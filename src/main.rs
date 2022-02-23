@@ -1,23 +1,23 @@
-mod memory;
-mod word;
-mod opcodes;
-mod cpu;
 mod bus;
+mod cpu;
 mod display;
+mod memory;
+mod opcodes;
+mod word;
 
 use winit::{
-    event::{ Event, WindowEvent },
-    event_loop::{ EventLoop, ControlFlow },
+    dpi::LogicalSize,
+    event::{Event, WindowEvent},
+    event_loop::{ControlFlow, EventLoop},
     window::WindowBuilder,
-    dpi::LogicalSize
 };
 
+use crate::cpu::CPU;
+use crate::memory::{Memory, PeekPoke};
+use crate::word::Word;
 use pixels::{Pixels, SurfaceTexture};
 use std::time::Instant;
 use winit::window::Window;
-use crate::cpu::CPU;
-use crate::memory::{ Memory, PeekPoke };
-use crate::word::Word;
 
 fn main() {
     let event_loop = EventLoop::new();
@@ -47,11 +47,6 @@ fn main() {
         cpu.poke(Word::from(0x10000 + n), 0xff);
         cpu.poke(Word::from(0x10000 + 128 * n + 127), 0b00000011);
         cpu.poke(Word::from(0x10000 + 128 * 127 + n), 0b00011100);
-
-        cpu.poke(Word::from(0x10000 + 128 * n), 1);
-        cpu.poke(Word::from(0x10000 + n), 2);
-        cpu.poke(Word::from(0x10000 + 128 * n + 127), 3);
-        cpu.poke(Word::from(0x10000 + 128 * 127 + n), 4);
     }
     window_loop(event_loop, window, pixels, cpu)
 }
@@ -63,17 +58,19 @@ fn window_loop(event_loop: EventLoop<()>, window: Window, mut pixels: Pixels, mu
         match event {
             Event::WindowEvent {
                 event: WindowEvent::CloseRequested,
-                window_id
-            } if window_id == window.id() => {
-                *control_flow = ControlFlow::Exit
-            }
+                window_id,
+            } if window_id == window.id() => *control_flow = ControlFlow::Exit,
             Event::MainEventsCleared => {
                 let start = Instant::now();
                 draw(pixels.get_frame(), &mut cpu);
                 let draw_time = Instant::now() - start;
                 pixels.render().expect("Problem displaying framebuffer");
                 let total_time = Instant::now() - start;
-                println!("Tick took {} total, {} to draw", total_time.as_micros(), draw_time.as_micros());
+                println!(
+                    "Tick took {} total, {} to draw",
+                    total_time.as_micros(),
+                    draw_time.as_micros()
+                );
             }
             _ => {}
         }

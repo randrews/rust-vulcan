@@ -5,11 +5,15 @@ pub const MEM_SIZE: u32 = 128 * 1024;
 pub struct Word(u32);
 
 impl From<u32> for Word {
-    fn from(a: u32) -> Self { Self(a & 0xffffff) }
+    fn from(a: u32) -> Self {
+        Self(a & 0xffffff)
+    }
 }
 
 impl From<Word> for u32 {
-    fn from(word: Word) -> Self { word.0 }
+    fn from(word: Word) -> Self {
+        word.0
+    }
 }
 
 impl std::ops::Add<i32> for Word {
@@ -21,20 +25,28 @@ impl std::ops::Add<i32> for Word {
 
 impl std::ops::Sub<i32> for Word {
     type Output = Word;
-    fn sub(self, rhs: i32) -> Self::Output { self + -rhs }
+    fn sub(self, rhs: i32) -> Self::Output {
+        self + -rhs
+    }
 }
 
 impl std::ops::Sub<Word> for Word {
     type Output = Word;
-    fn sub(self, rhs: Word) -> Self::Output { Word(self.0 - rhs.0) }
+    fn sub(self, rhs: Word) -> Self::Output {
+        Word(self.0 - rhs.0)
+    }
 }
 
 impl std::ops::SubAssign<i32> for Word {
-    fn sub_assign(&mut self, rhs: i32) { *self = *self - rhs; }
+    fn sub_assign(&mut self, rhs: i32) {
+        *self = *self - rhs;
+    }
 }
 
 impl std::ops::AddAssign<i32> for Word {
-    fn add_assign(&mut self, rhs: i32) { *self = *self + rhs; }
+    fn add_assign(&mut self, rhs: i32) {
+        *self = *self + rhs;
+    }
 }
 
 #[test]

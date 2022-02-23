@@ -108,7 +108,7 @@ impl TryFrom<u8> for Opcode {
             40 => Popr,
             41 => Peekr,
             42 => Debug,
-            other => return Err(InvalidOpcode(other))
+            other => return Err(InvalidOpcode(other)),
         })
     }
 }

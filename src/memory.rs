@@ -1,17 +1,19 @@
-use rand::Rng;
 use crate::word::Word;
 use crate::word::MEM_SIZE;
+use rand::Rng;
 
 pub struct Memory([u8; MEM_SIZE as usize]);
 
 impl Default for Memory {
-    fn default() -> Self { Self([0u8; MEM_SIZE as usize]) }
+    fn default() -> Self {
+        Self([0u8; MEM_SIZE as usize])
+    }
 }
 
 impl From<Word> for usize {
     fn from(w: Word) -> Self {
         let w: u32 = w.into();
-        (w & (MEM_SIZE-1)) as usize
+        (w & (MEM_SIZE - 1)) as usize
     }
 }
 
@@ -54,15 +56,27 @@ pub trait PeekPoke {
         self.poke(addr + 2, (val >> 16) as u8);
     }
 
-    fn peek_u32(&self, addr: u32) -> u8 { self.peek(addr.into()) }
-    fn poke_u32(&mut self, addr: u32, val: u8) { self.poke(addr.into(), val) }
-    fn peek24_u32(&mut self, addr: u32) -> u32 { self.peek24(addr.into()) }
-    fn poke24_u32(&mut self, addr: u32, val: u32) { self.poke24(addr.into(), val) }
+    fn peek_u32(&self, addr: u32) -> u8 {
+        self.peek(addr.into())
+    }
+    fn poke_u32(&mut self, addr: u32, val: u8) {
+        self.poke(addr.into(), val)
+    }
+    fn peek24_u32(&mut self, addr: u32) -> u32 {
+        self.peek24(addr.into())
+    }
+    fn poke24_u32(&mut self, addr: u32, val: u32) {
+        self.poke24(addr.into(), val)
+    }
 }
 
 impl PeekPoke for Memory {
-    fn peek(&self, addr: Word) -> u8 { self[addr] }
-    fn poke(&mut self, addr: Word, val: u8) { self[addr] = val; }
+    fn peek(&self, addr: Word) -> u8 {
+        self[addr]
+    }
+    fn poke(&mut self, addr: Word, val: u8) {
+        self[addr] = val;
+    }
 }
 
 #[cfg(test)]
