@@ -61,6 +61,7 @@ impl<A: Device, B: Device> Device for Bus<A, B> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::memory::PeekPokeExt;
 
     struct TestDevice(i32);
     impl Device for TestDevice {
@@ -111,8 +112,8 @@ mod tests {
     #[test]
     fn test_poke_peek() {
         let mut bus = Bus::new(5, 10, ArrayDevice([0u8; 10]), ArrayDevice([0u8; 10]));
-        bus.poke_u32(2, 2); // Goes into the 2nd device
-        bus.poke_u32(6, 6); // Goes into the first device...
+        bus.poke8(2, 2); // Goes into the 2nd device
+        bus.poke8(6, 6); // Goes into the first device...
         assert_eq!(bus.device.0[1], 6); // At index 1
         assert_eq!(bus.rest.0[2], 2); // Second device gets the other write
 
@@ -120,7 +121,7 @@ mod tests {
         assert_eq!(bus.device.0[2], 0);
         assert_eq!(bus.rest.0[1], 0);
 
-        assert_eq!(bus.peek_u32(2), 2); // Reading from the first device
-        assert_eq!(bus.peek_u32(6), 6); // And the second
+        assert_eq!(bus.peek8(2), 2); // Reading from the first device
+        assert_eq!(bus.peek8(6), 6); // And the second
     }
 }

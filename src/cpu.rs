@@ -1,5 +1,5 @@
-use crate::memory::Memory;
 use crate::memory::PeekPoke;
+use crate::memory::{Memory, PeekPokeExt};
 use crate::opcodes::InvalidOpcode;
 use crate::opcodes::Opcode;
 use crate::word::Word;
@@ -19,7 +19,7 @@ pub struct CPU {
 #[derive(Copy, Clone, Eq, PartialEq, Debug)]
 struct Instruction {
     opcode: Opcode,
-    arg: Option<u32>,
+    arg: Option<Word>,
     length: u8,
 }
 
@@ -54,32 +54,32 @@ impl CPU {
         self.halted = true;
     }
 
-    fn push_data<A: Into<u32>>(&mut self, word: A) {
-        self.memory.poke24(self.dp, word.into());
+    fn push_data<A: Into<Word>>(&mut self, word: A) {
+        self.memory.poke24(self.dp, word);
         self.dp += 3;
     }
 
-    fn push_call<A: Into<u32>>(&mut self, word: A) {
+    fn push_call<A: Into<Word>>(&mut self, word: A) {
         self.sp -= 3;
-        self.memory.poke24(self.sp, word.into());
+        self.memory.poke24(self.sp, word);
     }
 
-    fn pop_data(&mut self) -> u32 {
+    fn pop_data(&mut self) -> Word {
         self.dp -= 3;
         self.memory.peek24(self.dp)
     }
 
-    fn pop_call(&mut self) -> u32 {
+    fn pop_call(&mut self) -> Word {
         let val = self.memory.peek24(self.sp);
         self.sp += 3;
         val
     }
 
-    fn peek_call(&self) -> u32 {
+    fn peek_call(&self) -> Word {
         self.memory.peek24(self.sp)
     }
 
-    fn peek_data(&self) -> u32 {
+    fn peek_data(&self) -> Word {
         self.memory.peek24(self.dp - 3)
     }
 
@@ -103,7 +103,7 @@ impl CPU {
                     }
                     Ok(Instruction {
                         opcode,
-                        arg: Some(arg),
+                        arg: Some(Word::from(arg)),
                         length: arg_length + 1,
                     })
                 }
@@ -130,16 +130,16 @@ impl CPU {
                 Opcode::And => self.push_data(y & x),
                 Opcode::Or => self.push_data(y | x),
                 Opcode::Xor => self.push_data(y ^ x),
-                Opcode::Gt => self.push_data(bool_as_word(y > x)),
-                Opcode::Lt => self.push_data(bool_as_word(y < x)),
-                Opcode::Agt => self.push_data(bool_as_word(word_as_signed(y) > word_as_signed(x))),
-                Opcode::Alt => self.push_data(bool_as_word(word_as_signed(y) < word_as_signed(x))),
+                Opcode::Gt => self.push_data(y > x),
+                Opcode::Lt => self.push_data(y < x),
+                Opcode::Agt => self.push_data(i32::from(y) > i32::from(x)),
+                Opcode::Alt => self.push_data(i32::from(y) < i32::from(x)),
                 Opcode::Lshift => self.push_data(y << x),
                 Opcode::Rshift => self.push_data(y >> x),
                 Opcode::Arshift => {
                     if y & 0x800000 != 0 {
                         let mut shifted = y;
-                        for _ in 0..x {
+                        for _ in 0..u32::from(x).clamp(0, 24) {
                             shifted = shifted >> 1 | 0x800000;
                         }
                         self.push_data(shifted)
@@ -151,23 +151,23 @@ impl CPU {
                     self.push_data(x);
                     self.push_data(y)
                 }
-                Opcode::Store => self.memory.poke(x.into(), y as u8),
-                Opcode::Storew => self.memory.poke24(x.into(), y),
+                Opcode::Store => self.memory.poke8(x, y.to_bytes()[0]),
+                Opcode::Storew => self.memory.poke24(x, y),
                 Opcode::Setsdp => {
                     self.dp = x.into();
                     self.sp = y.into()
                 }
                 Opcode::Brz => {
                     if y == 0 {
-                        return self.pc + word_as_signed(x);
+                        return self.pc + i32::from(x);
                     }
                 }
                 Opcode::Brnz => {
                     if y != 0 {
-                        return self.pc + word_as_signed(x);
+                        return self.pc + i32::from(x);
                     }
                 }
-                _ => {} // This can never happen
+                _ => unreachable!(),
             }
             self.pc + instruction.length as i32
         } else {
@@ -176,7 +176,7 @@ impl CPU {
                 Opcode::Rand => {} // TODO remove this whole instruction
                 Opcode::Not => {
                     let x = self.pop_data();
-                    self.push_data(bool_as_word(x == 0))
+                    self.push_data(x == 0)
                 }
                 Opcode::Pop => {
                     self.pop_data();
@@ -184,7 +184,7 @@ impl CPU {
                 Opcode::Dup => self.push_data(self.peek_data()),
                 Opcode::Pick => {
                     let index = self.pop_data();
-                    let val = self.memory.peek24(self.dp - (index as i32 + 1) * 3);
+                    let val = self.memory.peek24(self.dp - (i32::from(index) + 1) * 3);
                     self.push_data(val)
                 }
                 Opcode::Rot => {
@@ -197,7 +197,7 @@ impl CPU {
                 }
                 Opcode::Jmp => return self.pop_data().into(),
                 Opcode::Jmpr => {
-                    let x = word_as_signed(self.pop_data());
+                    let x = i32::from(self.pop_data());
                     return self.pc + x;
                 }
                 Opcode::Call => {
@@ -209,11 +209,11 @@ impl CPU {
                 Opcode::Hlt => self.halted = true,
                 Opcode::Load => {
                     let x = self.pop_data();
-                    self.push_data(self.memory.peek(x.into()) as u32)
+                    self.push_data(self.memory.peek8(x))
                 }
                 Opcode::Loadw => {
                     let x = self.pop_data();
-                    self.push_data(self.memory.peek24(x.into()))
+                    self.push_data(self.memory.peek24(x))
                 }
                 Opcode::Inton => self.int_enabled = true,
                 Opcode::Intoff => self.int_enabled = false,
@@ -270,29 +270,13 @@ impl Opcode {
     }
 }
 
-fn word_as_signed(word: u32) -> i32 {
-    if word & 0x800000 != 0 {
-        -(((word ^ 0xffffff) + 1) as i32)
-    } else {
-        word as i32
-    }
-}
-
-fn bool_as_word(flag: bool) -> u32 {
-    if flag {
-        1
-    } else {
-        0
-    }
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
     use Opcode::*;
 
     impl CPU {
-        fn get_stack(&self) -> Vec<u32> {
+        fn get_stack(&self) -> Vec<Word> {
             let mut v = Vec::new();
             let mut curr = Word::from(256);
             while curr < self.dp {
@@ -302,7 +286,7 @@ mod tests {
             v
         }
 
-        fn get_call(&self) -> Vec<u32> {
+        fn get_call(&self) -> Vec<Word> {
             let mut v = Vec::new();
             let mut curr = Word::from(1024);
             while curr > self.sp {
@@ -520,8 +504,8 @@ mod tests {
                 cpu.push_data(2000u32)
             },
             |cpu| {
-                assert_eq!(cpu.sp, 1000.into());
-                assert_eq!(cpu.dp, 2000.into())
+                assert_eq!(cpu.sp, 1000);
+                assert_eq!(cpu.dp, 2000)
             },
         );
         call_stack_opcode_test(vec![123], vec![], Pushr, vec![], vec![123], 1025.into());
@@ -532,7 +516,7 @@ mod tests {
     #[test]
     fn test_cpu_new() {
         let cpu = CPU::new(Memory::default());
-        assert_eq!(cpu.pc, 1024.into());
+        assert_eq!(cpu.pc, 1024);
         assert_eq!(cpu.halted, true);
     }
 
@@ -541,7 +525,7 @@ mod tests {
         let mut cpu = CPU::new(Memory::default());
         cpu.iv = 12345.into();
         cpu.reset();
-        assert_eq!(cpu.iv, 1024.into());
+        assert_eq!(cpu.iv, 1024);
     }
 
     #[test]
@@ -549,40 +533,40 @@ mod tests {
         let mut cpu = CPU::new(Memory::default());
         cpu.push_data(37u32);
         cpu.push_data(45u32);
-        assert_eq!(cpu.memory.peek24_u32(256), 37);
-        assert_eq!(cpu.memory.peek24_u32(259), 45);
+        assert_eq!(cpu.memory.peek24(256), 37);
+        assert_eq!(cpu.memory.peek24(259), 45);
 
         cpu.push_call(12u32);
         cpu.push_call(34u32);
         assert_eq!(cpu.memory.peek24(cpu.sp), 34);
         assert_eq!(cpu.memory.peek24(cpu.sp + 3), 12);
-        assert_eq!(cpu.sp, (1024 - 6).into());
-        assert_eq!(cpu.dp, (256 + 6).into());
+        assert_eq!(cpu.sp, 1024 - 6);
+        assert_eq!(cpu.dp, 256 + 6);
 
         assert_eq!(cpu.pop_data(), 45);
         assert_eq!(cpu.pop_data(), 37);
-        assert_eq!(cpu.dp, 256.into());
+        assert_eq!(cpu.dp, 256);
 
         assert_eq!(cpu.pop_call(), 34);
         assert_eq!(cpu.pop_call(), 12);
-        assert_eq!(cpu.sp, 1024.into());
+        assert_eq!(cpu.sp, 1024);
     }
 
     #[test]
     fn test_cpu_fetch() {
         let mut cpu = CPU::new(Memory::default());
-        cpu.memory.poke_u32(0x400, 0x01); // nop 1 arg
-        cpu.memory.poke_u32(0x401, 0x02); // 2
-        cpu.memory.poke_u32(0x402, 0x07); // add 3 arg
-        cpu.memory.poke24_u32(0x403, 0x123456); // 3-byte arg
-        cpu.memory.poke_u32(0x406, 29 << 2); // hlt
-        cpu.memory.poke_u32(0x407, 0xfc); // gibberish
+        cpu.memory.poke8(0x400, 0x01); // nop 1 arg
+        cpu.memory.poke8(0x401, 0x02); // 2
+        cpu.memory.poke8(0x402, 0x07); // add 3 arg
+        cpu.memory.poke24(0x403, 0x123456); // 3-byte arg
+        cpu.memory.poke8(0x406, 29 << 2); // hlt
+        cpu.memory.poke8(0x407, 0xfc); // gibberish
 
         assert_eq!(
             cpu.fetch(),
             Ok(Instruction {
                 opcode: Opcode::Nop,
-                arg: Some(2),
+                arg: Some(Word::from(2)),
                 length: 2
             })
         );
@@ -592,7 +576,7 @@ mod tests {
             cpu.fetch(),
             Ok(Instruction {
                 opcode: Opcode::Add,
-                arg: Some(0x123456),
+                arg: Some(Word::from(0x123456)),
                 length: 4
             })
         );

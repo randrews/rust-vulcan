@@ -1,37 +1,36 @@
-use crate::memory::PeekPoke;
+use crate::memory::{PeekPoke, PeekPokeExt};
 use crate::Word;
-use std::convert::TryFrom;
 
 #[derive(Copy, Clone, Debug, Eq, PartialEq)]
 struct DisplayRegisters {
     mode: u8,
-    screen: u32,
-    palette: u32,
-    font: u32,
-    height: u32,
-    width: u32,
-    row_offset: u32,
-    col_offset: u32,
+    screen: Word,
+    palette: Word,
+    font: Word,
+    height: Word,
+    width: Word,
+    row_offset: Word,
+    col_offset: Word,
 }
 
 impl Default for DisplayRegisters {
     fn default() -> Self {
         Self {
-            mode: 4,
-            screen: 0x10000,
-            palette: 0x20000 - 0x100,
-            font: 0x20000 - 0x100 - 0x2000,
-            height: 128,
-            width: 128,
-            row_offset: 0,
-            col_offset: 0,
+            mode: 5,
+            screen: Word::from(0x10000),
+            palette: Word::from(0x20000 - 0x100),
+            font: Word::from(0x20000 - 0x100 - 0x2000),
+            height: Word::from(128),
+            width: Word::from(128),
+            row_offset: Word::from(0),
+            col_offset: Word::from(0),
         }
     }
 }
 
 fn read_display_registers<P: PeekPoke>(machine: &P, start: Word) -> DisplayRegisters {
     DisplayRegisters {
-        mode: machine.peek(start),
+        mode: machine.peek8(start),
         screen: machine.peek24(start + 1),
         palette: machine.peek24(start + 4),
         font: machine.peek24(start + 7),
@@ -45,13 +44,13 @@ fn read_display_registers<P: PeekPoke>(machine: &P, start: Word) -> DisplayRegis
 fn init_display_registers<P: PeekPoke>(machine: &mut P, start: Word) {
     let dr = DisplayRegisters::default();
     machine.poke(start, dr.mode);
-    machine.poke24(start + 1, dr.screen.into());
-    machine.poke24(start + 4, dr.palette.into());
-    machine.poke24(start + 7, dr.font.into());
-    machine.poke24(start + 10, dr.height.into());
-    machine.poke24(start + 13, dr.width.into());
-    machine.poke24(start + 16, dr.row_offset.into());
-    machine.poke24(start + 19, dr.col_offset.into());
+    machine.poke24(start + 1, dr.screen);
+    machine.poke24(start + 4, dr.palette);
+    machine.poke24(start + 7, dr.font);
+    machine.poke24(start + 10, dr.height);
+    machine.poke24(start + 13, dr.width);
+    machine.poke24(start + 16, dr.row_offset);
+    machine.poke24(start + 19, dr.col_offset);
 }
 
 fn init_font<P: PeekPoke>(machine: &mut P) {
@@ -96,9 +95,9 @@ fn init_palette<P: PeekPoke>(machine: &mut P) {
     }
 }
 
-fn to_byte_address((x, y): (u32, u32), reg: DisplayRegisters) -> u32 {
-    let row_start = (y + reg.row_offset % reg.height) * reg.width + reg.screen;
-    ((x + reg.col_offset) % reg.width) + row_start
+fn to_byte_address((x, y): (u32, u32), reg: DisplayRegisters) -> Word {
+    let row_start = (Word::from(y) + reg.row_offset % reg.height) * reg.width + reg.screen;
+    ((Word::from(x) + reg.col_offset) % reg.width) + row_start
 }
 
 fn draw_direct_high_gfx<P: PeekPoke>(machine: &P, reg: DisplayRegisters, frame: &mut [u8]) {
