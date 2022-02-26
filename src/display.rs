@@ -17,12 +17,12 @@ struct DisplayRegisters {
 impl Default for DisplayRegisters {
     fn default() -> Self {
         Self {
-            mode: 5,
+            mode: 0,
             screen: Word::from(0x10000),
             palette: Word::from(0x20000 - 0x100),
             font: Word::from(0x20000 - 0x100 - 0x2000),
-            height: Word::from(128),
-            width: Word::from(128),
+            height: Word::from(60),
+            width: Word::from(80),
             row_offset: Word::from(0),
             col_offset: Word::from(0),
         }
@@ -122,7 +122,7 @@ fn draw_paletted_high_gfx<P: PeekPoke>(machine: &P, reg: DisplayRegisters, frame
 fn draw_paletted_high_text<P: PeekPoke>(machine: &P, reg: DisplayRegisters, frame: &mut [u8]) {
     for (i, pixel) in frame.chunks_exact_mut(4).enumerate() {
         let (display_row, display_col) = (i / 640, i % 640);
-        let (vulcan_row, vulcan_col) = (Word::from(display_row >> 2), Word::from(display_col >> 2));
+        let (vulcan_row, vulcan_col) = (Word::from(display_row >> 3), Word::from(display_col >> 3));
 
         let addr = to_byte_address((vulcan_col, vulcan_row), reg);
         let char_idx = machine.peek(addr) as u32;
@@ -157,7 +157,7 @@ fn draw_text_pixel(pixel: &mut [u8; 4], char_col: u8, char_byte: u8, fg_color: u
 fn draw_direct_high_text<P: PeekPoke>(machine: &P, reg: DisplayRegisters, frame: &mut [u8]) {
     for (i, pixel) in frame.chunks_exact_mut(4).enumerate() {
         let (display_row, display_col) = (i / 640, i % 640);
-        let (vulcan_row, vulcan_col) = (Word::from(display_row >> 2), Word::from(display_col >> 2));
+        let (vulcan_row, vulcan_col) = (Word::from(display_row >> 3), Word::from(display_col >> 3));
 
         let addr = to_byte_address((vulcan_col, vulcan_row), reg);
         let char_idx = machine.peek(addr) as u32;
@@ -180,7 +180,7 @@ fn draw_direct_high_text<P: PeekPoke>(machine: &P, reg: DisplayRegisters, frame:
 fn draw_direct_low_text<P: PeekPoke>(machine: &P, reg: DisplayRegisters, frame: &mut [u8]) {
     for (i, pixel) in frame.chunks_exact_mut(4).enumerate() {
         let (display_row, display_col) = (i / 640, i % 640);
-        let (vulcan_row, vulcan_col) = (Word::from(display_row >> 2), Word::from(display_col >> 2));
+        let (vulcan_row, vulcan_col) = (Word::from(display_row >> 4), Word::from(display_col >> 4));
 
         let addr = to_byte_address((vulcan_col, vulcan_row), reg);
         let char_idx = machine.peek(addr) as u32;
@@ -203,7 +203,7 @@ fn draw_direct_low_text<P: PeekPoke>(machine: &P, reg: DisplayRegisters, frame: 
 fn draw_paletted_low_text<P: PeekPoke>(machine: &P, reg: DisplayRegisters, frame: &mut [u8]) {
     for (i, pixel) in frame.chunks_exact_mut(4).enumerate() {
         let (display_row, display_col) = (i / 640, i % 640);
-        let (vulcan_row, vulcan_col) = (Word::from(display_row >> 2), Word::from(display_col >> 2));
+        let (vulcan_row, vulcan_col) = (Word::from(display_row >> 4), Word::from(display_col >> 4));
 
         let addr = to_byte_address((vulcan_col, vulcan_row), reg);
         let char_idx = machine.peek(addr) as u32;

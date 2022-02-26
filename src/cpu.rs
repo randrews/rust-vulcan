@@ -240,6 +240,30 @@ impl CPU {
             self.pc + instruction.length as i32
         }
     }
+
+    pub fn tick(&mut self) {
+        if self.halted { return }
+
+        match self.fetch() {
+            Ok(instr) => {
+                //println!("Instr: {}", instr.opcode);
+                self.pc = self.execute(instr)
+            }
+
+            Err(invalidOpcode) => {
+                self.halted = true;
+                println!("Error: {}", invalidOpcode)
+            }
+        }
+    }
+
+    pub fn start(&mut self) {
+        self.halted = false
+    }
+
+    pub fn running(&self) -> bool {
+        !self.halted
+    }
 }
 
 impl Opcode {
