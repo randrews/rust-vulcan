@@ -1,5 +1,5 @@
-use crate::memory::{PeekPoke, PeekPokeExt};
-use crate::Word;
+use vcore::memory::{PeekPoke, PeekPokeExt};
+use vcore::word::Word;
 use std::convert::TryFrom;
 
 #[derive(Copy, Clone, Debug, Eq, PartialEq)]

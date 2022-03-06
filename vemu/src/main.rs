@@ -1,9 +1,4 @@
-mod bus;
-mod cpu;
 mod display;
-mod memory;
-mod opcodes;
-mod word;
 
 use winit::{
     dpi::LogicalSize,
@@ -12,9 +7,9 @@ use winit::{
     window::WindowBuilder,
 };
 
-use crate::cpu::CPU;
-use crate::memory::{Memory, PeekPoke};
-use crate::word::Word;
+use vcore::cpu::CPU;
+use vcore::memory::{Memory, PeekPoke};
+use vcore::word::Word;
 use pixels::{Pixels, SurfaceTexture};
 use std::time::{Instant, Duration};
 use winit::window::Window;

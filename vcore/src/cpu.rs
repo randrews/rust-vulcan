@@ -45,7 +45,7 @@ impl CPU {
         }
     }
 
-    fn reset(&mut self) {
+    pub fn reset(&mut self) {
         self.pc = 1024.into();
         self.dp = 256.into();
         self.sp = 1024.into();
@@ -250,9 +250,9 @@ impl CPU {
                 self.pc = self.execute(instr)
             }
 
-            Err(invalidOpcode) => {
+            Err(invalid_opcode) => {
                 self.halted = true;
-                println!("Error: {}", invalidOpcode)
+                println!("Error: {}", invalid_opcode)
             }
         }
     }
