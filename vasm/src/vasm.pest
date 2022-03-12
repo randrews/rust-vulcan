@@ -1,0 +1,75 @@
+WHITESPACE = _{ " " | "\t" }
+
+// A comment will start with a semicolon and go to the end of the line. Actually everything is parsed
+// line by line, so anything that starts with a semicolon is a comment:
+COMMENT = _{ ";" ~ ANY* ~ EOI }
+
+// Numbers are more complicated. We'll support three formats:
+// - Decimal numbers like 42
+// - Hexadecimal like 0x2a
+// - Binary like 0b00101010
+// - Decimal zero needs its own pattern: it's not a decimal because
+//   it starts with a 0, but it has to be matched after hex and bin
+//   because otherwise any "0x" will parse as "decimal 0 followed
+//   by unparseable x"
+dec_number = @{ ASCII_NONZERO_DIGIT ~ ASCII_DIGIT* }
+neg_number = ${ "-" ~ dec_number }
+hex_number = ${ "0x" ~ ASCII_HEX_DIGIT+ }
+bin_number = ${ "0b" ~ ASCII_BIN_DIGIT+ }
+dec_zero = @{ "0" }
+number = { dec_number | hex_number | bin_number | dec_zero | neg_number }
+
+// A label can be any sequence of C-identifier-y characters, as long as it doesn't start with
+// a digit:
+label_char = { ASCII_ALPHA_LOWER | ASCII_ALPHA_UPPER | "_" }
+label = @{ label_char ~ (label_char | ASCII_DIGIT | "$")* }
+
+// To make relative jumps easier, we'll also allow an '@' at the start of a label, and interpret
+// that as meaning "relative to the first byte of this instruction:"
+relative_label = ${ "@" ~ label }
+
+// We'll also have a special form, $+nnn (and $-nnn) which is the first byte of the an earlier or later line:
+absolute_line_offset = { "$" ~ sign ~ dec_number }
+
+// And the relative form of that, @+nnn and @-nnn:
+relative_line_offset = { "@" ~ sign ~ dec_number }
+
+opcode = @{ ASCII_ALPHA_LOWER+ } // TODO: replace with actual list
+
+// The assembler will support some directives:
+// - .org to set the current address
+// - .db to embed some data
+// - .equ to define some constants
+directive = { ".org" | ".db" | ".equ" }
+
+// The .equ directive isn't much use without the ability to have expressions based on
+// symbols, so, a quick arithmetic expression parser:
+sign = { "+" | "-" }
+term_op = { "/" | "*" | "%" }
+expr = { term ~ (sign ~ term)* }
+term = { fact ~ (term_op ~ fact)* }
+fact = { ("(" ~ expr ~ ")") | (number | relative_line_offset | relative_label | absolute_line_offset | label) }
+
+// Likewise, .db would get tedious quick without a string syntax, so, let's define one of those. An escape
+// sequence is a backslash followed by certain other characters:
+escape = @{ "\\" ~ ("t" | "r" | "n" | "0" | "\\" | "\"") }
+
+// And a string is a quoted sequence of escapes or other characters:
+string_inner = ${ !("\"" | "\\") ~ ANY | escape }
+string = ${ "\"" ~ string_inner* ~ "\"" }
+
+// Parsing a line
+// Normally an assembly line will be a sequence of "label, opcode, argument, comment."
+// However, most of these elements are optional. An opcode is only required if an
+// argument exists. Comments are already handled by the COMMENT pattern
+
+
+// Some sub-patterns for the portions of a line:
+label_group = { label ~ ":" }
+argument_group = { expr | string }
+
+// An opcode might be an actual opcode, or a directive
+instruction_group = { (opcode | directive) ~ argument_group? }
+
+// Finally the entire pattern for an assembly line:
+line = { SOI ~ label_group? ~ instruction_group? ~ EOI }

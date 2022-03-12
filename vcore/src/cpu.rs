@@ -154,8 +154,8 @@ impl CPU {
                 Opcode::Store => self.memory.poke8(x, y.to_bytes()[0]),
                 Opcode::Storew => self.memory.poke24(x, y),
                 Opcode::Setsdp => {
-                    self.dp = x.into();
-                    self.sp = y.into()
+                    self.dp = x;
+                    self.sp = y
                 }
                 Opcode::Brz => {
                     if y == 0 {
@@ -195,7 +195,7 @@ impl CPU {
                     self.push_data(x);
                     self.push_data(z)
                 }
-                Opcode::Jmp => return self.pop_data().into(),
+                Opcode::Jmp => return self.pop_data(),
                 Opcode::Jmpr => {
                     let x = i32::from(self.pop_data());
                     return self.pc + x;
@@ -203,9 +203,9 @@ impl CPU {
                 Opcode::Call => {
                     let x = self.pop_data();
                     self.push_call(self.pc + instruction.length as i32);
-                    return x.into();
+                    return x;
                 }
-                Opcode::Ret => return self.pop_call().into(),
+                Opcode::Ret => return self.pop_call(),
                 Opcode::Hlt => self.halted = true,
                 Opcode::Load => {
                     let x = self.pop_data();
@@ -217,7 +217,7 @@ impl CPU {
                 }
                 Opcode::Inton => self.int_enabled = true,
                 Opcode::Intoff => self.int_enabled = false,
-                Opcode::Setiv => self.iv = self.pop_data().into(),
+                Opcode::Setiv => self.iv = self.pop_data(),
                 Opcode::Sdp => {
                     self.push_data(self.sp);
                     self.push_data(self.dp + 3) // The +3 accounts for the word we're about to push

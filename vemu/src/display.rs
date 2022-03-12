@@ -211,7 +211,7 @@ fn draw_paletted_low_text<P: PeekPoke>(machine: &P, reg: DisplayRegisters, frame
         let char_byte = machine.peek(reg.font + (char_idx << 3) + char_row);
 
         let color_addr = addr + (reg.width * reg.height);
-        let color_byte = machine.peek(Word::from(color_addr));
+        let color_byte = machine.peek(color_addr);
         let (fg_color_idx, bg_color_idx) = (color_byte & 0xf, color_byte >> 4);
 
         let fg_color = machine.peek(reg.palette + fg_color_idx);
@@ -231,10 +231,8 @@ fn draw_direct_low_gfx<P: PeekPoke>(machine: &P, reg: DisplayRegisters, frame: &
     for (i, pixel) in frame.chunks_exact_mut(4).enumerate() {
         let (display_row, display_col) = (i / 640, i % 640);
 
-        if display_row >= (240 - 64 * 3)
-            && display_row < (240 + 64 * 3)
-            && display_col >= (320 - 64 * 3)
-            && display_col < (320 + 64 * 3)
+        if ((240 - 64 * 3)..(240 + 64 * 3)).contains(&display_row)
+            && ((320 - 64 * 3)..(320 + 64 * 3)).contains(&display_col)
         {
             let (vulcan_row, vulcan_col) = (
                 Word::from((display_row - (240 - 64 * 3)) / 3),
@@ -253,10 +251,8 @@ fn draw_paletted_low_gfx<P: PeekPoke>(machine: &P, reg: DisplayRegisters, frame:
     for (i, pixel) in frame.chunks_exact_mut(4).enumerate() {
         let (display_row, display_col) = (i / 640, i % 640);
 
-        if display_row >= (240 - 64 * 3)
-            && display_row < (240 + 64 * 3)
-            && display_col >= (320 - 64 * 3)
-            && display_col < (320 + 64 * 3)
+        if ((240 - 64 * 3)..(240 + 64 * 3)).contains(&display_row)
+            && ((320 - 64 * 3)..(320 + 64 * 3)).contains(&display_col)
         {
             let (vulcan_row, vulcan_col) = (
                 Word::from((display_row - (240 - 64 * 3)) / 3),

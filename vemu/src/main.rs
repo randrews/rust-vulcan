@@ -59,10 +59,10 @@ fn window_loop(event_loop: EventLoop<()>, window: Window, mut pixels: Pixels, mu
             } if window_id == window.id() => *control_flow = ControlFlow::Exit,
 
             Event::WindowEvent {
-                event: WindowEvent::Resized(newSize),
+                event: WindowEvent::Resized(new_size),
                 window_id
             } if window_id == window.id() => {
-                pixels.resize_surface(newSize.width, newSize.height);
+                pixels.resize_surface(new_size.width, new_size.height);
             }
 
             Event::MainEventsCleared => {

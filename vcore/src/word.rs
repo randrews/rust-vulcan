@@ -1,7 +1,7 @@
 // 128k, the amount of memory in a standard Vulcan machine
 pub const MEM_SIZE: u32 = 128 * 1024;
 
-#[derive(Debug, Copy, Clone, Eq, Ord)]
+#[derive(Debug, Copy, Clone, Eq)]
 pub struct Word(u32);
 
 impl Word {
@@ -10,9 +10,9 @@ impl Word {
     /// # Example
     ///
     /// ```
-    /// use vulcan_emu::Word;
+    /// use vcore::word::Word;
     ///
-    /// assert_eq!(Word::from_bytes([0x01, 0x02, 0x03]) == 0x010203);
+    /// assert!(Word::from_bytes([0x01, 0x02, 0x03]) == 0x030201);
     /// ```
     pub fn from_bytes(bytes: [u8; 3]) -> Self {
         let [a, b, c] = bytes;
@@ -24,9 +24,9 @@ impl Word {
     /// # Example
     ///
     /// ```
-    /// use vulcan_emu::Word;
+    /// use vcore::word::Word;
     ///
-    /// assert_eq!(Word::from(0x010203).to_bytes(), [0x01, 0x02, 0x03]);
+    /// assert_eq!(Word::from(0x010203).to_bytes(), [0x03, 0x02, 0x01]);
     /// ```
     pub fn to_bytes(self) -> [u8; 3] {
         let [a, b, c, _] = self.0.to_le_bytes();

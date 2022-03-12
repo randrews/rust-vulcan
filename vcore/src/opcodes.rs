@@ -163,6 +163,60 @@ impl TryFrom<u8> for Opcode {
     }
 }
 
+impl TryFrom<&str> for Opcode {
+    type Error = InvalidOpcode;
+
+    fn try_from(value: &str) -> Result<Self, Self::Error> {
+        use Opcode::*;
+        Ok(match value {
+            "nop" => Nop,
+            "add" => Add,
+            "sub" => Sub,
+            "mul" => Mul,
+            "div" => Div,
+            "mod" => Mod,
+            "rand" => Rand,
+            "and" => And,
+            "or" => Or,
+            "xor" => Xor,
+            "not" => Not,
+            "gt" => Gt,
+            "lt" => Lt,
+            "agt" => Agt,
+            "alt" => Alt,
+            "lshift" => Lshift,
+            "rshift" => Rshift,
+            "arshift" => Arshift,
+            "pop" => Pop,
+            "dup" => Dup,
+            "swap" => Swap,
+            "pick" => Pick,
+            "rot" => Rot,
+            "jmp" => Jmp,
+            "jmpr" => Jmpr,
+            "call" => Call,
+            "ret" => Ret,
+            "brz" => Brz,
+            "brnz" => Brnz,
+            "hlt" => Hlt,
+            "load" => Load,
+            "loadw" => Loadw,
+            "store" => Store,
+            "storew" => Storew,
+            "inton" => Inton,
+            "intoff" => Intoff,
+            "setiv" => Setiv,
+            "sdp" => Sdp,
+            "setsdp" => Setsdp,
+            "pushr" => Pushr,
+            "popr" => Popr,
+            "peekr" => Peekr,
+            "debug" => Debug,
+            _ => return Err(InvalidOpcode(255))
+        })
+    }
+}
+
 #[test]
 fn test_decode() {
     assert_eq!(Opcode::try_from(18), Ok(Opcode::Pop));
