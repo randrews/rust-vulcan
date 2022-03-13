@@ -106,6 +106,21 @@ impl<'a> Node<'a> {
             _ => unreachable!()
         }
     }
+
+    pub fn shake(node: Node<'a>) -> Node<'a> {
+        match node {
+            Node::Expr(first, rest) => {
+                let shaken_car = Node::shake(*first);
+                if rest.is_empty() {
+                    shaken_car
+                } else {
+                    let shaken_cdr = rest.into_iter().map(|(op, n)| (op, Node::shake(n))).collect();
+                    Node::Expr(Box::from(shaken_car), shaken_cdr)
+                }
+            },
+            _ => node
+        }
+    }
 }
 
 impl<'a> TryFrom<Pair<'a, Rule>> for Node<'a> {
@@ -221,7 +236,7 @@ fn parse_vasm_line(line: &str) -> Result<VASMLine, ParseError<'_>> {
         vasm_line = vasm_line.with_instruction(Instruction::try_from(pairs.next().unwrap())?);
 
         if let Some(argument_group) = pairs.next() {
-            vasm_line = vasm_line.with_argument(Node::try_from(argument_group)?)
+            vasm_line = vasm_line.with_argument(Node::shake(Node::try_from(argument_group)?))
         }
     }
 
@@ -240,19 +255,19 @@ mod test {
         }
 
         fn op_number(opcode: Opcode, argument: i32) -> VASMLine<'a> {
-            Self::blank().with_opcode(opcode).with_argument(Node::simple_expr(Node::simple_expr(Node::Number(argument))))
+            Self::blank().with_opcode(opcode).with_argument(Node::Number(argument))
         }
 
         fn op_label(opcode: Opcode, argument: &'a str) -> VASMLine<'a> {
-            Self::blank().with_opcode(opcode).with_argument(Node::simple_expr(Node::simple_expr(Node::Label(argument))))
+            Self::blank().with_opcode(opcode).with_argument(Node::Label(argument))
         }
 
         fn op_rel_label(opcode: Opcode, argument: &'a str) -> VASMLine<'a> {
-            Self::blank().with_opcode(opcode).with_argument(Node::simple_expr(Node::simple_expr(Node::RelativeLabel(argument))))
+            Self::blank().with_opcode(opcode).with_argument(Node::RelativeLabel(argument))
         }
 
         fn op_off(opcode: Opcode, argument: Node<'a>) -> VASMLine<'a> {
-            Self::blank().with_opcode(opcode).with_argument(Node::simple_expr(Node::simple_expr(argument)))
+            Self::blank().with_opcode(opcode).with_argument(argument)
         }
 
         pub fn dir_str(directive: Directive, string: &str) -> VASMLine<'a> {
@@ -290,7 +305,7 @@ mod test {
             VASMLine::op(Add)
                 .with_argument(
                     Node::Expr(
-                        Box::from(Node::simple_expr(Node::Number(2))),
+                        Box::from(Node::Number(2)),
                         vec![
                             (
                                 Operator::Add,
@@ -300,12 +315,12 @@ mod test {
                                         (
                                             Operator::Mul,
                                             Node::Expr(
-                                                Box::from(Node::simple_expr(Node::Number(4))),
-                                                vec![(Operator::Sub, Node::simple_expr(Node::Number(5)))],
+                                                Box::from(Node::Number(4)),
+                                                vec![(Operator::Sub, Node::Number(5))],
                                             ))],)),
                             (
                                 Operator::Add,
-                                Node::simple_expr(Node::Number(6))
+                                Node::Number(6)
                             )],))));
     }
 
