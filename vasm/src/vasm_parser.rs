@@ -47,10 +47,27 @@ impl<'a> TryFrom<Pair<'a, Rule>> for Instruction {
 #[derive(Debug, PartialEq, Copy, Clone)]
 enum Operator { Add, Sub, Mul, Div, Mod }
 
+impl From<&str> for Operator {
+    fn from(s: &str) -> Self {
+        use Operator::*;
+        match s {
+            "+" => Add,
+            "-" => Sub,
+            "*" => Mul,
+            "/" => Div,
+            "%" => Mod,
+            _ => unreachable!()
+        }
+    }
+}
+
 #[derive(Debug, PartialEq, Clone)]
 enum Node<'a>{
     Number(i32),
     Label(&'a str),
+    RelativeLabel(&'a str),
+    AbsoluteOffset(i32),
+    RelativeOffset(i32),
     String(String),
     Expr(Box<Node<'a>>, Vec<(Operator, Node<'a>)>)
 }
@@ -76,6 +93,19 @@ impl<'a> Node<'a> {
         }
         Node::String(string)
     }
+
+    pub fn line_offset(pair: Pair<'a, Rule>) -> Node<'a> {
+        let outer = pair.as_rule();
+        let mut inner = pair.into_inner();
+        let sign = inner.next().unwrap().as_str();
+        let mut num = i32::from_str(inner.next().unwrap().as_str()).unwrap();
+        if sign == "-" { num *= -1 }
+        match outer {
+            Rule::relative_line_offset => Node::RelativeOffset(num),
+            Rule::absolute_line_offset => Node::AbsoluteOffset(num),
+            _ => unreachable!()
+        }
+    }
 }
 
 impl<'a> TryFrom<Pair<'a, Rule>> for Node<'a> {
@@ -84,8 +114,17 @@ impl<'a> TryFrom<Pair<'a, Rule>> for Node<'a> {
     fn try_from(pair: Pair<'a, Rule>) -> Result<Self, Self::Error> {
         match pair.as_rule() {
             Rule::expr | Rule::term => {
-                let first = Node::try_from(pair.into_inner().next().unwrap())?;
-                Ok(Node::Expr(Box::from(first), vec![]))
+                let mut iter = pair.into_inner();
+                let first = Node::try_from(iter.next().unwrap())?;
+                let mut rest = Vec::<(Operator, Node)>::new();
+
+                while let Some(operator) = iter.next() {
+                    let rhs = iter.next().unwrap();
+                    let op = Operator::from(operator.as_str());
+                    let node = Node::try_from(rhs)?;
+                    rest.push((op, node));
+                }
+                Ok(Node::Expr(Box::from(first), rest))
             }
             Rule::fact | Rule::number => {
                 Ok(Node::try_from(pair.into_inner().next().unwrap())?)
@@ -97,6 +136,9 @@ impl<'a> TryFrom<Pair<'a, Rule>> for Node<'a> {
             Rule::bin_number => { Ok(Node::Number(i32::from_str_radix(pair.as_str().get(2..).unwrap(), 2).unwrap())) }
             Rule::oct_number => { Ok(Node::Number(i32::from_str_radix(pair.as_str().get(2..).unwrap(), 8).unwrap())) }
             Rule::string => { Ok(Node::string(pair)) }
+            Rule::label => Ok(Node::Label(pair.as_str())),
+            Rule::relative_label => Ok(Node::RelativeLabel(pair.as_str().get(1..).unwrap())),
+            Rule::absolute_line_offset | Rule::relative_line_offset => Ok(Node::line_offset(pair)),
             _ => todo!()
         }
     }
@@ -179,11 +221,7 @@ fn parse_vasm_line(line: &str) -> Result<VASMLine, ParseError<'_>> {
         vasm_line = vasm_line.with_instruction(Instruction::try_from(pairs.next().unwrap())?);
 
         if let Some(argument_group) = pairs.next() {
-            vasm_line = match argument_group.as_rule() {
-                Rule::string => vasm_line.with_argument(Node::try_from(argument_group)?),
-                Rule::expr => vasm_line.with_argument(Node::try_from(argument_group.into_inner().next().unwrap())?),
-                _ => unreachable!()
-            }
+            vasm_line = vasm_line.with_argument(Node::try_from(argument_group)?)
         }
     }
 
@@ -202,7 +240,19 @@ mod test {
         }
 
         fn op_number(opcode: Opcode, argument: i32) -> VASMLine<'a> {
-            Self::blank().with_opcode(opcode).with_argument(Node::simple_expr(Node::Number(argument)))
+            Self::blank().with_opcode(opcode).with_argument(Node::simple_expr(Node::simple_expr(Node::Number(argument))))
+        }
+
+        fn op_label(opcode: Opcode, argument: &'a str) -> VASMLine<'a> {
+            Self::blank().with_opcode(opcode).with_argument(Node::simple_expr(Node::simple_expr(Node::Label(argument))))
+        }
+
+        fn op_rel_label(opcode: Opcode, argument: &'a str) -> VASMLine<'a> {
+            Self::blank().with_opcode(opcode).with_argument(Node::simple_expr(Node::simple_expr(Node::RelativeLabel(argument))))
+        }
+
+        fn op_off(opcode: Opcode, argument: Node<'a>) -> VASMLine<'a> {
+            Self::blank().with_opcode(opcode).with_argument(Node::simple_expr(Node::simple_expr(argument)))
         }
 
         pub fn dir_str(directive: Directive, string: &str) -> VASMLine<'a> {
@@ -232,6 +282,43 @@ mod test {
     fn test_strings() {
         assert_eq!(parse_vasm_line(".db \"blah\""), Ok(VASMLine::dir_str(Db, "blah")));
         assert_eq!(parse_vasm_line(".db \"blah\\twith escapes\\0\""), Ok(VASMLine::dir_str(Db, "blah\twith escapes\0")))
+    }
+
+    #[test]
+    fn test_exprs() {
+        assert_eq!(parse_vasm_line("add 2 + 3 * (4 - 5) + 6"), Ok(
+            VASMLine::op(Add)
+                .with_argument(
+                    Node::Expr(
+                        Box::from(Node::simple_expr(Node::Number(2))),
+                        vec![
+                            (
+                                Operator::Add,
+                                Node::Expr(
+                                    Box::from(Node::Number(3)),
+                                    vec![
+                                        (
+                                            Operator::Mul,
+                                            Node::Expr(
+                                                Box::from(Node::simple_expr(Node::Number(4))),
+                                                vec![(Operator::Sub, Node::simple_expr(Node::Number(5)))],
+                                            ))],)),
+                            (
+                                Operator::Add,
+                                Node::simple_expr(Node::Number(6))
+                            )],))));
+    }
+
+    #[test]
+    fn test_expr_labels() {
+        assert_eq!(parse_vasm_line("loadw foo"), Ok(VASMLine::op_label(Loadw, "foo")));
+        assert_eq!(parse_vasm_line("brz @blah"), Ok(VASMLine::op_rel_label(Brz, "blah")))
+    }
+
+    #[test]
+    fn test_expr_offsets() {
+        assert_eq!(parse_vasm_line("jmp $-2"), Ok(VASMLine::op_off(Jmp, Node::AbsoluteOffset(-2))));
+        assert_eq!(parse_vasm_line("brz @+3"), Ok(VASMLine::op_off(Brz, Node::RelativeOffset(3))))
     }
 
     #[test]
