@@ -16,8 +16,9 @@ dec_number = @{ ASCII_NONZERO_DIGIT ~ ASCII_DIGIT* }
 neg_number = ${ "-" ~ dec_number }
 hex_number = ${ "0x" ~ ASCII_HEX_DIGIT+ }
 bin_number = ${ "0b" ~ ASCII_BIN_DIGIT+ }
+oct_number = ${ "0o" ~ ASCII_OCT_DIGIT+ }
 dec_zero = @{ "0" }
-number = { dec_number | hex_number | bin_number | dec_zero | neg_number }
+number = { dec_number | hex_number | bin_number | oct_number | dec_zero | neg_number }
 
 // A label can be any sequence of C-identifier-y characters, as long as it doesn't start with
 // a digit:
@@ -63,13 +64,11 @@ string = ${ "\"" ~ string_inner* ~ "\"" }
 // However, most of these elements are optional. An opcode is only required if an
 // argument exists. Comments are already handled by the COMMENT pattern
 
-
 // Some sub-patterns for the portions of a line:
 label_group = { label ~ ":" }
-argument_group = { expr | string }
 
 // An opcode might be an actual opcode, or a directive
-instruction_group = { (opcode | directive) ~ argument_group? }
+instruction_group = { (opcode | directive) ~ (expr | string)? }
 
 // Finally the entire pattern for an assembly line:
 line = { SOI ~ label_group? ~ instruction_group? ~ EOI }

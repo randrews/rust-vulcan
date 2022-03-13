@@ -59,6 +59,9 @@ impl Display for InvalidOpcode {
 
 impl std::error::Error for InvalidOpcode {}
 
+#[derive(Debug, Copy, Clone, Eq, PartialEq)]
+pub struct InvalidMnemonic<'a>(pub &'a str);
+
 impl Display for Opcode {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         match self {
@@ -163,10 +166,10 @@ impl TryFrom<u8> for Opcode {
     }
 }
 
-impl TryFrom<&str> for Opcode {
-    type Error = InvalidOpcode;
+impl<'a> TryFrom<&'a str> for Opcode {
+    type Error = InvalidMnemonic<'a>;
 
-    fn try_from(value: &str) -> Result<Self, Self::Error> {
+    fn try_from(value: &'a str) -> Result<Self, Self::Error> {
         use Opcode::*;
         Ok(match value {
             "nop" => Nop,
@@ -212,7 +215,7 @@ impl TryFrom<&str> for Opcode {
             "popr" => Popr,
             "peekr" => Peekr,
             "debug" => Debug,
-            _ => return Err(InvalidOpcode(255))
+            _ => return Err(InvalidMnemonic(value))
         })
     }
 }

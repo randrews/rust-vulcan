@@ -3,7 +3,6 @@ extern crate pest;
 extern crate pest_derive;
 
 mod parse_error;
-mod vasm_line;
 mod vasm_parser;
 
 fn main() {
