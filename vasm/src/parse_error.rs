@@ -1,12 +1,11 @@
-use vcore::opcodes::{InvalidMnemonic};
-use pest::iterators::Pair;
 use std::fmt::{Display, Formatter};
-use crate::vasm_parser::Rule;
+
+use vcore::opcodes::InvalidMnemonic;
 
 #[derive(Debug, PartialEq)]
 pub enum ParseError<'a> {
     LineParseFailure,
-    InvalidInstruction(&'a str)
+    InvalidInstruction(&'a str),
 }
 
 impl<'a> From<InvalidMnemonic<'a>> for ParseError<'a> {
@@ -18,6 +17,7 @@ impl<'a> From<InvalidMnemonic<'a>> for ParseError<'a> {
 impl<'a> Display for ParseError<'a> {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         use ParseError::*;
+        use crate::parse_error::ParseError::LineParseFailure;
         match self {
             LineParseFailure => write!(f, "Failed to parse line"),
             InvalidInstruction(p) => write!(f, "Cannot parse {} as instruction", p)

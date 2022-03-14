@@ -1,222 +1,36 @@
+use std::convert::TryFrom;
+use std::str::FromStr;
+
+use pest::iterators::Pair;
+use pest::Parser;
+
 use vcore::opcodes::Opcode;
 
-use crate::parse_error::ParseError;
-
-use pest::{Parser};
-use std::convert::TryFrom;
-use pest::iterators::Pair;
-use std::str::FromStr;
+pub use crate::ast::*;
+use crate::ast::{Node, VASMLine};
+pub use crate::parse_error::ParseError;
 
 #[derive(Parser)]
 #[grammar = "vasm.pest"]
-struct VASMParser;
+pub struct VASMParser;
 
-#[derive(Debug, PartialEq, Copy, Clone)]
-pub enum Directive { Db, Equ, Org }
-
-impl From<&str> for Directive {
-    fn from(value: &str) -> Self {
-        use Directive::*;
-        match value {
-            ".db" => Db,
-            ".equ" => Equ,
-            ".org" => Org,
-            _ => unreachable!()
-        }
-    }
-}
-
-#[derive(Debug, PartialEq, Copy, Clone)]
-pub enum Instruction {
-    Directive(Directive),
-    Opcode(Opcode)
-}
-
-impl<'a> TryFrom<Pair<'a, Rule>> for Instruction {
-    type Error = ParseError<'a>;
-
-    fn try_from(pair: Pair<'a, Rule>) -> Result<Self, Self::Error> {
-        match pair.as_rule() {
-            Rule::opcode => Ok(Instruction::Opcode(Opcode::try_from(pair.as_str())?)),
-            Rule::directive => Ok(Instruction::Directive(Directive::from(pair.as_str()))),
-            _ => Err(ParseError::InvalidInstruction(pair.as_str()))
-        }
-    }
-}
-
-#[derive(Debug, PartialEq, Copy, Clone)]
-enum Operator { Add, Sub, Mul, Div, Mod }
-
-impl From<&str> for Operator {
-    fn from(s: &str) -> Self {
-        use Operator::*;
-        match s {
-            "+" => Add,
-            "-" => Sub,
-            "*" => Mul,
-            "/" => Div,
-            "%" => Mod,
-            _ => unreachable!()
-        }
-    }
-}
-
-#[derive(Debug, PartialEq, Clone)]
-enum Node<'a>{
-    Number(i32),
-    Label(&'a str),
-    RelativeLabel(&'a str),
-    AbsoluteOffset(i32),
-    RelativeOffset(i32),
-    String(String),
-    Expr(Box<Node<'a>>, Vec<(Operator, Node<'a>)>)
-}
-
-impl<'a> Node<'a> {
-    pub fn simple_expr(node: Node<'a>) -> Node<'a> {
-        Node::Expr(Box::from(node), vec![])
-    }
-
-    pub fn string(pair: Pair<'a, Rule>) -> Node<'a> {
-        let mut string = String::with_capacity(pair.as_str().len());
-        for inner in pair.into_inner() {
-            let string_inner = inner.as_str();
-            match string_inner {
-                "\\t" => string.push_str("\t"),
-                "\\r" => string.push_str("\r"),
-                "\\n" => string.push_str("\n"),
-                "\\0" => string.push_str("\0"),
-                "\\\\" => string.push_str("\\"),
-                "\\\"" => string.push_str("\""),
-                _ => string.push_str(string_inner)
+/// Perform tree-shaking on a `Node` by recursively removing single-`Node` exprs.
+fn shake(node: Node) -> Node {
+    match node {
+        Node::Expr(first, rest) => {
+            let shaken_car = shake(*first);
+            if rest.is_empty() {
+                shaken_car
+            } else {
+                let shaken_cdr = rest.into_iter().map(|(op, n)| (op, shake(n))).collect();
+                Node::Expr(Box::from(shaken_car), shaken_cdr)
             }
         }
-        Node::String(string)
-    }
-
-    pub fn line_offset(pair: Pair<'a, Rule>) -> Node<'a> {
-        let outer = pair.as_rule();
-        let mut inner = pair.into_inner();
-        let sign = inner.next().unwrap().as_str();
-        let mut num = i32::from_str(inner.next().unwrap().as_str()).unwrap();
-        if sign == "-" { num *= -1 }
-        match outer {
-            Rule::relative_line_offset => Node::RelativeOffset(num),
-            Rule::absolute_line_offset => Node::AbsoluteOffset(num),
-            _ => unreachable!()
-        }
-    }
-
-    pub fn shake(node: Node<'a>) -> Node<'a> {
-        match node {
-            Node::Expr(first, rest) => {
-                let shaken_car = Node::shake(*first);
-                if rest.is_empty() {
-                    shaken_car
-                } else {
-                    let shaken_cdr = rest.into_iter().map(|(op, n)| (op, Node::shake(n))).collect();
-                    Node::Expr(Box::from(shaken_car), shaken_cdr)
-                }
-            },
-            _ => node
-        }
+        _ => node
     }
 }
 
-impl<'a> TryFrom<Pair<'a, Rule>> for Node<'a> {
-    type Error = ParseError<'a>;
-
-    fn try_from(pair: Pair<'a, Rule>) -> Result<Self, Self::Error> {
-        match pair.as_rule() {
-            Rule::expr | Rule::term => {
-                let mut iter = pair.into_inner();
-                let first = Node::try_from(iter.next().unwrap())?;
-                let mut rest = Vec::<(Operator, Node)>::new();
-
-                while let Some(operator) = iter.next() {
-                    let rhs = iter.next().unwrap();
-                    let op = Operator::from(operator.as_str());
-                    let node = Node::try_from(rhs)?;
-                    rest.push((op, node));
-                }
-                Ok(Node::Expr(Box::from(first), rest))
-            }
-            Rule::fact | Rule::number => {
-                Ok(Node::try_from(pair.into_inner().next().unwrap())?)
-            }
-            Rule::dec_number | Rule::dec_zero | Rule::neg_number => {
-                Ok(Node::Number(i32::from_str(pair.as_str()).unwrap()))
-            }
-            Rule::hex_number => { Ok(Node::Number(i32::from_str_radix(pair.as_str().get(2..).unwrap(), 16).unwrap())) }
-            Rule::bin_number => { Ok(Node::Number(i32::from_str_radix(pair.as_str().get(2..).unwrap(), 2).unwrap())) }
-            Rule::oct_number => { Ok(Node::Number(i32::from_str_radix(pair.as_str().get(2..).unwrap(), 8).unwrap())) }
-            Rule::string => { Ok(Node::string(pair)) }
-            Rule::label => Ok(Node::Label(pair.as_str())),
-            Rule::relative_label => Ok(Node::RelativeLabel(pair.as_str().get(1..).unwrap())),
-            Rule::absolute_line_offset | Rule::relative_line_offset => Ok(Node::line_offset(pair)),
-            _ => todo!()
-        }
-    }
-}
-
-#[derive(Debug, PartialEq, Clone)]
-pub struct VASMLine<'a> {
-    label: Option<&'a str>,
-    instruction: Option<Instruction>,
-    argument: Option<Node<'a>>
-}
-
-impl<'a> VASMLine<'a> {
-    pub fn blank() -> VASMLine<'a> {
-        VASMLine {
-            label: None,
-            instruction: None,
-            argument: None
-        }
-    }
-
-    pub fn with_instruction(self, instruction: Instruction) -> VASMLine<'a> {
-        VASMLine {
-            label: self.label,
-            instruction: Some(instruction),
-            argument: self.argument
-        }
-    }
-
-    pub fn with_opcode(self, opcode: Opcode) -> VASMLine<'a> {
-        VASMLine {
-            label: self.label,
-            instruction: Some(Instruction::Opcode(opcode)),
-            argument: self.argument
-        }
-    }
-
-    pub fn with_directive(self, directive: Directive) -> VASMLine<'a> {
-        VASMLine {
-            label: self.label,
-            instruction: Some(Instruction::Directive(directive)),
-            argument: self.argument
-        }
-    }
-
-    pub fn with_label(self, label: &'a str) -> Self {
-        VASMLine {
-            label: Some(label),
-            instruction: self.instruction,
-            argument: self.argument
-        }
-    }
-
-    pub fn with_argument(self, argument: Node<'a>) -> Self {
-        VASMLine {
-            label: self.label,
-            instruction: self.instruction,
-            argument: Some(argument)
-        }
-    }
-}
-
-fn parse_vasm_line(line: &str) -> Result<VASMLine, ParseError<'_>> {
+pub fn parse_vasm_line(line: &str) -> Result<VASMLine, ParseError<'_>> {
     let mut pairs = VASMParser::parse(Rule::line, line)
         .map_err(|_| ParseError::LineParseFailure)?
         .next()
@@ -236,7 +50,7 @@ fn parse_vasm_line(line: &str) -> Result<VASMLine, ParseError<'_>> {
         vasm_line = vasm_line.with_instruction(Instruction::try_from(pairs.next().unwrap())?);
 
         if let Some(argument_group) = pairs.next() {
-            vasm_line = vasm_line.with_argument(Node::shake(Node::try_from(argument_group)?))
+            vasm_line = vasm_line.with_argument(shake(Node::try_from(argument_group)?))
         }
     }
 
@@ -245,9 +59,10 @@ fn parse_vasm_line(line: &str) -> Result<VASMLine, ParseError<'_>> {
 
 #[cfg(test)]
 mod test {
+    use vcore::opcodes::Opcode::*;
+
     use super::*;
-    use Opcode::*;
-    use Directive::*;
+    use super::Directive::*;
 
     impl<'a> VASMLine<'a> {
         pub fn op(opcode: Opcode) -> VASMLine<'a> {
@@ -317,11 +132,11 @@ mod test {
                                             Node::Expr(
                                                 Box::from(Node::Number(4)),
                                                 vec![(Operator::Sub, Node::Number(5))],
-                                            ))],)),
+                                            ))], )),
                             (
                                 Operator::Add,
                                 Node::Number(6)
-                            )],))));
+                            )], ))));
     }
 
     #[test]
