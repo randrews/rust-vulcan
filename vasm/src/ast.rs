@@ -5,11 +5,16 @@ use pest::iterators::Pair;
 
 use vcore::opcodes::Opcode;
 
-use crate::vasm_parser::*;
+use crate::parse_error::ParseError;
+use crate::vasm_parser::{Rule, VASMParser};
 
 /// A non-opcode directive to the assembler
 #[derive(Debug, PartialEq, Copy, Clone)]
-pub enum Directive { Db, Equ, Org }
+pub enum Directive {
+    Db,
+    Equ,
+    Org,
+}
 
 impl From<Pair<'_, Rule>> for Directive {
     fn from(value: Pair<Rule>) -> Self {
@@ -18,7 +23,7 @@ impl From<Pair<'_, Rule>> for Directive {
             ".db" => Db,
             ".equ" => Equ,
             ".org" => Org,
-            _ => unreachable!()
+            _ => unreachable!(),
         }
     }
 }
@@ -38,14 +43,20 @@ impl<'a> TryFrom<Pair<'a, Rule>> for Instruction {
         match pair.as_rule() {
             Rule::opcode => Ok(Instruction::Opcode(Opcode::try_from(pair.as_str())?)),
             Rule::directive => Ok(Instruction::Directive(Directive::from(pair))),
-            _ => Err(ParseError::InvalidInstruction(pair.as_str()))
+            _ => Err(ParseError::InvalidInstruction(pair.as_str())),
         }
     }
 }
 
 /// One of the five arithmetical operators
 #[derive(Debug, PartialEq, Copy, Clone)]
-pub enum Operator { Add, Sub, Mul, Div, Mod }
+pub enum Operator {
+    Add,
+    Sub,
+    Mul,
+    Div,
+    Mod,
+}
 
 impl From<Pair<'_, Rule>> for Operator {
     fn from(s: Pair<Rule>) -> Self {
@@ -56,7 +67,7 @@ impl From<Pair<'_, Rule>> for Operator {
             "*" => Mul,
             "/" => Div,
             "%" => Mod,
-            _ => unreachable!()
+            _ => unreachable!(),
         }
     }
 }
@@ -91,7 +102,7 @@ impl<'a> Node<'a> {
                 "\\0" => string.push_str("\0"),
                 "\\\\" => string.push_str("\\"),
                 "\\\"" => string.push_str("\""),
-                _ => string.push_str(string_inner)
+                _ => string.push_str(string_inner),
             }
         }
         Node::String(string)
@@ -103,11 +114,13 @@ impl<'a> Node<'a> {
         let mut inner = pair.into_inner();
         let sign = inner.next().unwrap().as_str();
         let mut num = i32::from_str(inner.next().unwrap().as_str()).unwrap();
-        if sign == "-" { num *= -1 }
+        if sign == "-" {
+            num *= -1
+        }
         match outer {
             Rule::relative_line_offset => Node::RelativeOffset(num),
             Rule::absolute_line_offset => Node::AbsoluteOffset(num),
-            _ => unreachable!()
+            _ => unreachable!(),
         }
     }
 }
@@ -133,20 +146,24 @@ impl<'a> TryFrom<Pair<'a, Rule>> for Node<'a> {
                 }
                 Ok(Node::Expr(Box::from(first), rest))
             }
-            Rule::fact | Rule::number => {
-                Ok(Node::try_from(pair.into_inner().next().unwrap())?)
-            }
+            Rule::fact | Rule::number => Ok(Node::try_from(pair.into_inner().next().unwrap())?),
             Rule::dec_number | Rule::dec_zero | Rule::neg_number => {
                 Ok(Node::Number(i32::from_str(pair.as_str()).unwrap()))
             }
-            Rule::hex_number => { Ok(Node::Number(i32::from_str_radix(pair.as_str().get(2..).unwrap(), 16).unwrap())) }
-            Rule::bin_number => { Ok(Node::Number(i32::from_str_radix(pair.as_str().get(2..).unwrap(), 2).unwrap())) }
-            Rule::oct_number => { Ok(Node::Number(i32::from_str_radix(pair.as_str().get(2..).unwrap(), 8).unwrap())) }
-            Rule::string => { Ok(Node::string(pair)) }
+            Rule::hex_number => Ok(Node::Number(
+                i32::from_str_radix(pair.as_str().get(2..).unwrap(), 16).unwrap(),
+            )),
+            Rule::bin_number => Ok(Node::Number(
+                i32::from_str_radix(pair.as_str().get(2..).unwrap(), 2).unwrap(),
+            )),
+            Rule::oct_number => Ok(Node::Number(
+                i32::from_str_radix(pair.as_str().get(2..).unwrap(), 8).unwrap(),
+            )),
+            Rule::string => Ok(Node::string(pair)),
             Rule::label => Ok(Node::Label(pair.as_str())),
             Rule::relative_label => Ok(Node::RelativeLabel(pair.as_str().get(1..).unwrap())),
             Rule::absolute_line_offset | Rule::relative_line_offset => Ok(Node::line_offset(pair)),
-            _ => todo!()
+            _ => todo!(),
         }
     }
 }
