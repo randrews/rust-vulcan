@@ -1,17 +1,35 @@
 use std::convert::TryFrom;
-use std::str::FromStr;
 
-use pest::iterators::Pair;
 use pest::Parser;
 
 use vcore::opcodes::Opcode;
 
-use crate::ast::{Directive, Instruction, Node, Operator, VASMLine};
+use crate::ast::{Label, Node, VASMLine};
 use crate::parse_error::ParseError;
 
 #[derive(Parser)]
 #[grammar = "vasm.pest"]
 pub struct VASMParser;
+
+type Pair<'a> = pest::iterators::Pair<'a, Rule>;
+
+trait Children {
+    fn first(self) -> Self;
+    fn only(self) -> Self;
+}
+
+impl<'a> Children for Pair<'a> {
+    fn first(self) -> Self {
+        self.into_inner().next().unwrap()
+    }
+
+    fn only(self) -> Pair<'a> {
+        let mut iter = self.into_inner();
+        let child = iter.next().unwrap();
+        debug_assert_eq!(iter.next(), None);
+        child
+    }
+}
 
 /// Perform tree-shaking on a `Node` by recursively removing single-`Node` exprs.
 fn shake(node: Node) -> Node {
@@ -29,79 +47,81 @@ fn shake(node: Node) -> Node {
     }
 }
 
+fn optional_label(pair: Option<Pair>) -> Option<Label> {
+    pair.map(|label| Label(label.only().as_str()))
+}
+
 pub fn parse_vasm_line(line: &str) -> Result<VASMLine, ParseError<'_>> {
-    let mut pairs = VASMParser::parse(Rule::line, line)
+    let line = VASMParser::parse(Rule::line, line)
         .map_err(|_| ParseError::LineParseFailure)?
         .next()
         .unwrap()
-        .into_inner()
-        .peekable();
+        .first();
 
-    let mut vasm_line = VASMLine::blank();
-
-    if let Some(label_group) = pairs.next_if(|pair| pair.as_rule() == Rule::label_group) {
-        let label = label_group.into_inner().next().unwrap();
-        vasm_line = vasm_line.with_label(label.as_str())
-    }
-
-    if let Some(instruction_group) = pairs.next_if(|pair| pair.as_rule() == Rule::instruction_group)
-    {
-        let mut pairs = instruction_group.into_inner();
-        vasm_line = vasm_line.with_instruction(Instruction::try_from(pairs.next().unwrap())?);
-
-        if let Some(argument_group) = pairs.next() {
-            vasm_line = vasm_line.with_argument(shake(Node::try_from(argument_group)?))
+    match line.as_rule() {
+        Rule::instruction => {
+            let mut iter = line.into_inner().peekable();
+            let label = optional_label(iter.next_if(|pair| pair.as_rule() == Rule::label_def));
+            let opcode = Opcode::try_from(
+                iter.next_if(|pair| pair.as_rule() == Rule::opcode)
+                    .unwrap()
+                    .as_str(),
+            )?;
+            let argument = iter
+                .next_if(|pair| pair.as_rule() == Rule::expr)
+                .map(|expr| shake(Node::from(expr)));
+            return Ok(VASMLine::Instruction(label, opcode, argument));
         }
+        Rule::db_directive => {
+            let mut iter = line.into_inner().peekable();
+            let label = optional_label(iter.next_if(|pair| pair.as_rule() == Rule::label_def));
+            let argument = shake(Node::from(iter.next().unwrap()));
+            return Ok(VASMLine::Db(label, argument));
+        }
+        Rule::org_directive => {
+            let mut iter = line.into_inner().peekable();
+            let label = optional_label(iter.next_if(|pair| pair.as_rule() == Rule::label_def));
+            let argument = shake(Node::from(iter.next().unwrap()));
+            return Ok(VASMLine::Org(label, argument));
+        }
+        Rule::equ_directive => {
+            let mut iter = line.into_inner();
+            let label = Label(iter.next().unwrap().only().as_str());
+            let argument = shake(Node::from(iter.next().unwrap()));
+            return Ok(VASMLine::Equ(label, argument));
+        }
+        Rule::label_def => {
+            return Ok(VASMLine::LabelDef(Label(line.only().as_str())));
+        }
+        _ => unreachable!(),
     }
-
-    Ok(vasm_line)
 }
 
 #[cfg(test)]
 mod test {
     use vcore::opcodes::Opcode::*;
 
-    use super::Directive::*;
     use super::*;
+    use crate::ast::Operator;
 
-    impl<'a> VASMLine<'a> {
-        pub fn op(opcode: Opcode) -> VASMLine<'a> {
-            Self::blank().with_opcode(opcode)
-        }
+    fn number(number: i32) -> Node<'static> {
+        Node::Number(number)
+    }
 
-        fn op_number(opcode: Opcode, argument: i32) -> VASMLine<'a> {
-            Self::blank()
-                .with_opcode(opcode)
-                .with_argument(Node::Number(argument))
-        }
-
-        fn op_label(opcode: Opcode, argument: &'a str) -> VASMLine<'a> {
-            Self::blank()
-                .with_opcode(opcode)
-                .with_argument(Node::Label(argument))
-        }
-
-        fn op_rel_label(opcode: Opcode, argument: &'a str) -> VASMLine<'a> {
-            Self::blank()
-                .with_opcode(opcode)
-                .with_argument(Node::RelativeLabel(argument))
-        }
-
-        fn op_off(opcode: Opcode, argument: Node<'a>) -> VASMLine<'a> {
-            Self::blank().with_opcode(opcode).with_argument(argument)
-        }
-
-        pub fn dir_str(directive: Directive, string: &str) -> VASMLine<'a> {
-            Self::blank()
-                .with_directive(directive)
-                .with_argument(Node::String(string.to_string()))
-        }
+    fn string(s: &str) -> Node<'static> {
+        Node::String(s.to_string())
     }
 
     #[test]
     fn test_parse() {
-        assert_eq!(parse_vasm_line("add"), Ok(VASMLine::op(Add)));
-        assert_eq!(parse_vasm_line("sub"), Ok(VASMLine::op(Sub)));
+        assert_eq!(
+            parse_vasm_line("add"),
+            Ok(VASMLine::Instruction(None, Add, None))
+        );
+        assert_eq!(
+            parse_vasm_line("sub"),
+            Ok(VASMLine::Instruction(None, Sub, None))
+        );
         assert_eq!(
             parse_vasm_line("blah"),
             Err(ParseError::InvalidInstruction("blah"))
@@ -111,61 +131,83 @@ mod test {
 
     #[test]
     fn test_numbers() {
-        assert_eq!(parse_vasm_line("add 45"), Ok(VASMLine::op_number(Add, 45)));
-        assert_eq!(parse_vasm_line("add 0"), Ok(VASMLine::op_number(Add, 0)));
+        assert_eq!(
+            parse_vasm_line("add 45"),
+            Ok(VASMLine::Instruction(None, Add, Some(number(45))))
+        );
+        assert_eq!(
+            parse_vasm_line("blah: add 45"),
+            Ok(VASMLine::Instruction(
+                Some(Label("blah")),
+                Add,
+                Some(number(45))
+            ))
+        );
+        assert_eq!(
+            parse_vasm_line("add 0"),
+            Ok(VASMLine::Instruction(None, Add, Some(number(0))))
+        );
         assert_eq!(
             parse_vasm_line("add 0x10"),
-            Ok(VASMLine::op_number(Add, 16))
+            Ok(VASMLine::Instruction(None, Add, Some(number(16))))
         );
         assert_eq!(
             parse_vasm_line("add 0b1111"),
-            Ok(VASMLine::op_number(Add, 15))
+            Ok(VASMLine::Instruction(None, Add, Some(number(15))))
         );
         assert_eq!(
             parse_vasm_line("add 0o377"),
-            Ok(VASMLine::op_number(Add, 255))
+            Ok(VASMLine::Instruction(None, Add, Some(number(255))))
         );
         assert_eq!(
             parse_vasm_line("add -17"),
-            Ok(VASMLine::op_number(Add, -17))
+            Ok(VASMLine::Instruction(None, Add, Some(number(-17))))
         );
     }
 
     #[test]
-    fn test_strings() {
+    fn test_dbs() {
         assert_eq!(
             parse_vasm_line(".db \"blah\""),
-            Ok(VASMLine::dir_str(Db, "blah"))
+            Ok(VASMLine::Db(None, string("blah")))
         );
         assert_eq!(
             parse_vasm_line(".db \"blah\\twith escapes\\0\""),
-            Ok(VASMLine::dir_str(Db, "blah\twith escapes\0"))
-        )
+            Ok(VASMLine::Db(None, string("blah\twith escapes\0")))
+        );
+        assert_eq!(
+            parse_vasm_line("foo: .db 47"),
+            Ok(VASMLine::Db(Some(Label("foo")), number(47)))
+        );
     }
 
     #[test]
     fn test_exprs() {
         assert_eq!(
             parse_vasm_line("add 2 + 3 * (4 - 5) + 6"),
-            Ok(VASMLine::op(Add).with_argument(Node::Expr(
-                Box::from(Node::Number(2)),
-                vec![
-                    (
-                        Operator::Add,
-                        Node::Expr(
-                            Box::from(Node::Number(3)),
-                            vec![(
-                                Operator::Mul,
-                                Node::Expr(
-                                    Box::from(Node::Number(4)),
-                                    vec![(Operator::Sub, Node::Number(5))],
-                                )
-                            )],
-                        )
-                    ),
-                    (Operator::Add, Node::Number(6))
-                ],
-            )))
+            Ok(VASMLine::Instruction(
+                None,
+                Add,
+                Some(Node::Expr(
+                    Box::from(Node::Number(2)),
+                    vec![
+                        (
+                            Operator::Add,
+                            Node::Expr(
+                                Box::from(Node::Number(3)),
+                                vec![(
+                                    Operator::Mul,
+                                    Node::Expr(
+                                        Box::from(Node::Number(4)),
+                                        vec![(Operator::Sub, Node::Number(5))],
+                                    )
+                                )],
+                            )
+                        ),
+                        (Operator::Add, Node::Number(6))
+                    ],
+                ))
+            ))
         );
     }
 
@@ -173,11 +215,15 @@ mod test {
     fn test_expr_labels() {
         assert_eq!(
             parse_vasm_line("loadw foo"),
-            Ok(VASMLine::op_label(Loadw, "foo"))
+            Ok(VASMLine::Instruction(None, Loadw, Some(Node::Label("foo"))))
         );
         assert_eq!(
             parse_vasm_line("brz @blah"),
-            Ok(VASMLine::op_rel_label(Brz, "blah"))
+            Ok(VASMLine::Instruction(
+                None,
+                Brz,
+                Some(Node::RelativeLabel("blah"))
+            ))
         )
     }
 
@@ -185,11 +231,19 @@ mod test {
     fn test_expr_offsets() {
         assert_eq!(
             parse_vasm_line("jmp $-2"),
-            Ok(VASMLine::op_off(Jmp, Node::AbsoluteOffset(-2)))
+            Ok(VASMLine::Instruction(
+                None,
+                Jmp,
+                Some(Node::AbsoluteOffset(-2))
+            ))
         );
         assert_eq!(
             parse_vasm_line("brz @+3"),
-            Ok(VASMLine::op_off(Brz, Node::RelativeOffset(3)))
+            Ok(VASMLine::Instruction(
+                None,
+                Brz,
+                Some(Node::RelativeOffset(3))
+            ))
         )
     }
 
@@ -197,27 +251,31 @@ mod test {
     fn test_parse_labels() {
         assert_eq!(
             parse_vasm_line("foo: add"),
-            Ok(VASMLine::op(Add).with_label("foo"))
+            Ok(VASMLine::Instruction(Some(Label("foo")), Add, None))
         );
         assert_eq!(
             parse_vasm_line("bar:"),
-            Ok(VASMLine::blank().with_label("bar"))
+            Ok(VASMLine::LabelDef(Label("bar")))
         );
         assert_eq!(
             parse_vasm_line("foo: add 43"),
-            Ok(VASMLine::op_number(Add, 43).with_label("foo"))
+            Ok(VASMLine::Instruction(
+                Some(Label("foo")),
+                Add,
+                Some(number(43))
+            ))
         );
     }
 
     #[test]
     fn test_parse_directives() {
         assert_eq!(
-            parse_vasm_line("foo: .equ"),
-            Ok(VASMLine::blank().with_label("foo").with_directive(Equ))
+            parse_vasm_line("foo: .equ 47"),
+            Ok(VASMLine::Equ(Label("foo"), number(47)))
         );
         assert_eq!(
-            parse_vasm_line(".db"),
-            Ok(VASMLine::blank().with_directive(Db))
+            parse_vasm_line(".org 0x400"),
+            Ok(VASMLine::Org(None, number(1024)))
         );
     }
 }

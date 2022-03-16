@@ -112,6 +112,10 @@ impl CPU {
         }
     }
 
+    #[allow(clippy::cmp_owned)]
+    // This is needed because clippy can't figure out, on alt / agt, that even though yes you can
+    // directly compare two Words, that means something different than comparing the i32s those
+    // Words represent. That difference is the entire point of the agt / alt instructions.
     fn execute(&mut self, instruction: Instruction) -> Word {
         if let Some(arg) = instruction.arg {
             self.push_data(arg)
@@ -242,7 +246,9 @@ impl CPU {
     }
 
     pub fn tick(&mut self) {
-        if self.halted { return }
+        if self.halted {
+            return;
+        }
 
         match self.fetch() {
             Ok(instr) => {
@@ -329,7 +335,7 @@ mod tests {
         let mut cpu = CPU::new(Memory::default());
         given(&mut cpu);
         let new_pc = cpu.execute(Instruction {
-            opcode: opcode,
+            opcode,
             arg: None,
             length: 1,
         });
@@ -501,8 +507,10 @@ mod tests {
         simple_opcode_test(vec![5, 3], Lt, vec![0]);
         simple_opcode_test(vec![5, 7], Lt, vec![1]);
         simple_opcode_test(vec![5, to_word(-3)], Agt, vec![1]);
+        simple_opcode_test(vec![to_word(-3), 5], Agt, vec![0]);
         simple_opcode_test(vec![5, 10], Agt, vec![0]);
         simple_opcode_test(vec![5, to_word(-3)], Alt, vec![0]);
+        simple_opcode_test(vec![to_word(-3), 5], Alt, vec![1]);
         simple_opcode_test(vec![5, 10], Alt, vec![1]);
         simple_opcode_test(vec![0b1100, 2], Rshift, vec![3]);
         simple_opcode_test(vec![0b1100, 2], Lshift, vec![0b110000]);
@@ -541,7 +549,7 @@ mod tests {
     fn test_cpu_new() {
         let cpu = CPU::new(Memory::default());
         assert_eq!(cpu.pc, 1024);
-        assert_eq!(cpu.halted, true);
+        assert!(cpu.halted);
     }
 
     #[test]

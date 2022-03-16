@@ -17,10 +17,9 @@ impl<'a> From<InvalidMnemonic<'a>> for ParseError<'a> {
 impl<'a> Display for ParseError<'a> {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         use ParseError::*;
-        use crate::parse_error::ParseError::LineParseFailure;
         match self {
             LineParseFailure => write!(f, "Failed to parse line"),
-            InvalidInstruction(p) => write!(f, "Cannot parse {} as instruction", p)
+            InvalidInstruction(p) => write!(f, "Cannot parse {} as instruction", p),
         }
     }
 }

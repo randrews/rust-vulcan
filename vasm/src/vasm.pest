@@ -24,6 +24,7 @@ number = { dec_number | hex_number | bin_number | oct_number | dec_zero | neg_nu
 // a digit:
 label_char = { ASCII_ALPHA_LOWER | ASCII_ALPHA_UPPER | "_" }
 label = @{ label_char ~ (label_char | ASCII_DIGIT | "$")* }
+label_def = { label ~ ":" }
 
 // To make relative jumps easier, we'll also allow an '@' at the start of a label, and interpret
 // that as meaning "relative to the first byte of this instruction:"
@@ -35,13 +36,7 @@ absolute_line_offset = { "$" ~ sign ~ dec_number }
 // And the relative form of that, @+nnn and @-nnn:
 relative_line_offset = { "@" ~ sign ~ dec_number }
 
-opcode = @{ ASCII_ALPHA_LOWER+ } // TODO: replace with actual list
-
-// The assembler will support some directives:
-// - .org to set the current address
-// - .db to embed some data
-// - .equ to define some constants
-directive = { ".org" | ".db" | ".equ" }
+opcode = @{ ASCII_ALPHA_LOWER+ }
 
 // The .equ directive isn't much use without the ability to have expressions based on
 // symbols, so, a quick arithmetic expression parser:
@@ -61,14 +56,16 @@ string = ${ "\"" ~ string_inner* ~ "\"" }
 
 // Parsing a line
 // Normally an assembly line will be a sequence of "label, opcode, argument, comment."
-// However, most of these elements are optional. An opcode is only required if an
-// argument exists. Comments are already handled by the COMMENT pattern
-
-// Some sub-patterns for the portions of a line:
-label_group = { label ~ ":" }
-
-// An opcode might be an actual opcode, or a directive
-instruction_group = { (opcode | directive) ~ (expr | string)? }
+// However, only some combinations of these are valid. Comments are already handled by
+// the COMMENT pattern.
+// Also, a line might be an actual instruction, or the assembler will support some directives:
+// - .org to set the current address
+// - .db to embed some data
+// - .equ to define some constants
+instruction = { label_def? ~ opcode ~ expr? }
+db_directive = { label_def? ~ ".db" ~ (expr | string) }
+org_directive = { label_def? ~ ".org" ~ expr }
+equ_directive = { label_def ~ ".equ" ~ expr }
 
 // Finally the entire pattern for an assembly line:
-line = { SOI ~ label_group? ~ instruction_group? ~ EOI }
+line = { SOI ~ (db_directive | org_directive | equ_directive | instruction | label_def) ~ EOI }

@@ -12,7 +12,7 @@ impl Word {
     /// ```
     /// use vcore::word::Word;
     ///
-    /// assert!(Word::from_bytes([0x01, 0x02, 0x03]) == 0x030201);
+    /// assert_eq!(Word::from_bytes([0x01, 0x02, 0x03]), 0x030201);
     /// ```
     pub fn from_bytes(bytes: [u8; 3]) -> Self {
         let [a, b, c] = bytes;
@@ -130,9 +130,9 @@ impl From<Word> for bool {
 
 #[test]
 fn to_from_bool() {
-    assert_eq!(bool::from(Word::from(0)), false);
-    assert_eq!(bool::from(Word::from(1)), true);
-    assert_eq!(bool::from(Word::from(0x123456)), true);
+    assert!(!bool::from(Word::from(0)));
+    assert!(bool::from(Word::from(1)));
+    assert!(bool::from(Word::from(0x123456)));
 
     assert_eq!(Word::from(false), Word::from(0));
     assert_eq!(Word::from(true), Word::from(1));
