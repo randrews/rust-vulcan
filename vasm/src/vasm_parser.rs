@@ -4,12 +4,17 @@ use pest::Parser;
 
 use vcore::opcodes::Opcode;
 
-use crate::ast::{Label, Node, VASMLine};
+use crate::ast::{Label, Node, Operator, VASMLine};
 use crate::parse_error::ParseError;
+use std::str::FromStr;
 
-#[derive(Parser)]
-#[grammar = "vasm.pest"]
-pub struct VASMParser;
+mod inner {
+    #[derive(Parser)]
+    #[grammar = "vasm.pest"]
+    pub struct VASMParser;
+}
+
+use inner::*;
 
 type Pair<'a> = pest::iterators::Pair<'a, Rule>;
 
@@ -47,6 +52,96 @@ fn shake(node: Node) -> Node {
     }
 }
 
+impl From<Pair<'_>> for Operator {
+    fn from(s: Pair) -> Self {
+        use Operator::*;
+        match s.as_str() {
+            "+" => Add,
+            "-" => Sub,
+            "*" => Mul,
+            "/" => Div,
+            "%" => Mod,
+            _ => unreachable!(),
+        }
+    }
+}
+
+/// Create a `Node` containing the string represented by a given pair. Since the pair will
+/// reference bytes containing escape sequences, this isn't the same as an &str to the
+/// original code; this is a new string translating those escape sequences to their actual
+/// bytes.
+fn create_string_node(pair: Pair) -> Node {
+    let mut string = String::with_capacity(pair.as_str().len());
+    for inner in pair.into_inner() {
+        let string_inner = inner.as_str();
+        match string_inner {
+            "\\t" => string.push('\t'),
+            "\\r" => string.push('\r'),
+            "\\n" => string.push('\n'),
+            "\\0" => string.push('\0'),
+            "\\\\" => string.push('\\'),
+            "\\\"" => string.push('\"'),
+            _ => string.push_str(string_inner),
+        }
+    }
+    Node::String(string)
+}
+
+/// Create a `Node` containing the line offset represented by a pair.
+fn create_line_offset_node(pair: Pair) -> Node {
+    let outer = pair.as_rule();
+    let mut inner = pair.into_inner();
+    let sign = inner.next().unwrap().as_str();
+    let mut num = i32::from_str(inner.next().unwrap().as_str()).unwrap();
+    if sign == "-" {
+        num *= -1
+    }
+    match outer {
+        Rule::relative_line_offset => Node::RelativeOffset(num),
+        Rule::absolute_line_offset => Node::AbsoluteOffset(num),
+        _ => unreachable!(),
+    }
+}
+
+/// Parse a given pair into the `Node` it represents. The result of this is a
+/// `Node` that might contain a borrow of part of the original code, but which in no way
+/// depends on the original pair's object model.
+fn parse(pair: Pair) -> Node {
+    match pair.as_rule() {
+        Rule::expr | Rule::term => {
+            let mut iter = pair.into_inner();
+            let first = parse(iter.next().unwrap());
+            let mut rest = Vec::<(Operator, Node)>::new();
+
+            while let Some(operator) = iter.next() {
+                let rhs = iter.next().unwrap();
+                let op = Operator::from(operator);
+                let node = parse(rhs);
+                rest.push((op, node));
+            }
+            Node::Expr(Box::from(first), rest)
+        }
+        Rule::fact | Rule::number => parse(pair.only()),
+        Rule::dec_number | Rule::dec_zero | Rule::neg_number => {
+            Node::Number(i32::from_str(pair.as_str()).unwrap())
+        }
+        Rule::hex_number => {
+            Node::Number(i32::from_str_radix(pair.as_str().get(2..).unwrap(), 16).unwrap())
+        }
+        Rule::bin_number => {
+            Node::Number(i32::from_str_radix(pair.as_str().get(2..).unwrap(), 2).unwrap())
+        }
+        Rule::oct_number => {
+            Node::Number(i32::from_str_radix(pair.as_str().get(2..).unwrap(), 8).unwrap())
+        }
+        Rule::string => create_string_node(pair),
+        Rule::label => Node::Label(pair.as_str()),
+        Rule::relative_label => Node::RelativeLabel(pair.as_str().get(1..).unwrap()),
+        Rule::absolute_line_offset | Rule::relative_line_offset => create_line_offset_node(pair),
+        _ => unreachable!(),
+    }
+}
+
 fn optional_label(pair: Option<Pair>) -> Option<Label> {
     pair.map(|label| Label(label.only().as_str()))
 }
@@ -69,25 +164,25 @@ pub fn parse_vasm_line(line: &str) -> Result<VASMLine, ParseError<'_>> {
             )?;
             let argument = iter
                 .next_if(|pair| pair.as_rule() == Rule::expr)
-                .map(|expr| shake(Node::from(expr)));
+                .map(|expr| shake(parse(expr)));
             return Ok(VASMLine::Instruction(label, opcode, argument));
         }
         Rule::db_directive => {
             let mut iter = line.into_inner().peekable();
             let label = optional_label(iter.next_if(|pair| pair.as_rule() == Rule::label_def));
-            let argument = shake(Node::from(iter.next().unwrap()));
+            let argument = shake(parse(iter.next().unwrap()));
             return Ok(VASMLine::Db(label, argument));
         }
         Rule::org_directive => {
             let mut iter = line.into_inner().peekable();
             let label = optional_label(iter.next_if(|pair| pair.as_rule() == Rule::label_def));
-            let argument = shake(Node::from(iter.next().unwrap()));
+            let argument = shake(parse(iter.next().unwrap()));
             return Ok(VASMLine::Org(label, argument));
         }
         Rule::equ_directive => {
             let mut iter = line.into_inner();
             let label = Label(iter.next().unwrap().only().as_str());
-            let argument = shake(Node::from(iter.next().unwrap()));
+            let argument = shake(parse(iter.next().unwrap()));
             return Ok(VASMLine::Equ(label, argument));
         }
         Rule::label_def => {

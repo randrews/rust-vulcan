@@ -44,7 +44,7 @@ sign = { "+" | "-" }
 term_op = { "/" | "*" | "%" }
 expr = { term ~ (sign ~ term)* }
 term = { fact ~ (term_op ~ fact)* }
-fact = { ("(" ~ expr ~ ")") | (number | relative_line_offset | relative_label | absolute_line_offset | label) }
+fact = { ("(" ~ expr ~ ")") | number | relative_line_offset | relative_label | absolute_line_offset | label }
 
 // Likewise, .db would get tedious quick without a string syntax, so, let's define one of those. An escape
 // sequence is a backslash followed by certain other characters:
