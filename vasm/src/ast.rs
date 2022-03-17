@@ -5,6 +5,7 @@ use pest::iterators::Pair;
 use vcore::opcodes::Opcode;
 
 use crate::vasm_parser::Rule;
+use std::fmt::{Display, Formatter};
 
 /// A non-opcode directive to the assembler
 #[derive(Debug, PartialEq, Copy, Clone)]
@@ -60,7 +61,7 @@ pub enum Node<'a> {
     RelativeLabel(&'a str),
     AbsoluteOffset(i32),
     RelativeOffset(i32),
-    String(String),
+    String(String), // TODO: this shouldn't exist
     Expr(Box<Node<'a>>, Vec<(Operator, Node<'a>)>),
 }
 
@@ -146,6 +147,12 @@ impl<'a> From<Pair<'a, Rule>> for Node<'a> {
 
 #[derive(Debug, PartialEq, Clone)]
 pub struct Label<'a>(pub &'a str);
+
+impl<'a> Display for Label<'a> {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}", self.0)
+    }
+}
 
 #[derive(Debug, PartialEq, Clone)]
 pub enum VASMLine<'a> {
