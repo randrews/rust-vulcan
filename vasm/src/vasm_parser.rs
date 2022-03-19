@@ -66,11 +66,11 @@ impl From<Pair<'_>> for Operator {
     }
 }
 
-/// Create a `Node` containing the string represented by a given pair. Since the pair will
+/// Create a String containing the string represented by a given pair. Since the pair will
 /// reference bytes containing escape sequences, this isn't the same as an &str to the
 /// original code; this is a new string translating those escape sequences to their actual
 /// bytes.
-fn create_string_node(pair: Pair) -> Node {
+fn create_string(pair: Pair) -> String {
     let mut string = String::with_capacity(pair.as_str().len());
     for inner in pair.into_inner() {
         let string_inner = inner.as_str();
@@ -84,7 +84,7 @@ fn create_string_node(pair: Pair) -> Node {
             _ => string.push_str(string_inner),
         }
     }
-    Node::String(string)
+    string
 }
 
 /// Create a `Node` containing the line offset represented by a pair.
@@ -134,7 +134,6 @@ fn parse(pair: Pair) -> Node {
         Rule::oct_number => {
             Node::Number(i32::from_str_radix(pair.as_str().get(2..).unwrap(), 8).unwrap())
         }
-        Rule::string => create_string_node(pair),
         Rule::label => Node::Label(pair.as_str()),
         Rule::relative_label => Node::RelativeLabel(pair.as_str().get(1..).unwrap()),
         Rule::absolute_line_offset | Rule::relative_line_offset => create_line_offset_node(pair),
@@ -167,11 +166,17 @@ pub fn parse_vasm_line(line: &str) -> Result<VASMLine, ParseError<'_>> {
                 .map(|expr| shake(parse(expr)));
             return Ok(VASMLine::Instruction(label, opcode, argument));
         }
-        Rule::db_directive => {
+        Rule::db_word => {
             let mut iter = line.into_inner().peekable();
             let label = optional_label(iter.next_if(|pair| pair.as_rule() == Rule::label_def));
             let argument = shake(parse(iter.next().unwrap()));
             return Ok(VASMLine::Db(label, argument));
+        }
+        Rule::db_string => {
+            let mut iter = line.into_inner().peekable();
+            let label = optional_label(iter.next_if(|pair| pair.as_rule() == Rule::label_def));
+            let argument = create_string(iter.next().unwrap());
+            return Ok(VASMLine::StringDb(label, argument));
         }
         Rule::org_directive => {
             let mut iter = line.into_inner().peekable();
@@ -201,10 +206,6 @@ mod test {
 
     fn number(number: i32) -> Node<'static> {
         Node::Number(number)
-    }
-
-    fn string(s: &str) -> Node<'static> {
-        Node::String(s.to_string())
     }
 
     #[test]
@@ -264,11 +265,11 @@ mod test {
     fn test_dbs() {
         assert_eq!(
             parse_vasm_line(".db \"blah\""),
-            Ok(VASMLine::Db(None, string("blah")))
+            Ok(VASMLine::StringDb(None, "blah".into()))
         );
         assert_eq!(
             parse_vasm_line(".db \"blah\\twith escapes\\0\""),
-            Ok(VASMLine::Db(None, string("blah\twith escapes\0")))
+            Ok(VASMLine::StringDb(None, "blah\twith escapes\0".into()))
         );
         assert_eq!(
             parse_vasm_line("foo: .db 47"),

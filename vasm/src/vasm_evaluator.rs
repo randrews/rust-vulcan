@@ -59,9 +59,6 @@ pub fn eval<'a>(
                 Err(EvalError::UnknownAddress(line_num + offset))
             }
         }
-        Node::String(_) => {
-            unreachable!()
-        }
         Node::Expr(car, cdr) => {
             let car = eval(*car, line_num, line_addresses, scope);
             if let Ok(mut acc) = car {

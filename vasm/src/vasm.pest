@@ -63,9 +63,10 @@ string = ${ "\"" ~ string_inner* ~ "\"" }
 // - .db to embed some data
 // - .equ to define some constants
 instruction = { label_def? ~ opcode ~ expr? }
-db_directive = { label_def? ~ ".db" ~ (expr | string) }
+db_word = { label_def? ~ ".db" ~ expr }
+db_string = { label_def? ~ ".db" ~ string }
 org_directive = { label_def? ~ ".org" ~ expr }
 equ_directive = { label_def ~ ".equ" ~ expr }
 
 // Finally the entire pattern for an assembly line:
-line = { SOI ~ (db_directive | org_directive | equ_directive | instruction | label_def) ~ EOI }
+line = { SOI ~ (db_word | db_string | org_directive | equ_directive | instruction | label_def) ~ EOI }

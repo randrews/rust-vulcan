@@ -22,7 +22,6 @@ pub enum Node<'a> {
     RelativeLabel(&'a str),
     AbsoluteOffset(i32),
     RelativeOffset(i32),
-    String(String), // TODO: this shouldn't exist
     Expr(Box<Node<'a>>, Vec<(Operator, Node<'a>)>),
 }
 
@@ -39,6 +38,7 @@ impl<'a> Display for Label<'a> {
 pub enum VASMLine<'a> {
     Instruction(Option<Label<'a>>, Opcode, Option<Node<'a>>),
     Db(Option<Label<'a>>, Node<'a>),
+    StringDb(Option<Label<'a>>, String),
     Org(Option<Label<'a>>, Node<'a>),
     Equ(Label<'a>, Node<'a>),
     LabelDef(Label<'a>),
