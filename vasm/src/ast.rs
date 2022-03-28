@@ -25,7 +25,7 @@ pub enum Node<'a> {
     Expr(Box<Node<'a>>, Vec<(Operator, Node<'a>)>),
 }
 
-#[derive(Debug, PartialEq, Clone)]
+#[derive(Debug, PartialEq, Copy, Clone)]
 pub struct Label<'a>(pub &'a str);
 
 impl<'a> Display for Label<'a> {
@@ -42,4 +42,18 @@ pub enum VASMLine<'a> {
     Org(Option<Label<'a>>, Node<'a>),
     Equ(Label<'a>, Node<'a>),
     LabelDef(Label<'a>),
+}
+
+impl<'a> VASMLine<'a> {
+    pub fn label(&self) -> Option<Label<'a>> {
+        match self {
+            VASMLine::Instruction(Some(lbl), _, _)
+            | VASMLine::Db(Some(lbl), _)
+            | VASMLine::StringDb(Some(lbl), _)
+            | VASMLine::Org(Some(lbl), _)
+            | VASMLine::Equ(lbl, _)
+            | VASMLine::LabelDef(lbl) => Some(*lbl),
+            _ => None,
+        }
+    }
 }

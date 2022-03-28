@@ -308,6 +308,32 @@ mod test {
     }
 
     #[test]
+    fn test_label_exprs() {
+        assert_eq!(
+            parse_vasm_line("add 2 + foo"),
+            Ok(VASMLine::Instruction(
+                None,
+                Add,
+                Some(Node::Expr(
+                    Box::from(Node::Number(2)),
+                    vec![(Operator::Add, Node::Label("foo"))]
+                ))
+            ))
+        );
+        assert_eq!(
+            parse_vasm_line("add foo + 2"),
+            Ok(VASMLine::Instruction(
+                None,
+                Add,
+                Some(Node::Expr(
+                    Box::from(Node::Label("foo")),
+                    vec![(Operator::Add, Node::Number(2))]
+                ))
+            ))
+        )
+    }
+
+    #[test]
     fn test_expr_labels() {
         assert_eq!(
             parse_vasm_line("loadw foo"),

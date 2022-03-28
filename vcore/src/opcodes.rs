@@ -65,49 +65,135 @@ pub struct InvalidMnemonic<'a>(pub &'a str);
 impl Display for Opcode {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         match self {
-            Opcode::Nop => { write!(f, "nop") }
-            Opcode::Add => { write!(f, "add") }
-            Opcode::Sub => { write!(f, "sub") }
-            Opcode::Mul => { write!(f, "mul") }
-            Opcode::Div => { write!(f, "div") }
-            Opcode::Mod => { write!(f, "mod") }
-            Opcode::Rand => { write!(f, "rand") }
-            Opcode::And => { write!(f, "and") }
-            Opcode::Or => { write!(f, "or") }
-            Opcode::Xor => { write!(f, "xor") }
-            Opcode::Not => { write!(f, "not") }
-            Opcode::Gt => { write!(f, "gt") }
-            Opcode::Lt => { write!(f, "lt") }
-            Opcode::Agt => { write!(f, "agt") }
-            Opcode::Alt => { write!(f, "alt") }
-            Opcode::Lshift => { write!(f, "lshift") }
-            Opcode::Rshift => { write!(f, "rshift") }
-            Opcode::Arshift => { write!(f, "arshift") }
-            Opcode::Pop => { write!(f, "pop") }
-            Opcode::Dup => { write!(f, "dup") }
-            Opcode::Swap => { write!(f, "swap") }
-            Opcode::Pick => { write!(f, "pick") }
-            Opcode::Rot => { write!(f, "rot") }
-            Opcode::Jmp => { write!(f, "jmp") }
-            Opcode::Jmpr => { write!(f, "jmpr") }
-            Opcode::Call => { write!(f, "call") }
-            Opcode::Ret => { write!(f, "ret") }
-            Opcode::Brz => { write!(f, "brz") }
-            Opcode::Brnz => { write!(f, "brnz") }
-            Opcode::Hlt => { write!(f, "hlt") }
-            Opcode::Load => { write!(f, "load") }
-            Opcode::Loadw => { write!(f, "loadw") }
-            Opcode::Store => { write!(f, "store") }
-            Opcode::Storew => { write!(f, "storew") }
-            Opcode::Inton => { write!(f, "inton") }
-            Opcode::Intoff => { write!(f, "intoff") }
-            Opcode::Setiv => { write!(f, "setiv") }
-            Opcode::Sdp => { write!(f, "sdp") }
-            Opcode::Setsdp => { write!(f, "setsdp") }
-            Opcode::Pushr => { write!(f, "pushr") }
-            Opcode::Popr => { write!(f, "popr") }
-            Opcode::Peekr => { write!(f, "peekr") }
-            Opcode::Debug => { write!(f, "debug") }
+            Opcode::Nop => {
+                write!(f, "nop")
+            }
+            Opcode::Add => {
+                write!(f, "add")
+            }
+            Opcode::Sub => {
+                write!(f, "sub")
+            }
+            Opcode::Mul => {
+                write!(f, "mul")
+            }
+            Opcode::Div => {
+                write!(f, "div")
+            }
+            Opcode::Mod => {
+                write!(f, "mod")
+            }
+            Opcode::Rand => {
+                write!(f, "rand")
+            }
+            Opcode::And => {
+                write!(f, "and")
+            }
+            Opcode::Or => {
+                write!(f, "or")
+            }
+            Opcode::Xor => {
+                write!(f, "xor")
+            }
+            Opcode::Not => {
+                write!(f, "not")
+            }
+            Opcode::Gt => {
+                write!(f, "gt")
+            }
+            Opcode::Lt => {
+                write!(f, "lt")
+            }
+            Opcode::Agt => {
+                write!(f, "agt")
+            }
+            Opcode::Alt => {
+                write!(f, "alt")
+            }
+            Opcode::Lshift => {
+                write!(f, "lshift")
+            }
+            Opcode::Rshift => {
+                write!(f, "rshift")
+            }
+            Opcode::Arshift => {
+                write!(f, "arshift")
+            }
+            Opcode::Pop => {
+                write!(f, "pop")
+            }
+            Opcode::Dup => {
+                write!(f, "dup")
+            }
+            Opcode::Swap => {
+                write!(f, "swap")
+            }
+            Opcode::Pick => {
+                write!(f, "pick")
+            }
+            Opcode::Rot => {
+                write!(f, "rot")
+            }
+            Opcode::Jmp => {
+                write!(f, "jmp")
+            }
+            Opcode::Jmpr => {
+                write!(f, "jmpr")
+            }
+            Opcode::Call => {
+                write!(f, "call")
+            }
+            Opcode::Ret => {
+                write!(f, "ret")
+            }
+            Opcode::Brz => {
+                write!(f, "brz")
+            }
+            Opcode::Brnz => {
+                write!(f, "brnz")
+            }
+            Opcode::Hlt => {
+                write!(f, "hlt")
+            }
+            Opcode::Load => {
+                write!(f, "load")
+            }
+            Opcode::Loadw => {
+                write!(f, "loadw")
+            }
+            Opcode::Store => {
+                write!(f, "store")
+            }
+            Opcode::Storew => {
+                write!(f, "storew")
+            }
+            Opcode::Inton => {
+                write!(f, "inton")
+            }
+            Opcode::Intoff => {
+                write!(f, "intoff")
+            }
+            Opcode::Setiv => {
+                write!(f, "setiv")
+            }
+            Opcode::Sdp => {
+                write!(f, "sdp")
+            }
+            Opcode::Setsdp => {
+                write!(f, "setsdp")
+            }
+            Opcode::Pushr => {
+                write!(f, "pushr")
+            }
+            Opcode::Popr => {
+                write!(f, "popr")
+            }
+            Opcode::Peekr => {
+                write!(f, "peekr")
+            }
+            Opcode::Debug => {
+                write!(f, "debug")
+            }
         }
     }
 }
@@ -172,7 +258,7 @@ impl<'a> TryFrom<&'a str> for Opcode {
     fn try_from(value: &'a str) -> Result<Self, Self::Error> {
         use Opcode::*;
         Ok(match value {
-            "nop" => Nop,
+            "nop" | "push" => Nop,
             "add" => Add,
             "sub" => Sub,
             "mul" => Mul,
@@ -215,7 +301,7 @@ impl<'a> TryFrom<&'a str> for Opcode {
             "popr" => Popr,
             "peekr" => Peekr,
             "debug" => Debug,
-            _ => return Err(InvalidMnemonic(value))
+            _ => return Err(InvalidMnemonic(value)),
         })
     }
 }
