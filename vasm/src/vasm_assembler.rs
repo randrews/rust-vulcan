@@ -8,6 +8,7 @@ pub enum AssembleError<'a> {
     EquResolveError(i32, &'a str, EvalError<'a>),
     EquDuplicateError(i32, &'a str),
     OrgResolveError(i32, EvalError<'a>),
+    ArgError(i32, EvalError<'a>),
 }
 
 impl<'a> Display for AssembleError<'a> {
@@ -21,6 +22,9 @@ impl<'a> Display for AssembleError<'a> {
             }
             AssembleError::OrgResolveError(line, err) => {
                 write!(f, "Cannot resolve .org on line {}: {}", line, err)
+            }
+            AssembleError::ArgError(line, err) => {
+                write!(f, "Cannot calculate argument on line {}: {}", line, err)
             }
         }
     }
@@ -48,6 +52,7 @@ pub fn solve_equs<'a>(lines: &[VASMLine<'a>]) -> Result<Scope<'a>, AssembleError
 
 type LineLengths = BTreeMap<i32, usize>;
 type LineAddresses = BTreeMap<i32, i32>;
+type LineArgs = BTreeMap<i32, i32>;
 
 fn arg_length(val: i32) -> usize {
     if val < 0 {
@@ -146,6 +151,33 @@ fn place_labels<'a>(
     Ok((addresses, scope))
 }
 
+/// At this point we have everything we need to calculate the arguments, so we'll do that.
+/// This will take the lines, addresses, and scope we've calculated so far, and iterate through
+/// each line. If the line has an argument, evaluate it based on the scope, and store the number
+/// that it evaluates to
+fn calculate_args<'a>(
+    lines: &[VASMLine<'a>],
+    scope: Scope,
+    line_addresses: &LineAddresses,
+) -> Result<LineArgs, AssembleError<'a>> {
+    let mut args = LineArgs::new();
+
+    for (line_idx, line) in lines.iter().enumerate() {
+        let line_num = (line_idx + 1) as i32;
+
+        match line {
+            VASMLine::Instruction(_, _, Some(arg)) | VASMLine::Db(_, arg) => {
+                let num = eval(arg, line_num, line_addresses, &scope)
+                    .map_err(|err| AssembleError::ArgError(line_num, err))?;
+                args.insert(line_num, num);
+            }
+            _ => {}
+        }
+    }
+
+    Ok(args)
+}
+
 #[cfg(test)]
 mod test {
     use super::AssembleError::*;
@@ -168,6 +200,14 @@ mod test {
         let scope = solve_equs(&lines).unwrap();
         let lengths = measure_instructions(&lines, &scope);
         place_labels(&lines, scope, &lengths)
+    }
+
+    fn calculate_args_pass<'a>(lines: &'a [&str]) -> Result<LineArgs, AssembleError<'a>> {
+        let lines = parse(lines);
+        let scope = solve_equs(&lines).unwrap();
+        let lengths = measure_instructions(&lines, &scope);
+        let (line_addresses, scope) = place_labels(&lines, scope, &lengths)?;
+        calculate_args(&lines, scope, &line_addresses)
     }
 
     #[test]
@@ -270,6 +310,41 @@ mod test {
         assert_eq!(
             place_labels_pass(&["blah: .org blah"]),
             Err(OrgResolveError(1, EvalError::MissingLabel("blah")))
+        );
+    }
+
+    #[test]
+    fn test_calculate_args() {
+        assert_eq!(
+            calculate_args_pass(&["add 3", "add 5"]),
+            Ok([(1, 3), (2, 5)].into())
+        );
+        assert_eq!(
+            calculate_args_pass(&["foo: .equ 4", "add 3+foo", "add foo+7"]),
+            Ok([(2, 7), (3, 11)].into())
+        );
+        assert_eq!(
+            calculate_args_pass(&[".org 0x400", "blah:", "jmp blah + 10"]),
+            Ok([(3, 1034)].into())
+        );
+        assert_eq!(
+            calculate_args_pass(&[".org 0x400", "blah:", "add -4", "jmp @blah + 10"]),
+            Ok([(3, -4), (4, 6)].into()) // blah is 1024, address of line 4 is 1028, so 6
+        );
+        assert_eq!(
+            calculate_args_pass(&[".org 0x400", "sub", "jmp $-1"]),
+            Ok([(3, 0x400)].into())
+        );
+        assert_eq!(
+            calculate_args_pass(&[".org 0x400", "sub", "agt -3", "brz @-2"]),
+            Ok([(3, -3), (4, -5)].into())
+        );
+        assert_eq!(
+            calculate_args_pass(&["add banana + 3"]),
+            Err(AssembleError::ArgError(
+                1,
+                EvalError::MissingLabel("banana")
+            ))
         );
     }
 }
