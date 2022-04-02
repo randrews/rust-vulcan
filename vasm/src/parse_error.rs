@@ -2,7 +2,7 @@ use std::fmt::{Display, Formatter};
 
 use vcore::opcodes::InvalidMnemonic;
 
-#[derive(Debug, PartialEq)]
+#[derive(Debug, PartialEq, Clone)]
 pub enum ParseError<'a> {
     LineParseFailure,
     InvalidInstruction(&'a str),
