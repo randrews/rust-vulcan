@@ -306,6 +306,56 @@ impl<'a> TryFrom<&'a str> for Opcode {
     }
 }
 
+impl From<Opcode> for u8 {
+    fn from(opcode: Opcode) -> Self {
+        match opcode {
+            Opcode::Nop => 0,
+            Opcode::Add => 1,
+            Opcode::Sub => 2,
+            Opcode::Mul => 3,
+            Opcode::Div => 4,
+            Opcode::Mod => 5,
+            Opcode::Rand => 6,
+            Opcode::And => 7,
+            Opcode::Or => 8,
+            Opcode::Xor => 9,
+            Opcode::Not => 10,
+            Opcode::Gt => 11,
+            Opcode::Lt => 12,
+            Opcode::Agt => 13,
+            Opcode::Alt => 14,
+            Opcode::Lshift => 15,
+            Opcode::Rshift => 16,
+            Opcode::Arshift => 17,
+            Opcode::Pop => 18,
+            Opcode::Dup => 19,
+            Opcode::Swap => 20,
+            Opcode::Pick => 21,
+            Opcode::Rot => 22,
+            Opcode::Jmp => 23,
+            Opcode::Jmpr => 24,
+            Opcode::Call => 25,
+            Opcode::Ret => 26,
+            Opcode::Brz => 27,
+            Opcode::Brnz => 28,
+            Opcode::Hlt => 29,
+            Opcode::Load => 30,
+            Opcode::Loadw => 31,
+            Opcode::Store => 32,
+            Opcode::Storew => 33,
+            Opcode::Inton => 34,
+            Opcode::Intoff => 35,
+            Opcode::Setiv => 36,
+            Opcode::Sdp => 37,
+            Opcode::Setsdp => 38,
+            Opcode::Pushr => 39,
+            Opcode::Popr => 40,
+            Opcode::Peekr => 41,
+            Opcode::Debug => 42,
+        }
+    }
+}
+
 #[test]
 fn test_decode() {
     assert_eq!(Opcode::try_from(18), Ok(Opcode::Pop));

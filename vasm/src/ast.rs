@@ -56,4 +56,10 @@ impl<'a> VASMLine<'a> {
             _ => None,
         }
     }
+    pub fn zero_length(&self) -> bool {
+        matches!(
+            self,
+            VASMLine::Org(_, _) | VASMLine::Equ(_, _) | VASMLine::LabelDef(_)
+        )
+    }
 }
