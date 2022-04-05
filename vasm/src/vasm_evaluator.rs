@@ -1,14 +1,15 @@
-use crate::ast::{Node, Operator};
+use crate::ast::{Node, Operator, Scope};
 use std::collections::BTreeMap;
 use std::fmt::{Display, Formatter};
 
 #[derive(Debug, Clone, PartialEq)]
-pub enum EvalError<'a> {
-    MissingLabel(&'a str),
-    UnknownAddress(i32),
+pub enum EvalError {
+    MissingLabel(String),
+    UnknownAddress(usize),
+    OffsetError(usize, i32),
 }
 
-impl<'a> Display for EvalError<'a> {
+impl Display for EvalError {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         match self {
             EvalError::MissingLabel(label) => write!(f, "Unable to resolve label {}", label),
@@ -17,11 +18,20 @@ impl<'a> Display for EvalError<'a> {
                 "Unable to calculate starting address of line {}",
                 line_num
             ),
+            EvalError::OffsetError(line_num, offset) => {
+                write!(f, "Invalid line offset {} on line {}", offset, line_num)
+            }
         }
     }
 }
 
-pub type Scope<'a> = BTreeMap<&'a str, i32>;
+fn offset_line(line_num: usize, offset: i32) -> Result<usize, EvalError> {
+    if (line_num as i32) + offset < 0 {
+        Err(EvalError::OffsetError(line_num, offset))
+    } else {
+        Ok(((line_num as i32) + offset) as usize)
+    }
+}
 
 /// ## Evaluating expressions
 /// Now that we have a parsed file, that file has a bunch of numeric symbols in it: labels,
@@ -45,21 +55,22 @@ pub type Scope<'a> = BTreeMap<&'a str, i32>;
 /// - If the node is an absolute or relative line offset, it attempts to look up the start of
 ///   the given line in the table of line start addresses and gives that address relatively or
 ///   absolutely.
-pub fn eval<'a>(
-    node: &Node<'a>,
-    line_num: i32,
-    line_addresses: &BTreeMap<i32, i32>,
+pub fn eval(
+    node: &Node,
+    line_num: usize,
+    line_addresses: &BTreeMap<usize, i32>,
     scope: &Scope,
-) -> Result<i32, EvalError<'a>> {
+) -> Result<i32, EvalError> {
     match node {
         Node::Number(n) => Ok(*n),
-        Node::Label(label) => scope
-            .get(label)
-            .map_or_else(|| Err(EvalError::MissingLabel(label)), |val| Ok(*val)),
+        Node::Label(label) => scope.get(label.into()).map_or_else(
+            || Err(EvalError::MissingLabel(label.to_string())),
+            |val| Ok(*val),
+        ),
         Node::RelativeLabel(label) => {
             if let Some(address) = line_addresses.get(&line_num) {
-                scope.get(label).map_or_else(
-                    || Err(EvalError::MissingLabel(label)),
+                scope.get(label.into()).map_or_else(
+                    || Err(EvalError::MissingLabel(label.to_string())),
                     |val| Ok(*val - address),
                 )
             } else {
@@ -67,20 +78,21 @@ pub fn eval<'a>(
             }
         }
         Node::AbsoluteOffset(offset) => {
-            if let Some(dest_address) = line_addresses.get(&(line_num + offset)) {
+            let addr = offset_line(line_num, *offset)?;
+            if let Some(dest_address) = line_addresses.get(&addr) {
                 Ok(*dest_address)
             } else {
-                Err(EvalError::UnknownAddress(line_num + offset))
+                Err(EvalError::UnknownAddress(addr))
             }
         }
         Node::RelativeOffset(offset) => {
-            if let (Some(line_address), Some(dest_address)) = (
-                line_addresses.get(&line_num),
-                line_addresses.get(&(line_num + offset)),
-            ) {
+            let addr = offset_line(line_num, *offset)?;
+            if let (Some(line_address), Some(dest_address)) =
+                (line_addresses.get(&line_num), line_addresses.get(&addr))
+            {
                 Ok(*dest_address - *line_address)
             } else {
-                Err(EvalError::UnknownAddress(line_num + offset))
+                Err(EvalError::UnknownAddress(addr))
             }
         }
         Node::Expr(car, cdr) => {
@@ -114,25 +126,22 @@ mod test {
         test_scope_addresses_eval(BTreeMap::new(), [(1, 0x400)].into(), line)
     }
 
-    fn test_scope_eval<'a>(
-        scope: BTreeMap<&'a str, i32>,
-        line: &'a str,
-    ) -> Result<i32, EvalError<'a>> {
+    fn test_scope_eval(scope: Scope, line: &str) -> Result<i32, EvalError> {
         test_scope_addresses_eval(scope, [(1, 0x400)].into(), line)
     }
 
     fn test_addresses_eval(
-        line_addresses: BTreeMap<i32, i32>,
+        line_addresses: BTreeMap<usize, i32>,
         line: &str,
     ) -> Result<i32, EvalError> {
         test_scope_addresses_eval([].into(), line_addresses, line)
     }
 
-    fn test_scope_addresses_eval<'a>(
-        scope: BTreeMap<&'a str, i32>,
-        line_addresses: BTreeMap<i32, i32>,
-        line: &'a str,
-    ) -> Result<i32, EvalError<'a>> {
+    fn test_scope_addresses_eval(
+        scope: Scope,
+        line_addresses: BTreeMap<usize, i32>,
+        line: &str,
+    ) -> Result<i32, EvalError> {
         if let Ok(VASMLine::Instruction(_, _, Some(arg))) = parse_vasm_line(line) {
             eval(&arg, 1, &line_addresses, &scope)
         } else {
@@ -152,45 +161,51 @@ mod test {
 
     #[test]
     fn test_labels() {
-        assert_eq!(test_scope_eval([("apple", 5)].into(), "add apple"), Ok(5));
         assert_eq!(
-            test_scope_eval([("apple", 5)].into(), "add apple + 7"),
+            test_scope_eval([("apple".into(), 5)].into(), "add apple"),
+            Ok(5)
+        );
+        assert_eq!(
+            test_scope_eval([("apple".into(), 5)].into(), "add apple + 7"),
             Ok(12)
         );
         assert_eq!(
-            test_scope_eval([("apple", 5)].into(), "add 5 + apple"),
+            test_scope_eval([("apple".into(), 5)].into(), "add 5 + apple"),
             Ok(10)
         );
         assert_eq!(
-            test_scope_eval([("apple", 5), ("banana", 3)].into(), "add apple * banana"),
+            test_scope_eval(
+                [("apple".into(), 5), ("banana".into(), 3)].into(),
+                "add apple * banana"
+            ),
             Ok(15)
         );
         assert_eq!(
-            test_scope_eval([("apple", 5)].into(), "add banana"),
-            Err(EvalError::MissingLabel("banana"))
+            test_scope_eval([("apple".into(), 5)].into(), "add banana"),
+            Err(EvalError::MissingLabel("banana".into()))
         );
         assert_eq!(
             test_scope_eval([].into(), "add apple + 2"),
-            Err(EvalError::MissingLabel("apple"))
+            Err(EvalError::MissingLabel("apple".into()))
         );
         assert_eq!(
             test_scope_eval([].into(), "add 2 + apple"),
-            Err(EvalError::MissingLabel("apple"))
+            Err(EvalError::MissingLabel("apple".into()))
         );
     }
 
     #[test]
     fn test_relative_labels() {
         assert_eq!(
-            test_scope_eval([("apple", 0x500)].into(), "jmpr @apple"),
+            test_scope_eval([("apple".into(), 0x500)].into(), "jmpr @apple"),
             Ok(0x100)
         );
         assert_eq!(
-            test_scope_eval([("apple", 0x300)].into(), "jmpr @apple"),
+            test_scope_eval([("apple".into(), 0x300)].into(), "jmpr @apple"),
             Ok(-256)
         );
         assert_eq!(
-            test_scope_addresses_eval([("apple", 0x300)].into(), [].into(), "jmpr @apple"),
+            test_scope_addresses_eval([("apple".into(), 0x300)].into(), [].into(), "jmpr @apple"),
             Err(EvalError::UnknownAddress(1))
         );
     }

@@ -3,18 +3,18 @@ use std::fmt::{Display, Formatter};
 use vcore::opcodes::InvalidMnemonic;
 
 #[derive(Debug, PartialEq, Clone)]
-pub enum ParseError<'a> {
+pub enum ParseError {
     LineParseFailure,
-    InvalidInstruction(&'a str),
+    InvalidInstruction(String),
 }
 
-impl<'a> From<InvalidMnemonic<'a>> for ParseError<'a> {
+impl<'a> From<InvalidMnemonic<'a>> for ParseError {
     fn from(err: InvalidMnemonic<'a>) -> Self {
-        Self::InvalidInstruction(err.0)
+        Self::InvalidInstruction(err.0.into())
     }
 }
 
-impl<'a> Display for ParseError<'a> {
+impl Display for ParseError {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         use ParseError::*;
         match self {

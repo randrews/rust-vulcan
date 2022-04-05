@@ -4,7 +4,7 @@ use pest::Parser;
 
 use vcore::opcodes::Opcode;
 
-use crate::ast::{Label, Node, Operator, VASMLine};
+use crate::ast::{Label, Macro, Node, Operator, VASMLine};
 use crate::parse_error::ParseError;
 use std::str::FromStr;
 
@@ -134,18 +134,18 @@ fn parse(pair: Pair) -> Node {
         Rule::oct_number => {
             Node::Number(i32::from_str_radix(pair.as_str().get(2..).unwrap(), 8).unwrap())
         }
-        Rule::label => Node::Label(pair.as_str()),
-        Rule::relative_label => Node::RelativeLabel(pair.as_str().get(1..).unwrap()),
+        Rule::label => Node::label(pair.as_str()),
+        Rule::relative_label => Node::relative_label(pair.as_str().get(1..).unwrap()),
         Rule::absolute_line_offset | Rule::relative_line_offset => create_line_offset_node(pair),
         _ => unreachable!(),
     }
 }
 
 fn optional_label(pair: Option<Pair>) -> Option<Label> {
-    pair.map(|label| Label(label.only().as_str()))
+    pair.map(|label| Label::from(label.only().as_str()))
 }
 
-pub fn parse_vasm_line(line: &str) -> Result<VASMLine, ParseError<'_>> {
+pub fn parse_vasm_line(line: &str) -> Result<VASMLine, ParseError> {
     let line = VASMParser::parse(Rule::line, line)
         .map_err(|_| ParseError::LineParseFailure)?
         .next()
@@ -164,35 +164,51 @@ pub fn parse_vasm_line(line: &str) -> Result<VASMLine, ParseError<'_>> {
             let argument = iter
                 .next_if(|pair| pair.as_rule() == Rule::expr)
                 .map(|expr| shake(parse(expr)));
-            return Ok(VASMLine::Instruction(label, opcode, argument));
+            Ok(VASMLine::Instruction(label, opcode, argument))
         }
         Rule::db_word => {
             let mut iter = line.into_inner().peekable();
             let label = optional_label(iter.next_if(|pair| pair.as_rule() == Rule::label_def));
             let argument = shake(parse(iter.next().unwrap()));
-            return Ok(VASMLine::Db(label, argument));
+            Ok(VASMLine::Db(label, argument))
         }
         Rule::db_string => {
             let mut iter = line.into_inner().peekable();
             let label = optional_label(iter.next_if(|pair| pair.as_rule() == Rule::label_def));
             let argument = create_string(iter.next().unwrap());
-            return Ok(VASMLine::StringDb(label, argument));
+            Ok(VASMLine::StringDb(label, argument))
         }
         Rule::org_directive => {
             let mut iter = line.into_inner().peekable();
             let label = optional_label(iter.next_if(|pair| pair.as_rule() == Rule::label_def));
             let argument = shake(parse(iter.next().unwrap()));
-            return Ok(VASMLine::Org(label, argument));
+            Ok(VASMLine::Org(label, argument))
         }
         Rule::equ_directive => {
             let mut iter = line.into_inner();
-            let label = Label(iter.next().unwrap().only().as_str());
+            let label = Label::from(iter.next().unwrap().only().as_str());
             let argument = shake(parse(iter.next().unwrap()));
-            return Ok(VASMLine::Equ(label, argument));
+            Ok(VASMLine::Equ(label, argument))
         }
-        Rule::label_def => {
-            return Ok(VASMLine::LabelDef(Label(line.only().as_str())));
-        }
+        Rule::label_def => Ok(VASMLine::LabelDef(Label::from(line.only().as_str()))),
+        Rule::preprocessor => Ok(VASMLine::Macro(parse_macro(line))),
+        _ => unreachable!(),
+    }
+}
+
+fn parse_macro(line: Pair) -> Macro {
+    let pre = line.only();
+    match pre.as_rule() {
+        Rule::control => match pre.as_str() {
+            "if" => Macro::If,
+            "else" => Macro::Else,
+            "while" => Macro::While,
+            "until" => Macro::Until,
+            "do" => Macro::Do,
+            "end" => Macro::End,
+            _ => unreachable!(),
+        },
+        Rule::include => Macro::Include(create_string(pre.only())),
         _ => unreachable!(),
     }
 }
@@ -204,7 +220,7 @@ mod test {
     use super::*;
     use crate::ast::Operator;
 
-    fn number(number: i32) -> Node<'static> {
+    fn number(number: i32) -> Node {
         Node::Number(number)
     }
 
@@ -220,7 +236,7 @@ mod test {
         );
         assert_eq!(
             parse_vasm_line("blah"),
-            Err(ParseError::InvalidInstruction("blah"))
+            Err(ParseError::InvalidInstruction("blah".into()))
         );
         assert_eq!(parse_vasm_line("47"), Err(ParseError::LineParseFailure));
     }
@@ -234,7 +250,7 @@ mod test {
         assert_eq!(
             parse_vasm_line("blah: add 45"),
             Ok(VASMLine::Instruction(
-                Some(Label("blah")),
+                Some(Label::from("blah")),
                 Add,
                 Some(number(45))
             ))
@@ -273,7 +289,7 @@ mod test {
         );
         assert_eq!(
             parse_vasm_line("foo: .db 47"),
-            Ok(VASMLine::Db(Some(Label("foo")), number(47)))
+            Ok(VASMLine::Db(Some(Label::from("foo")), number(47)))
         );
     }
 
@@ -316,7 +332,7 @@ mod test {
                 Add,
                 Some(Node::Expr(
                     Box::from(Node::Number(2)),
-                    vec![(Operator::Add, Node::Label("foo"))]
+                    vec![(Operator::Add, Node::label("foo"))]
                 ))
             ))
         );
@@ -326,7 +342,7 @@ mod test {
                 None,
                 Add,
                 Some(Node::Expr(
-                    Box::from(Node::Label("foo")),
+                    Box::from(Node::label("foo")),
                     vec![(Operator::Add, Node::Number(2))]
                 ))
             ))
@@ -337,14 +353,14 @@ mod test {
     fn test_expr_labels() {
         assert_eq!(
             parse_vasm_line("loadw foo"),
-            Ok(VASMLine::Instruction(None, Loadw, Some(Node::Label("foo"))))
+            Ok(VASMLine::Instruction(None, Loadw, Some(Node::label("foo"))))
         );
         assert_eq!(
             parse_vasm_line("brz @blah"),
             Ok(VASMLine::Instruction(
                 None,
                 Brz,
-                Some(Node::RelativeLabel("blah"))
+                Some(Node::relative_label("blah"))
             ))
         )
     }
@@ -373,16 +389,16 @@ mod test {
     fn test_parse_labels() {
         assert_eq!(
             parse_vasm_line("foo: add"),
-            Ok(VASMLine::Instruction(Some(Label("foo")), Add, None))
+            Ok(VASMLine::Instruction(Some(Label::from("foo")), Add, None))
         );
         assert_eq!(
             parse_vasm_line("bar:"),
-            Ok(VASMLine::LabelDef(Label("bar")))
+            Ok(VASMLine::LabelDef(Label::from("bar")))
         );
         assert_eq!(
             parse_vasm_line("foo: add 43"),
             Ok(VASMLine::Instruction(
-                Some(Label("foo")),
+                Some(Label::from("foo")),
                 Add,
                 Some(number(43))
             ))
@@ -393,11 +409,20 @@ mod test {
     fn test_parse_directives() {
         assert_eq!(
             parse_vasm_line("foo: .equ 47"),
-            Ok(VASMLine::Equ(Label("foo"), number(47)))
+            Ok(VASMLine::Equ(Label::from("foo"), number(47)))
         );
         assert_eq!(
             parse_vasm_line(".org 0x400"),
             Ok(VASMLine::Org(None, number(1024)))
         );
+    }
+
+    #[test]
+    fn test_parse_macros() {
+        assert_eq!(parse_vasm_line("#if"), Ok(VASMLine::Macro(Macro::If)));
+        assert_eq!(
+            parse_vasm_line("#include \"blah\""),
+            Ok(VASMLine::Macro(Macro::Include("blah".to_string())))
+        )
     }
 }
