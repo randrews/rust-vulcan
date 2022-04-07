@@ -61,6 +61,15 @@ enum LoopType {
     Until,
 }
 
+impl From<Macro> for LoopType {
+    fn from(mac: Macro) -> Self {
+        match mac {
+            Macro::While => LoopType::While,
+            Macro::Until => LoopType::Until,
+            _ => unreachable!()
+        }
+    }
+}
 #[derive(Debug, Clone, PartialEq)]
 enum ControlStructure {
     Target(String),
@@ -130,8 +139,16 @@ where
                             return Err(AssembleError::MacroError(line_idx + 1));
                         }
                     }
-                    Macro::While => {}
-                    Macro::Until => {}
+                    Macro::While |
+                    Macro::Until => {
+                        let label = gensym();
+                        control_stack.push(ControlStructure::Loop(label.clone(), mac.into()));
+                        all_lines.push(Line {
+                            line: VASMLine::LabelDef(Label(label)),
+                            line_num: line_idx + 1,
+                            file: filename_stack.last().unwrap().clone(),
+                        })
+                    }
                     Macro::Do => {}
                     Macro::End => {}
                 },
@@ -659,6 +676,38 @@ mod test {
                 },
                 Line {
                     line_num: 2,
+                    file: "blah".to_string(),
+                    line: VASMLine::LabelDef(Label("__gensym_1".to_string()))
+                }
+            ])
+        )
+    }
+
+    #[test]
+    fn test_preprocess_while() {
+        let include = |_name: String| Ok(vec![]);
+        let lines = vec!["#while"];
+        assert_eq!(
+            preprocess(lines, "blah".to_string(), &include),
+            Ok(vec![
+                Line {
+                    line_num: 1,
+                    file: "blah".to_string(),
+                    line: VASMLine::LabelDef(Label("__gensym_1".to_string()))
+                }
+            ])
+        )
+    }
+
+    #[test]
+    fn test_preprocess_until() {
+        let include = |_name: String| Ok(vec![]);
+        let lines = vec!["#until"];
+        assert_eq!(
+            preprocess(lines, "blah".to_string(), &include),
+            Ok(vec![
+                Line {
+                    line_num: 1,
                     file: "blah".to_string(),
                     line: VASMLine::LabelDef(Label("__gensym_1".to_string()))
                 }
