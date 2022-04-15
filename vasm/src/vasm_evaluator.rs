@@ -1,29 +1,6 @@
 use crate::ast::{Node, Operator, Scope};
+use crate::parse_error::EvalError;
 use std::collections::BTreeMap;
-use std::fmt::{Display, Formatter};
-
-#[derive(Debug, Clone, PartialEq)]
-pub enum EvalError {
-    MissingLabel(String),
-    UnknownAddress(usize),
-    OffsetError(usize, i32),
-}
-
-impl Display for EvalError {
-    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-        match self {
-            EvalError::MissingLabel(label) => write!(f, "Unable to resolve label {}", label),
-            EvalError::UnknownAddress(line_num) => write!(
-                f,
-                "Unable to calculate starting address of line {}",
-                line_num
-            ),
-            EvalError::OffsetError(line_num, offset) => {
-                write!(f, "Invalid line offset {} on line {}", offset, line_num)
-            }
-        }
-    }
-}
 
 fn offset_line(line_num: usize, offset: i32) -> Result<usize, EvalError> {
     if (line_num as i32) + offset < 0 {
