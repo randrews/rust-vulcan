@@ -66,7 +66,7 @@ impl From<Macro> for LoopType {
         match mac {
             Macro::While => LoopType::While,
             Macro::Until => LoopType::Until,
-            _ => unreachable!()
+            _ => unreachable!(),
         }
     }
 }
@@ -74,6 +74,7 @@ impl From<Macro> for LoopType {
 enum ControlStructure {
     Target(String),
     Loop(String, LoopType),
+    LoopDo(String, String),
 }
 
 fn preprocess<'a, T, F>(iter: T, filename: String, include: &F) -> Result<Vec<Line>, AssembleError>
@@ -139,8 +140,7 @@ where
                             return Err(AssembleError::MacroError(line_idx + 1));
                         }
                     }
-                    Macro::While |
-                    Macro::Until => {
+                    Macro::While | Macro::Until => {
                         let label = gensym();
                         control_stack.push(ControlStructure::Loop(label.clone(), mac.into()));
                         all_lines.push(Line {
@@ -149,8 +149,45 @@ where
                             file: filename_stack.last().unwrap().clone(),
                         })
                     }
-                    Macro::Do => {}
-                    Macro::End => {}
+                    Macro::Do => {
+                        if let Some(ControlStructure::Loop(label, loop_type)) = control_stack.pop()
+                        {
+                            let after = gensym();
+                            control_stack.push(ControlStructure::LoopDo(label, after.clone()));
+                            let instr = match loop_type {
+                                LoopType::While => "brz",
+                                LoopType::Until => "brnz",
+                            };
+                            all_lines.push(Line {
+                                line: parse_vasm_line(format!("{} @{}", instr, after).as_str())
+                                    .unwrap(),
+                                line_num: line_idx + 1,
+                                file: filename_stack.last().unwrap().clone(),
+                            })
+                        } else {
+                            return Err(AssembleError::MacroError(line_idx + 1));
+                        }
+                    }
+                    Macro::End => match control_stack.pop() {
+                        Some(ControlStructure::Target(label)) => all_lines.push(Line {
+                            line: VASMLine::LabelDef(Label::from(label.as_str())),
+                            line_num: line_idx + 1,
+                            file: filename_stack.last().unwrap().clone(),
+                        }),
+                        Some(ControlStructure::LoopDo(start, after)) => {
+                            all_lines.push(Line {
+                                line: parse_vasm_line(format!("jmpr @{}", start).as_str()).unwrap(),
+                                line_num: line_idx + 1,
+                                file: filename_stack.last().unwrap().clone(),
+                            });
+                            all_lines.push(Line {
+                                line: VASMLine::LabelDef(Label::from(after.as_str())),
+                                line_num: line_idx + 1,
+                                file: filename_stack.last().unwrap().clone(),
+                            })
+                        }
+                        _ => return Err(AssembleError::MacroError(line_idx + 1)),
+                    },
                 },
                 normal_line => all_lines.push(Line {
                     line: normal_line,
@@ -632,20 +669,27 @@ mod test {
     }
 
     #[test]
-    fn test_preprocess_if() {
+    fn test_preprocess_if_end() {
         let include = |_name: String| Ok(vec![]);
-        let lines = vec!["#if"];
+        let lines = vec!["#if", "#end"];
         assert_eq!(
             preprocess(lines, "blah".to_string(), &include),
-            Ok(vec![Line {
-                line_num: 1,
-                file: "blah".to_string(),
-                line: VASMLine::Instruction(
-                    None,
-                    Opcode::Brz,
-                    Some(Node::relative_label("__gensym_1"))
-                )
-            }])
+            Ok(vec![
+                Line {
+                    line_num: 1,
+                    file: "blah".to_string(),
+                    line: VASMLine::Instruction(
+                        None,
+                        Opcode::Brz,
+                        Some(Node::relative_label("__gensym_1"))
+                    )
+                },
+                Line {
+                    line_num: 2,
+                    file: "blah".to_string(),
+                    line: VASMLine::LabelDef(Label::from("__gensym_1"))
+                }
+            ])
         )
     }
 
@@ -689,13 +733,11 @@ mod test {
         let lines = vec!["#while"];
         assert_eq!(
             preprocess(lines, "blah".to_string(), &include),
-            Ok(vec![
-                Line {
-                    line_num: 1,
-                    file: "blah".to_string(),
-                    line: VASMLine::LabelDef(Label("__gensym_1".to_string()))
-                }
-            ])
+            Ok(vec![Line {
+                line_num: 1,
+                file: "blah".to_string(),
+                line: VASMLine::LabelDef(Label("__gensym_1".to_string()))
+            }])
         )
     }
 
@@ -705,11 +747,48 @@ mod test {
         let lines = vec!["#until"];
         assert_eq!(
             preprocess(lines, "blah".to_string(), &include),
+            Ok(vec![Line {
+                line_num: 1,
+                file: "blah".to_string(),
+                line: VASMLine::LabelDef(Label("__gensym_1".to_string()))
+            }])
+        )
+    }
+
+    #[test]
+    fn test_preprocess_do_end() {
+        let include = |_name: String| Ok(vec![]);
+        let lines = vec!["#while", "#do", "#end"];
+        assert_eq!(
+            preprocess(lines, "blah".to_string(), &include),
             Ok(vec![
                 Line {
                     line_num: 1,
                     file: "blah".to_string(),
                     line: VASMLine::LabelDef(Label("__gensym_1".to_string()))
+                },
+                Line {
+                    line_num: 2,
+                    file: "blah".to_string(),
+                    line: VASMLine::Instruction(
+                        None,
+                        Opcode::Brz,
+                        Some(Node::RelativeLabel("__gensym_2".to_string()))
+                    )
+                },
+                Line {
+                    line_num: 3,
+                    file: "blah".to_string(),
+                    line: VASMLine::Instruction(
+                        None,
+                        Opcode::Jmpr,
+                        Some(Node::RelativeLabel("__gensym_1".to_string()))
+                    )
+                },
+                Line {
+                    line_num: 3,
+                    file: "blah".to_string(),
+                    line: VASMLine::LabelDef(Label::from("__gensym_2"))
                 }
             ])
         )
