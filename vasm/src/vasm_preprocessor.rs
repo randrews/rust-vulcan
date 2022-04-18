@@ -4,9 +4,9 @@ use crate::vasm_parser::parse_vasm_line;
 use std::collections::VecDeque;
 use std::iter::Enumerate;
 
-#[derive(Debug, PartialEq)]
+#[derive(Debug, PartialEq, Clone)]
 pub struct Line {
-    line: VASMLine,
+    pub line: VASMLine,
     line_num: usize,
     file: String,
 }

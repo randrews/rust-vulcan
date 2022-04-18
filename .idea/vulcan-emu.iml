@@ -6,6 +6,7 @@
       <sourceFolder url="file://$MODULE_DIR$/vcore/src" isTestSource="false" />
       <sourceFolder url="file://$MODULE_DIR$/vemu/src" isTestSource="false" />
       <sourceFolder url="file://$MODULE_DIR$/vasm/src" isTestSource="false" />
+      <sourceFolder url="file://$MODULE_DIR$/vtest/src" isTestSource="false" />
       <excludeFolder url="file://$MODULE_DIR$/target" />
     </content>
     <orderEntry type="inheritedJdk" />

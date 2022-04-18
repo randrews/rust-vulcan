@@ -1,3 +1,5 @@
+use std::fmt::{Display, Formatter};
+
 // 128k, the amount of memory in a standard Vulcan machine
 pub const MEM_SIZE: u32 = 128 * 1024;
 
@@ -45,6 +47,11 @@ impl From<Word> for u32 {
     }
 }
 
+impl Display for Word {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}", i32::from(*self))
+    }
+}
 #[test]
 fn to_from_u32() {
     assert_eq!(u32::from(Word::from(0x123456u32)), 0x123456u32);

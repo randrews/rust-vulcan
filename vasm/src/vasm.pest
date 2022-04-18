@@ -72,5 +72,7 @@ include = { "include" ~ string }
 control = { "if" | "unless" | "while" | "until" | "do" | "else" | "end" }
 preprocessor = {"#" ~ (control | include) }
 
+blank = { WHITESPACE? ~ COMMENT? }
+
 // Finally the entire pattern for an assembly line:
-line = { SOI ~ (preprocessor | db_word | db_string | org_directive | equ_directive | instruction | label_def) ~ EOI }
+line = { SOI ~ (preprocessor | db_word | db_string | org_directive | equ_directive | instruction | label_def | blank) ~ EOI }

@@ -192,6 +192,7 @@ pub fn parse_vasm_line(line: &str) -> Result<VASMLine, ParseError> {
         }
         Rule::label_def => Ok(VASMLine::LabelDef(Label::from(line.only().as_str()))),
         Rule::preprocessor => Ok(VASMLine::Macro(parse_macro(line))),
+        Rule::blank => Ok(VASMLine::Blank),
         _ => unreachable!(),
     }
 }
@@ -201,6 +202,7 @@ fn parse_macro(line: Pair) -> Macro {
     match pre.as_rule() {
         Rule::control => match pre.as_str() {
             "if" => Macro::If,
+            "unless" => Macro::Unless,
             "else" => Macro::Else,
             "while" => Macro::While,
             "until" => Macro::Until,
@@ -421,8 +423,20 @@ mod test {
     fn test_parse_macros() {
         assert_eq!(parse_vasm_line("#if"), Ok(VASMLine::Macro(Macro::If)));
         assert_eq!(
+            parse_vasm_line("#unless"),
+            Ok(VASMLine::Macro(Macro::Unless))
+        );
+        assert_eq!(
             parse_vasm_line("#include \"blah\""),
             Ok(VASMLine::Macro(Macro::Include("blah".to_string())))
         )
+    }
+
+    #[test]
+    fn test_parse_blank() {
+        assert_eq!(parse_vasm_line(""), Ok(VASMLine::Blank));
+        assert_eq!(parse_vasm_line("    "), Ok(VASMLine::Blank));
+        assert_eq!(parse_vasm_line("; foo"), Ok(VASMLine::Blank));
+        assert_eq!(parse_vasm_line("   ;foo"), Ok(VASMLine::Blank));
     }
 }

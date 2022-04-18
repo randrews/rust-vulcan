@@ -20,6 +20,26 @@ impl<R: Rng> From<R> for Memory {
     }
 }
 
+impl Memory {
+    /// Create a memory containing the given contents (probably code) starting at `0x400` (the
+    /// starting address for code). The rest of the memory is zeroes.
+    /// ```
+    /// # use crate::vcore::memory::PeekPokeExt;
+    /// # use crate::vcore::Word;
+    /// # use crate::vcore::Memory;
+    /// let mem = Memory::with_program(vec![0x02, 0x12, 0x34]);
+    /// assert_eq!(mem.peek8(Word::from(0x400)), 0x02);
+    /// assert_eq!(mem.peek8(Word::from(0x401)), 0x12); // etc
+    /// ```
+    pub fn with_program<T: IntoIterator<Item = u8>>(code: T) -> Memory {
+        let mut m = Memory::default();
+        for (addr, byte) in code.into_iter().enumerate() {
+            m.poke8(addr + 0x400, byte)
+        }
+        m
+    }
+}
+
 impl std::ops::Index<Word> for Memory {
     type Output = u8;
     fn index(&self, index: Word) -> &Self::Output {

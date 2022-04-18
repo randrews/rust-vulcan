@@ -73,6 +73,7 @@ pub enum VASMLine {
     Equ(Label, Node),
     LabelDef(Label),
     Macro(Macro),
+    Blank,
 }
 
 impl VASMLine {

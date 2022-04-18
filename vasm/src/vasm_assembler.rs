@@ -1,7 +1,7 @@
 use crate::ast::{Label, Scope, VASMLine};
 use crate::parse_error::AssembleError;
 use crate::vasm_evaluator::eval;
-use crate::vasm_parser::parse_vasm_line;
+use crate::vasm_preprocessor::{Line, LineSource};
 use std::collections::BTreeMap;
 
 /// This will solve all the .equ directives and return a symbol table of them.
@@ -72,7 +72,7 @@ fn measure_instructions(lines: &[VASMLine], scope: &Scope) -> LineLengths {
             VASMLine::StringDb(_, value) => {
                 lengths.insert(line_num, value.len());
             }
-            VASMLine::Org(_, _) | VASMLine::Equ(_, _) | VASMLine::LabelDef(_) => {
+            VASMLine::Org(_, _) | VASMLine::Equ(_, _) | VASMLine::LabelDef(_) | VASMLine::Blank => {
                 lengths.insert(line_num, 0);
             }
             VASMLine::Macro(_) => unreachable!(),
@@ -156,14 +156,37 @@ fn code_bounds(
     Ok((start, end + end_length - 1))
 }
 
-pub fn assemble<'a, T: IntoIterator<Item = &'a str>>(lines: T) -> Result<Vec<u8>, AssembleError> {
-    let mut parsed = Vec::new();
-    for (line_idx, line) in lines.into_iter().enumerate() {
-        let line_num = line_idx + 1;
-        parsed.push(parse_vasm_line(line).map_err(|err| AssembleError::ParseError(line_num, err))?)
-    }
+/// Turn an iterable of strs into an assembled binary. This supports macros, but not
+/// the `#include` macro. The resulting Vec is only as large as it needs to be; if your
+/// code starts with `.org 0x400` and is five bytes long then the Vec will be five
+/// bytes long and index 0 will represent 0x400.
+/// ```
+/// assert_eq!(
+///   vasm::assemble_snippet(vec![".org 0x400", "push 5", "add 7"]),
+///   Ok(vec![0x01, 0x05, 0x05, 0x07])
+/// )
+/// ```
+pub fn assemble_snippet<'a, T: IntoIterator<Item = &'a str>>(
+    lines: T,
+) -> Result<Vec<u8>, AssembleError> {
+    let mut line_results: Vec<Result<Line, AssembleError>> =
+        LineSource::new("_snippet", lines, |_file| {
+            Err(AssembleError::IncludeError(
+                0,
+                "Including is not supported in assembling snippets".to_string(),
+            ))
+        })
+        .collect();
 
-    generate_code(parsed)
+    if let Some(Err(error)) = line_results.iter().find(|line| line.is_err()) {
+        Err(error.clone())
+    } else {
+        generate_code(
+            line_results
+                .iter_mut()
+                .map(|line| line.clone().unwrap().line),
+        )
+    }
 }
 
 /// At this point all lines have addresses and lengths, and all arguments are reduced to
@@ -181,7 +204,7 @@ pub fn assemble<'a, T: IntoIterator<Item = &'a str>>(lines: T) -> Result<Vec<u8>
 ///
 /// Vulcan is a little-endian architecture: multi-byte arguments / .dbs will store the
 /// least-significant byte at the lowest address, then the more significant bytes following.
-fn generate_code(lines: Vec<VASMLine>) -> Result<Vec<u8>, AssembleError> {
+fn generate_code<T: IntoIterator<Item = VASMLine>>(lines: T) -> Result<Vec<u8>, AssembleError> {
     let lines: Vec<VASMLine> = lines.into_iter().collect();
     let scope = solve_equs(&lines)?;
     let line_lengths = measure_instructions(&lines, &scope);
@@ -195,13 +218,13 @@ fn generate_code(lines: Vec<VASMLine>) -> Result<Vec<u8>, AssembleError> {
         let line_num = line_idx + 1;
         match line {
             VASMLine::Instruction(_, opcode, None) => {
-                code[current_addr] = u8::from(*opcode) << 2;
+                code[current_addr - start] = u8::from(*opcode) << 2;
                 current_addr += 1;
             }
             VASMLine::Instruction(_, opcode, Some(arg)) => {
                 let arg = eval(arg, line_num, &line_addresses, &scope)
                     .map_err(|err| AssembleError::ArgError(line_num, err))?;
-                let len = arg_length(arg);
+                let len = line_lengths[&line_num] - 1;
                 let instr = (u8::from(*opcode) << 2) + len as u8;
                 code[current_addr - start] = instr;
                 let [low, mid, high, _] = arg.to_le_bytes();
@@ -229,7 +252,7 @@ fn generate_code(lines: Vec<VASMLine>) -> Result<Vec<u8>, AssembleError> {
             VASMLine::Org(_, _) => {
                 current_addr = line_addresses[&(line_num + 1)] as usize;
             }
-            VASMLine::Equ(_, _) | VASMLine::LabelDef(_) => {}
+            VASMLine::Equ(_, _) | VASMLine::LabelDef(_) | VASMLine::Blank => {}
             VASMLine::Macro(_) => unreachable!(),
         }
     }
@@ -335,6 +358,13 @@ mod test {
         );
         assert_eq!(
             measure_instructions(
+                &parse([".org 0x400", "push 3", "call blah", "hlt", "blah: mul 2"]),
+                &[].into()
+            ),
+            [(1, 0), (2, 2), (3, 4), (4, 1), (5, 2)].into()
+        );
+        assert_eq!(
+            measure_instructions(
                 &parse(["add 2 + foo", "add 3 + blah", "jmpr @foo"]),
                 &[("blah".to_string(), 300)].into()
             ),
@@ -367,6 +397,28 @@ mod test {
             Ok((
                 [(1, 256), (2, 266), (3, 266)].into(),
                 [("blah".to_string(), 266), ("start".to_string(), 256)].into()
+            ))
+        );
+        assert_eq!(
+            place_labels_pass([
+                ".org 1024",
+                "nop 3",
+                "call blah",
+                "hlt",
+                "blah: mul 2",
+                "ret"
+            ]),
+            Ok((
+                [
+                    (1, 1024),
+                    (2, 1024),
+                    (3, 1026),
+                    (4, 1030),
+                    (5, 1031),
+                    (6, 1033)
+                ]
+                .into(),
+                [("blah".to_string(), 1031)].into()
             ))
         );
     }
@@ -421,14 +473,33 @@ mod test {
     }
 
     #[test]
-    fn test_assemble() {
-        assert_eq!(assemble(["add"]), Ok(vec![4]));
+    fn test_assemble_snippet() {
+        assert_eq!(assemble_snippet(["add"]), Ok(vec![4]));
         assert_eq!(
-            assemble(["apple"]),
+            assemble_snippet(["apple"]),
             Err(ParseError(
                 1,
                 parse_error::ParseError::InvalidInstruction("apple".into())
             ))
+        );
+
+        assert_eq!(
+            assemble_snippet(
+                ".org 0x400
+                                    nop 3
+                                    call blah
+                                    hlt
+                                    blah: mul 2
+                                    ret"
+                .lines()
+            ),
+            Ok(vec![
+                0x01, 0x03, // nop 3
+                0x67, 0x07, 0x04, 0x00, // call blah (arg defaults to 3 bytes long)
+                0x74, // hlt
+                0x0d, 0x02, // mul 2
+                0x68
+            ])
         );
     }
 }

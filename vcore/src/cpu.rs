@@ -32,6 +32,12 @@ impl PeekPoke for CPU {
     }
 }
 
+impl Default for CPU {
+    fn default() -> Self {
+        Self::new(Memory::default())
+    }
+}
+
 impl CPU {
     pub fn new(memory: Memory) -> Self {
         Self {
@@ -270,6 +276,33 @@ impl CPU {
     pub fn running(&self) -> bool {
         !self.halted
     }
+
+    pub fn run_to_halt(&mut self) {
+        self.start();
+        while !self.halted && self.pc < 1100 {
+            self.tick()
+        }
+    }
+
+    pub fn get_stack(&self) -> Vec<Word> {
+        let mut v = Vec::new();
+        let mut curr = Word::from(256);
+        while curr < self.dp {
+            v.push(self.memory.peek24(curr));
+            curr += 3
+        }
+        v
+    }
+
+    pub fn get_call(&self) -> Vec<Word> {
+        let mut v = Vec::new();
+        let mut curr = Word::from(1024);
+        while curr > self.sp {
+            curr -= 3;
+            v.push(self.memory.peek24(curr));
+        }
+        v
+    }
 }
 
 impl Opcode {
@@ -304,28 +337,6 @@ impl Opcode {
 mod tests {
     use super::*;
     use Opcode::*;
-
-    impl CPU {
-        fn get_stack(&self) -> Vec<Word> {
-            let mut v = Vec::new();
-            let mut curr = Word::from(256);
-            while curr < self.dp {
-                v.push(self.memory.peek24(curr));
-                curr += 3
-            }
-            v
-        }
-
-        fn get_call(&self) -> Vec<Word> {
-            let mut v = Vec::new();
-            let mut curr = Word::from(1024);
-            while curr > self.sp {
-                curr -= 3;
-                v.push(self.memory.peek24(curr));
-            }
-            v
-        }
-    }
 
     fn predicate_opcode_test<P, Q>(opcode: Opcode, given: P, pred: Q)
     where
