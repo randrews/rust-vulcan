@@ -225,8 +225,10 @@ impl CPU {
                     let x = self.pop_data();
                     self.push_data(self.memory.peek24(x))
                 }
-                Opcode::Inton => self.int_enabled = true,
-                Opcode::Intoff => self.int_enabled = false,
+                Opcode::Setint => {
+                    let x = self.pop_data();
+                    self.int_enabled = x != 0;
+                }
                 Opcode::Setiv => self.iv = self.pop_data(),
                 Opcode::Sdp => {
                     self.push_data(self.sp);
@@ -322,8 +324,7 @@ impl Opcode {
             && self != Hlt
             && self != Load
             && self != Loadw
-            && self != Inton
-            && self != Intoff
+            && self != Setint
             && self != Setiv
             && self != Sdp
             && self != Pushr

@@ -37,8 +37,7 @@ pub enum Opcode {
     Loadw,
     Store,
     Storew,
-    Inton,
-    Intoff,
+    Setint,
     Setiv,
     Sdp,
     Setsdp,
@@ -167,11 +166,8 @@ impl Display for Opcode {
             Opcode::Storew => {
                 write!(f, "storew")
             }
-            Opcode::Inton => {
-                write!(f, "inton")
-            }
-            Opcode::Intoff => {
-                write!(f, "intoff")
+            Opcode::Setint => {
+                write!(f, "setint")
             }
             Opcode::Setiv => {
                 write!(f, "setiv")
@@ -238,15 +234,14 @@ impl TryFrom<u8> for Opcode {
             31 => Loadw,
             32 => Store,
             33 => Storew,
-            34 => Inton,
-            35 => Intoff,
-            36 => Setiv,
-            37 => Sdp,
-            38 => Setsdp,
-            39 => Pushr,
-            40 => Popr,
-            41 => Peekr,
-            42 => Debug,
+            34 => Setint,
+            35 => Setiv,
+            36 => Sdp,
+            37 => Setsdp,
+            38 => Pushr,
+            39 => Popr,
+            40 => Peekr,
+            41 => Debug,
             other => return Err(InvalidOpcode(other)),
         })
     }
@@ -292,8 +287,7 @@ impl<'a> TryFrom<&'a str> for Opcode {
             "loadw" => Loadw,
             "store" => Store,
             "storew" => Storew,
-            "inton" => Inton,
-            "intoff" => Intoff,
+            "setint" => Setint,
             "setiv" => Setiv,
             "sdp" => Sdp,
             "setsdp" => Setsdp,
@@ -343,15 +337,14 @@ impl From<Opcode> for u8 {
             Opcode::Loadw => 31,
             Opcode::Store => 32,
             Opcode::Storew => 33,
-            Opcode::Inton => 34,
-            Opcode::Intoff => 35,
-            Opcode::Setiv => 36,
-            Opcode::Sdp => 37,
-            Opcode::Setsdp => 38,
-            Opcode::Pushr => 39,
-            Opcode::Popr => 40,
-            Opcode::Peekr => 41,
-            Opcode::Debug => 42,
+            Opcode::Setint => 34,
+            Opcode::Setiv => 35,
+            Opcode::Sdp => 36,
+            Opcode::Setsdp => 37,
+            Opcode::Pushr => 38,
+            Opcode::Popr => 39,
+            Opcode::Peekr => 40,
+            Opcode::Debug => 41,
         }
     }
 }
