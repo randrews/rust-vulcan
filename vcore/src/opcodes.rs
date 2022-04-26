@@ -349,6 +349,66 @@ impl From<Opcode> for u8 {
     }
 }
 
+impl Opcode {
+    /// The number of things required to be on the data stack for this opcode to function.
+    pub fn arity(self) -> usize {
+        use Opcode::*;
+        match self {
+            Nop | Rand | Ret | Hlt | Sdp | Popr | Peekr | Debug => 0,
+
+            Not | Pop | Dup | Jmp | Jmpr | Call | Load | Loadw | Setint | Pushr | Pick => 1,
+
+            Add | Sub | Mul | Div | Mod | And | Or | Xor | Gt | Lt | Agt | Alt | Lshift
+            | Rshift | Arshift | Swap | Brz | Brnz | Store | Storew | Setsdp | Setiv => 2,
+
+            Rot => 3,
+        }
+    }
+
+    /// The number of things required to be on the return stack for this opcode to function.
+    pub fn r_arity(self) -> usize {
+        use Opcode::*;
+
+        match self {
+            Peekr | Popr | Ret => 1,
+
+            Nop | Rand | Hlt | Sdp | Debug | Not | Pop | Dup | Jmp | Jmpr | Call | Load | Loadw
+            | Setint | Setiv | Pushr | Add | Sub | Mul | Div | Mod | And | Or | Xor | Gt | Lt
+            | Agt | Alt | Lshift | Rshift | Arshift | Swap | Brz | Brnz | Store | Storew
+            | Setsdp | Rot | Pick => 0,
+        }
+    }
+
+    /// The net change in stack usage (in cells) after executing this instruction. This is used to
+    /// tell whether this instruction will cause an overflow. Execution happens in three phases:
+    /// first the argument is pushed (which might trigger overflow); then the operands are popped
+    /// (which cannot overflow); then the result is pushed (which might overflow). This fn tells
+    /// you the number of result cells minus the number of operand cells, so, the delta in stack
+    /// usage for steps 2 and 3. Additionally, this fn counts data and return stack cells together,
+    /// so,
+    /// ```
+    /// # use vcore::opcodes::Opcode;
+    /// assert_eq!(Opcode::Pushr.net_stack(), 0)
+    /// ```
+    /// because moving a cell from data to return doesn't increase stack usage.
+    pub fn net_stack(self) -> i32 {
+        use Opcode::*;
+
+        match self {
+            Sdp => 2,
+
+            Peekr | Rand | Dup => 1,
+
+            Nop | Hlt | Debug | Not | Call | Load | Loadw | Pushr | Popr | Pick | Rot | Swap => 0,
+
+            Pop | Jmp | Jmpr | Add | Sub | Mul | Div | Mod | And | Or | Xor | Gt | Lt | Agt
+            | Alt | Lshift | Rshift | Arshift | Ret => -1,
+
+            Setint | Store | Storew | Setsdp | Setiv | Brz | Brnz => -2,
+        }
+    }
+}
+
 #[test]
 fn test_decode() {
     assert_eq!(Opcode::try_from(18), Ok(Opcode::Pop));

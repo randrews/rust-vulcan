@@ -11,9 +11,11 @@ pub struct CPU {
     pc: Word,          // program counter, address of the low byte of the instruction
     dp: Word,          // data pointer, address of the low byte of one cell above the data stack
     sp: Word,          // stack pointer, address of the low byte of the return stack
-    iv: Word,          // interrupt vector
+    iv: [Word; 256],   // interrupt vectors
     int_enabled: bool, // interrupt enable bit
     halted: bool,      // Whether the CPU is halted
+    sp_top: Word,      // The last value given for the sp, or 0x400
+    dp_btm: Word,      // The last value given for the dp, or 0x100
 }
 
 #[derive(Copy, Clone, Eq, PartialEq, Debug)]
@@ -21,6 +23,14 @@ struct Instruction {
     opcode: Opcode,
     arg: Option<Word>,
     length: u8,
+}
+
+#[derive(Copy, Clone, Eq, PartialEq, Debug)]
+enum ExecutionError {
+    DivZero,
+    DataUnderflow,
+    StackUnderflow,
+    Overflow,
 }
 
 impl PeekPoke for CPU {
@@ -45,9 +55,11 @@ impl CPU {
             pc: 1024.into(),
             dp: 256.into(),
             sp: 1024.into(),
-            iv: 1024.into(),
+            iv: [1024.into(); 256],
             int_enabled: false,
             halted: true,
+            sp_top: 0x400.into(),
+            dp_btm: 0x100.into(),
         }
     }
 
@@ -55,9 +67,11 @@ impl CPU {
         self.pc = 1024.into();
         self.dp = 256.into();
         self.sp = 1024.into();
-        self.iv = 1024.into();
+        self.iv = [1024.into(); 256];
         self.int_enabled = false;
         self.halted = true;
+        self.sp_top = 0x400.into();
+        self.dp_btm = 0x100.into();
     }
 
     fn push_data<A: Into<Word>>(&mut self, word: A) {
@@ -127,7 +141,7 @@ impl CPU {
             self.push_data(arg)
         }
 
-        if instruction.opcode.is_binary() {
+        if instruction.opcode.arity() == 2 {
             let x = self.pop_data();
             let y = self.pop_data();
 
@@ -165,7 +179,9 @@ impl CPU {
                 Opcode::Storew => self.memory.poke24(x, y),
                 Opcode::Setsdp => {
                     self.dp = x;
-                    self.sp = y
+                    self.sp = y;
+                    self.dp_btm = self.dp;
+                    self.sp_top = self.sp
                 }
                 Opcode::Brz => {
                     if y == 0 {
@@ -177,13 +193,18 @@ impl CPU {
                         return self.pc + i32::from(x);
                     }
                 }
+                Opcode::Setiv => {
+                    self.iv[u8::from(x) as usize] = y;
+                }
                 _ => unreachable!(),
             }
             self.pc + instruction.length as i32
         } else {
             match instruction.opcode {
                 Opcode::Nop => { /* No action required */ }
-                Opcode::Rand => {} // TODO remove this whole instruction
+                Opcode::Rand => {
+                    todo!()
+                }
                 Opcode::Not => {
                     let x = self.pop_data();
                     self.push_data(x == 0)
@@ -194,8 +215,12 @@ impl CPU {
                 Opcode::Dup => self.push_data(self.peek_data()),
                 Opcode::Pick => {
                     let index = self.pop_data();
-                    let val = self.memory.peek24(self.dp - (i32::from(index) + 1) * 3);
-                    self.push_data(val)
+                    let addr = self.dp - (i32::from(index) + 1) * 3;
+                    if addr >= self.dp_btm {
+                        self.push_data(self.memory.peek24(addr));
+                    } else {
+                        self.push_data(0);
+                    }
                 }
                 Opcode::Rot => {
                     let x = self.pop_data();
@@ -229,7 +254,6 @@ impl CPU {
                     let x = self.pop_data();
                     self.int_enabled = x != 0;
                 }
-                Opcode::Setiv => self.iv = self.pop_data(),
                 Opcode::Sdp => {
                     self.push_data(self.sp);
                     self.push_data(self.dp + 3) // The +3 accounts for the word we're about to push
@@ -253,6 +277,89 @@ impl CPU {
         }
     }
 
+    /// Checks if an instruction would cause an error if executed, and returns it if so.
+    /// There are four possible error conditions, evaluated in order:
+    ///
+    /// - If an instruction requires more stack space after execution than exists
+    /// - If an instruction would pop more from the data stack than is on it
+    /// - If an instruction would pop more from the return stack than is on it
+    /// - If an instruction would divide (or modulus) by zero
+    ///
+    /// So, running `div` on a stack containing a single 0 is a `DataUnderflow`, not a `DivZero`.
+    ///
+    /// Also, this function doesn't consider the requirements for actually handling the error, which
+    /// could change a `DivZero` into an `Overflow`: handling any error consumes one more stack cell,
+    /// for the new return address when calling the interrupt handler. So, although this may
+    /// return `DivZero` the actual error thrown may be `Overflow`.  
+    fn error(&self, instruction: Instruction) -> Option<ExecutionError> {
+        use ExecutionError::*;
+        use Opcode::{Div, Mod};
+        let Instruction { opcode, arg, .. } = instruction;
+        let data_height: usize = usize::from(self.dp - self.dp_btm) / 3;
+        let stack_height: usize = usize::from(self.sp_top - self.sp) / 3;
+        let room: i32 = i32::from(self.sp - self.dp) / 3;
+        let net = opcode.net_stack() + arg.map_or(0, |_| 1);
+
+        // If we're out of room, any instruction with an arg is out. Also, if the total amount
+        // we'll add to the stack (including arg) overflows, then we overflow
+        if arg.is_some() && room < 1 || net > room {
+            return Some(Overflow);
+        }
+
+        // Figure out if there might be an underflow
+        let provided_args = data_height + if arg.is_some() { 1 } else { 0 };
+
+        // Arity taller than data stack?
+        if opcode.arity() > provided_args {
+            return Some(DataUnderflow);
+        }
+
+        // Underflowing the rstack?
+        if opcode.r_arity() > stack_height {
+            return Some(StackUnderflow);
+        }
+
+        // The top of the stack during the instruction
+        let top = arg.unwrap_or_else(|| self.peek_data());
+
+        // Dividing by zero?
+        if (opcode == Div || opcode == Mod) && top == 0u32 {
+            return Some(DivZero);
+        }
+
+        None
+    }
+
+    fn handle_error(&mut self, error: ExecutionError) -> Word {
+        // If the error is not an overflow then we still might turn it into one: we require one new
+        // stack frame to handle every non-overflow error (for the new return stack cell) so if we
+        // don't have that we'll just pretend this is an overflow.
+        if self.dp >= self.sp && error != ExecutionError::Overflow {
+            return self.handle_error(ExecutionError::Overflow);
+        }
+
+        // The procedure for handling an overflow is a bit different, because we need to have some
+        // stack available to do it. First, we reset the stack to its original size, and then we
+        // put the old sp and dp on the data stack:
+        if error == ExecutionError::Overflow {
+            let (old_sp, old_dp) = (self.sp, self.dp);
+            (self.sp, self.dp) = (self.sp_top, self.dp_btm);
+            self.push_data(old_sp);
+            self.push_data(old_dp);
+        }
+
+        // Now we have room to handle whatever this is, so, handle it:
+        let int = match error {
+            ExecutionError::DivZero => 0,
+            ExecutionError::DataUnderflow => 1,
+            ExecutionError::StackUnderflow => 2,
+            ExecutionError::Overflow => 3,
+        };
+        self.int_enabled = false;
+        self.push_call(self.pc);
+        self.iv[int]
+    }
+
     pub fn tick(&mut self) {
         if self.halted {
             return;
@@ -260,8 +367,11 @@ impl CPU {
 
         match self.fetch() {
             Ok(instr) => {
-                //println!("Instr: {}", instr.opcode);
-                self.pc = self.execute(instr)
+                self.pc = if let Some(err) = self.error(instr) {
+                    self.handle_error(err)
+                } else {
+                    self.execute(instr)
+                }
             }
 
             Err(invalid_opcode) => {
@@ -281,14 +391,14 @@ impl CPU {
 
     pub fn run_to_halt(&mut self) {
         self.start();
-        while !self.halted && self.pc < 1100 {
+        while !self.halted {
             self.tick()
         }
     }
 
     pub fn get_stack(&self) -> Vec<Word> {
         let mut v = Vec::new();
-        let mut curr = Word::from(256);
+        let mut curr = Word::from(self.dp_btm);
         while curr < self.dp {
             v.push(self.memory.peek24(curr));
             curr += 3
@@ -298,39 +408,16 @@ impl CPU {
 
     pub fn get_call(&self) -> Vec<Word> {
         let mut v = Vec::new();
-        let mut curr = Word::from(1024);
+        let mut curr = Word::from(self.sp_top);
         while curr > self.sp {
             curr -= 3;
             v.push(self.memory.peek24(curr));
         }
         v
     }
-}
 
-impl Opcode {
-    fn is_binary(self) -> bool {
-        use Opcode::*;
-        self != Nop
-            && self != Not
-            && self != Rand
-            && self != Pop
-            && self != Dup
-            && self != Pick
-            && self != Rot
-            && self != Jmp
-            && self != Jmpr
-            && self != Call
-            && self != Ret
-            && self != Hlt
-            && self != Load
-            && self != Loadw
-            && self != Setint
-            && self != Setiv
-            && self != Sdp
-            && self != Pushr
-            && self != Popr
-            && self != Peekr
-            && self != Debug
+    pub fn sdp(&self) -> (Word, Word) {
+        (self.sp, self.dp)
     }
 }
 
@@ -459,6 +546,8 @@ mod tests {
         simple_opcode_test(vec![5], Dup, vec![5, 5]);
         simple_opcode_test(vec![5, 3], Swap, vec![3, 5]);
         simple_opcode_test(vec![10, 20, 30, 2], Pick, vec![10, 20, 30, 10]);
+        simple_opcode_test(vec![10, 0], Pick, vec![10, 10]);
+        simple_opcode_test(vec![10, 1], Pick, vec![10, 0]);
         simple_opcode_test(vec![1, 4, 9], Rot, vec![4, 9, 1]);
         simple_opcode_test(vec![1, 4, 9], Pop, vec![1, 4]);
     }
@@ -567,9 +656,9 @@ mod tests {
     #[test]
     fn test_cpu_reset() {
         let mut cpu = CPU::new(Memory::default());
-        cpu.iv = 12345.into();
+        cpu.iv[2] = 12345.into();
         cpu.reset();
-        assert_eq!(cpu.iv, 1024);
+        assert_eq!(cpu.iv[2], 1024);
     }
 
     #[test]
