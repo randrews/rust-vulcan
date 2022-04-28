@@ -421,3 +421,23 @@ fn test_overflow_promotion() {
     // Stack is now the previous bottom values, minus three cells:
     assert_eq!((22.into(), 16.into()), cpu.sdp());
 }
+
+#[test]
+fn test_invalid_opcode() {
+    let cpu = test_mem(
+        ".org 0x400
+        push onop
+        setiv 4 ; set the overflow handler
+        push 1
+        push 2 ; fine so far
+        .org 0x4ff ; bunch of nops and then...
+        .db 0xf6 ; this isn't an instruction!
+        store ; never happens
+        onop: hlt"
+            .lines(),
+        [(256, 1), (259, 2)].into(), // expect the two successful pushes to be still there
+    );
+
+    // Call stack contains the address of the offending instruction
+    assert_eq!(vec![Word::from(0x4ff)], cpu.get_call());
+}

@@ -11,7 +11,7 @@ pub struct CPU {
     pc: Word,          // program counter, address of the low byte of the instruction
     dp: Word,          // data pointer, address of the low byte of one cell above the data stack
     sp: Word,          // stack pointer, address of the low byte of the return stack
-    iv: [Word; 256],   // interrupt vectors
+    iv: [Word; 16],    // interrupt vectors
     int_enabled: bool, // interrupt enable bit
     halted: bool,      // Whether the CPU is halted
     sp_top: Word,      // The last value given for the sp, or 0x400
@@ -31,6 +31,7 @@ enum ExecutionError {
     DataUnderflow,
     StackUnderflow,
     Overflow,
+    InvalidOpcode,
 }
 
 impl PeekPoke for CPU {
@@ -55,7 +56,7 @@ impl CPU {
             pc: 1024.into(),
             dp: 256.into(),
             sp: 1024.into(),
-            iv: [1024.into(); 256],
+            iv: [1024.into(); 16],
             int_enabled: false,
             halted: true,
             sp_top: 0x400.into(),
@@ -67,7 +68,7 @@ impl CPU {
         self.pc = 1024.into();
         self.dp = 256.into();
         self.sp = 1024.into();
-        self.iv = [1024.into(); 256];
+        self.iv = [1024.into(); 16];
         self.int_enabled = false;
         self.halted = true;
         self.sp_top = 0x400.into();
@@ -194,7 +195,7 @@ impl CPU {
                     }
                 }
                 Opcode::Setiv => {
-                    self.iv[u8::from(x) as usize] = y;
+                    self.iv[usize::from(x % 16)] = y;
                 }
                 _ => unreachable!(),
             }
@@ -354,6 +355,7 @@ impl CPU {
             ExecutionError::DataUnderflow => 1,
             ExecutionError::StackUnderflow => 2,
             ExecutionError::Overflow => 3,
+            ExecutionError::InvalidOpcode => 4,
         };
         self.int_enabled = false;
         self.push_call(self.pc);
@@ -374,10 +376,7 @@ impl CPU {
                 }
             }
 
-            Err(invalid_opcode) => {
-                self.halted = true;
-                println!("Error: {}", invalid_opcode)
-            }
+            Err(_) => self.pc = self.handle_error(ExecutionError::InvalidOpcode),
         }
     }
 
@@ -398,7 +397,7 @@ impl CPU {
 
     pub fn get_stack(&self) -> Vec<Word> {
         let mut v = Vec::new();
-        let mut curr = Word::from(self.dp_btm);
+        let mut curr = self.dp_btm;
         while curr < self.dp {
             v.push(self.memory.peek24(curr));
             curr += 3
@@ -408,7 +407,7 @@ impl CPU {
 
     pub fn get_call(&self) -> Vec<Word> {
         let mut v = Vec::new();
-        let mut curr = Word::from(self.sp_top);
+        let mut curr = self.sp_top;
         while curr > self.sp {
             curr -= 3;
             v.push(self.memory.peek24(curr));
