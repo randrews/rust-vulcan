@@ -1,4 +1,5 @@
 mod display;
+mod keyboard;
 
 use winit::{
     dpi::LogicalSize,
@@ -7,11 +8,15 @@ use winit::{
     window::WindowBuilder,
 };
 
+use crate::keyboard::convert_keycode;
+use pixels::{Pixels, SurfaceTexture};
+use std::collections::VecDeque;
+use std::time::{Duration, Instant};
+use vasm::assemble_snippet;
 use vcore::cpu::CPU;
 use vcore::memory::{Memory, PeekPoke};
 use vcore::word::Word;
-use pixels::{Pixels, SurfaceTexture};
-use std::time::{Instant, Duration};
+use winit::event::ElementState;
 use winit::window::Window;
 
 fn main() {
@@ -43,12 +48,16 @@ fn main() {
     //     cpu.poke(Word::from(0x10000 + 128 * n + 127), 0b00000011);
     //     cpu.poke(Word::from(0x10000 + 128 * 127 + n), 0b00011100);
     // }
-    cpu.poke_slice(Word::from(0x400), include_bytes!("gfx_test.rom"));
+    let code = assemble_snippet(include_str!("typewriter.asm").lines()).expect("Assemble error");
+    //cpu.poke_slice(Word::from(0x400), include_bytes!("gfx_test.rom"));
+    cpu.poke_slice(0x400.into(), code.as_slice());
     cpu.start();
     window_loop(event_loop, window, pixels, cpu)
 }
 
 fn window_loop(event_loop: EventLoop<()>, window: Window, mut pixels: Pixels, mut cpu: CPU) -> ! {
+    let mut interrupt_events: VecDeque<(usize, Option<Word>)> = VecDeque::new();
+
     event_loop.run(move |event, _, control_flow| {
         *control_flow = ControlFlow::Poll;
 
@@ -60,9 +69,25 @@ fn window_loop(event_loop: EventLoop<()>, window: Window, mut pixels: Pixels, mu
 
             Event::WindowEvent {
                 event: WindowEvent::Resized(new_size),
-                window_id
+                window_id,
             } if window_id == window.id() => {
                 pixels.resize_surface(new_size.width, new_size.height);
+            }
+
+            Event::WindowEvent {
+                event: WindowEvent::KeyboardInput { input, .. },
+                window_id,
+            } if window_id == window.id() => {
+                if let (Some(vk), state) = (input.virtual_keycode, input.state) {
+                    let byte = convert_keycode(vk);
+                    let word = Word::from_bytes([
+                        byte,
+                        if state == ElementState::Pressed { 1 } else { 0 },
+                        0,
+                    ]);
+                    println!("Saw: {:#4x}", u32::from(word));
+                    interrupt_events.push_back((5, Some(word)))
+                }
             }
 
             Event::MainEventsCleared => {
@@ -70,6 +95,9 @@ fn window_loop(event_loop: EventLoop<()>, window: Window, mut pixels: Pixels, mu
                 draw(pixels.get_frame(), &mut cpu);
                 pixels.render().expect("Problem displaying framebuffer");
                 while Instant::now() < start + Duration::from_millis(25) {
+                    if let Some((int, arg)) = interrupt_events.pop_front() {
+                        cpu.interrupt(int, arg)
+                    }
                     for _ in 1..1000 {
                         cpu.tick()
                     }

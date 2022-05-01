@@ -271,7 +271,11 @@ impl CPU {
                     let r = self.peek_call();
                     self.push_data(r)
                 }
-                Opcode::Debug => { /* TODO This should print the stack or something */ }
+                Opcode::Debug => {
+                    for v in self.get_stack().iter() {
+                        println!("{:#08x}", u32::from(*v));
+                    }
+                }
                 _ => {} // This can never happen
             }
             self.pc + instruction.length as i32
@@ -369,6 +373,27 @@ impl CPU {
 
         match self.fetch() {
             Ok(instr) => {
+                let stack_str: Vec<String> = self
+                    .get_stack()
+                    .iter()
+                    .map(|w| format!("{:#08x} ", u32::from(*w)))
+                    .collect();
+                let call_str: Vec<String> = self
+                    .get_call()
+                    .iter()
+                    .map(|w| format!("{:#08x} ", u32::from(*w)))
+                    .collect();
+                let arg_str = instr
+                    .arg
+                    .map_or(String::from(""), |w| format!("{:#08x}", u32::from(w)));
+                println!(
+                    "{:#8x}: {} <{}> ( {}) [ {}]",
+                    u32::from(self.pc),
+                    instr.opcode,
+                    arg_str,
+                    stack_str.join(" "),
+                    call_str.join(" ")
+                );
                 self.pc = if let Some(err) = self.error(instr) {
                     self.handle_error(err)
                 } else {
@@ -377,6 +402,28 @@ impl CPU {
             }
 
             Err(_) => self.pc = self.handle_error(ExecutionError::InvalidOpcode),
+        }
+    }
+
+    pub fn interrupt(&mut self, int: usize, arg: Option<Word>) {
+        if int >= self.iv.len() {
+            panic!("Invalid interrupt: {}", int)
+        }
+        if self.int_enabled {
+            if self.halted {
+                self.start()
+            }
+            self.int_enabled = false;
+            let room = self.sp - self.dp;
+            self.pc = if room == 0 || room == 1 && arg.is_some() {
+                self.handle_error(ExecutionError::Overflow)
+            } else {
+                self.push_call(self.pc);
+                if let Some(val) = arg {
+                    self.push_data(val)
+                }
+                self.iv[int]
+            }
         }
     }
 
