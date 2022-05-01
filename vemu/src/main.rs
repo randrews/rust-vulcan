@@ -42,14 +42,7 @@ fn main() {
     let memory = Memory::from(rng);
     let mut cpu = CPU::new(memory);
     display::reset(&mut cpu);
-    // for n in 0..128 {
-    //     cpu.poke(Word::from(0x10000 + 128 * n), 0b11100000);
-    //     cpu.poke(Word::from(0x10000 + n), 0xff);
-    //     cpu.poke(Word::from(0x10000 + 128 * n + 127), 0b00000011);
-    //     cpu.poke(Word::from(0x10000 + 128 * 127 + n), 0b00011100);
-    // }
     let code = assemble_snippet(include_str!("typewriter.asm").lines()).expect("Assemble error");
-    //cpu.poke_slice(Word::from(0x400), include_bytes!("gfx_test.rom"));
     cpu.poke_slice(0x400.into(), code.as_slice());
     cpu.start();
     window_loop(event_loop, window, pixels, cpu)
@@ -85,7 +78,6 @@ fn window_loop(event_loop: EventLoop<()>, window: Window, mut pixels: Pixels, mu
                         if state == ElementState::Pressed { 1 } else { 0 },
                         0,
                     ]);
-                    println!("Saw: {:#4x}", u32::from(word));
                     interrupt_events.push_back((5, Some(word)))
                 }
             }

@@ -66,15 +66,12 @@ on_key:
     setint 1 ; this can be reentrant, doesn't hurt anything
     call is_press ; check for press
     #if
-        ; if is alpha, look up in map and print
-        dup
         call is_alpha
-        #if
-        call to_alpha_char
-        call putc
-        #else
+        brnz @putc
+        call is_punc
+        brnz @putc
         pop
-        #end
+        ret
     #else
     ; TODO:
     ;   if is punc, look up in punc map and print
@@ -94,27 +91,43 @@ is_press: ; ( event -- key bool )
     and 0xff00
     ret
 
-is_alpha: ; ( key -- bool )
+is_ret: ; ( key -- 1 ) or ( key -- key 0 )
+    dup
+    sub 0x28
+    brnz @+3
+    pop
+    ret 1
+    ret 0
+
+is_alpha: ; ( key -- ch 1 ) or ( key -- key 0 )
+    dup
     dup
     gt 0x03
     swap
-    lt 0x27
+    lt 0x28
     and
-    ret
+    #if
+    sub 0x04
+    add alpha_table
+    load
+    ret 1
+    #end
+    ret 0
 
-is_punc: ; ( key -- bool )
+is_punc: ; ( key -- ch 1 ) or (key -- key 0 )
+    dup
     dup
     gt 0x2b
     swap
     lt 0x39
     and
-    ret
-
-to_alpha_char: ; ( key -- ch )
-    sub 0x04
-    add alpha_table
+    #if
+    sub 0x2c
+    add punc_table
     load
-    ret
+    ret 1
+    #end
+    ret 0
 
 putc: ; ( ch -- ) (also modifies cursor)
     loadw cursor
@@ -129,3 +142,4 @@ putc: ; ( ch -- ) (also modifies cursor)
 cursor: .db screen + 40
 msg: .db "Type something:\0"
 alpha_table: .db "abcdefghijklmnopqrstuvwxyz1234567890"
+punc_table: .db " -=[]\\?;'`,./"

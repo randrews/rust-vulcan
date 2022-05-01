@@ -373,27 +373,10 @@ impl CPU {
 
         match self.fetch() {
             Ok(instr) => {
-                let stack_str: Vec<String> = self
-                    .get_stack()
-                    .iter()
-                    .map(|w| format!("{:#08x} ", u32::from(*w)))
-                    .collect();
-                let call_str: Vec<String> = self
-                    .get_call()
-                    .iter()
-                    .map(|w| format!("{:#08x} ", u32::from(*w)))
-                    .collect();
-                let arg_str = instr
-                    .arg
-                    .map_or(String::from(""), |w| format!("{:#08x}", u32::from(w)));
-                println!(
-                    "{:#8x}: {} <{}> ( {}) [ {}]",
-                    u32::from(self.pc),
-                    instr.opcode,
-                    arg_str,
-                    stack_str.join(" "),
-                    call_str.join(" ")
-                );
+                //if cfg!(debug_assertions) {
+                //self.debug_instr(instr);
+                //}
+
                 self.pc = if let Some(err) = self.error(instr) {
                     self.handle_error(err)
                 } else {
@@ -403,6 +386,30 @@ impl CPU {
 
             Err(_) => self.pc = self.handle_error(ExecutionError::InvalidOpcode),
         }
+    }
+
+    fn debug_instr(&self, instr: Instruction) {
+        let stack_str: Vec<String> = self
+            .get_stack()
+            .iter()
+            .map(|w| format!("{:#08x} ", u32::from(*w)))
+            .collect();
+        let call_str: Vec<String> = self
+            .get_call()
+            .iter()
+            .map(|w| format!("{:#08x} ", u32::from(*w)))
+            .collect();
+        let arg_str = instr
+            .arg
+            .map_or(String::from(""), |w| format!("{:#08x}", u32::from(w)));
+        println!(
+            "{:#8x}: {} <{}> ( {}) [ {}]",
+            u32::from(self.pc),
+            instr.opcode,
+            arg_str,
+            stack_str.join(" "),
+            call_str.join(" ")
+        );
     }
 
     pub fn interrupt(&mut self, int: usize, arg: Option<Word>) {
