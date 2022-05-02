@@ -11,4 +11,3 @@ vasm = { path = "../vasm" }
 rand = "0.8.0"
 winit = "0.26.1"
 pixels = "0.9.0"
-stacker = "0.1"

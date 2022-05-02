@@ -33,7 +33,8 @@ fn main() {
     };
 
     let pixels = {
-        let surface_texture = SurfaceTexture::new(640, 480, &window);
+        let winit::dpi::PhysicalSize { width, height } = window.inner_size();
+        let surface_texture = SurfaceTexture::new(width, height, &window);
         Pixels::new(640, 480, surface_texture).unwrap()
     };
 
@@ -43,6 +44,7 @@ fn main() {
     let mut cpu = CPU::new(memory);
     display::reset(&mut cpu);
     let code = assemble_snippet(include_str!("typewriter.asm").lines()).expect("Assemble error");
+    println!("ROM size: {} bytes", code.len());
     cpu.poke_slice(0x400.into(), code.as_slice());
     cpu.start();
     window_loop(event_loop, window, pixels, cpu)
@@ -86,12 +88,15 @@ fn window_loop(event_loop: EventLoop<()>, window: Window, mut pixels: Pixels, mu
                 let start = Instant::now();
                 draw(pixels.get_frame(), &mut cpu);
                 pixels.render().expect("Problem displaying framebuffer");
-                while Instant::now() < start + Duration::from_millis(25) {
+                loop {
                     if let Some((int, arg)) = interrupt_events.pop_front() {
                         cpu.interrupt(int, arg)
                     }
                     for _ in 1..1000 {
                         cpu.tick()
+                    }
+                    if Instant::now() > start + Duration::from_millis(25) {
+                        break;
                     }
                 }
             }
