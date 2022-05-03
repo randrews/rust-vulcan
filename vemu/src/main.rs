@@ -16,7 +16,7 @@ use vasm::assemble_snippet;
 use vcore::cpu::CPU;
 use vcore::memory::{Memory, PeekPoke};
 use vcore::word::Word;
-use winit::event::ElementState;
+use winit::event::{DeviceEvent, ElementState};
 use winit::window::Window;
 
 fn main() {
@@ -69,10 +69,10 @@ fn window_loop(event_loop: EventLoop<()>, window: Window, mut pixels: Pixels, mu
                 pixels.resize_surface(new_size.width, new_size.height);
             }
 
-            Event::WindowEvent {
-                event: WindowEvent::KeyboardInput { input, .. },
-                window_id,
-            } if window_id == window.id() => {
+            Event::DeviceEvent {
+                event: DeviceEvent::Key(input),
+                device_id: _device_id,
+            } => {
                 if let (Some(vk), state) = (input.virtual_keycode, input.state) {
                     let byte = convert_keycode(vk);
                     let word = Word::from_bytes([
@@ -81,9 +81,15 @@ fn window_loop(event_loop: EventLoop<()>, window: Window, mut pixels: Pixels, mu
                         0,
                     ]);
                     interrupt_events.push_back((5, Some(word)))
+                } else {
+                    println!("scancode: {}", input.scancode);
                 }
             }
-
+            // Event::WindowEvent {
+            //     event: WindowEvent::KeyboardInput { input, .. },
+            //     window_id,
+            // } if window_id == window.id() => {
+            // }
             Event::MainEventsCleared => {
                 let start = Instant::now();
                 draw(pixels.get_frame(), &mut cpu);
