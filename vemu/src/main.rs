@@ -52,6 +52,7 @@ fn main() {
 
 fn window_loop(event_loop: EventLoop<()>, window: Window, mut pixels: Pixels, mut cpu: CPU) -> ! {
     let mut interrupt_events: VecDeque<(usize, Option<Word>)> = VecDeque::new();
+    let mut focused = true;
 
     event_loop.run(move |event, _, control_flow| {
         *control_flow = ControlFlow::Poll;
@@ -69,11 +70,19 @@ fn window_loop(event_loop: EventLoop<()>, window: Window, mut pixels: Pixels, mu
                 pixels.resize_surface(new_size.width, new_size.height);
             }
 
+            // These are sent regardless of whether the window is focused or not, and are the same regardless of keyboard
+            // layout, so, we have to separately track focus and this will only work as expected for normal US Sholes
+            // keyboards.
+            // If we use the WindowEvent equivalent of this, however, shifted non-letter characters will send no vkeys
+            // at all on Linux. Which is actually worse: this way, someone with a "normal" keyboard can use the app on
+            // any OS, and there are probably more Linux users than Dvorak users.
+            // Also, this won't actually affect me, even on Linux, because the KMAC handles the dvorak mapping in the
+            // keyboard itself, rather than an input map; it generates scancodes as though it were a Sholes board.
             Event::DeviceEvent {
                 event: DeviceEvent::Key(input),
                 device_id: _device_id,
             } => {
-                if let (Some(vk), state) = (input.virtual_keycode, input.state) {
+                if let (Some(vk), state, true) = (input.virtual_keycode, input.state, focused) {
                     let byte = convert_keycode(vk);
                     let word = Word::from_bytes([
                         byte,
@@ -81,15 +90,14 @@ fn window_loop(event_loop: EventLoop<()>, window: Window, mut pixels: Pixels, mu
                         0,
                     ]);
                     interrupt_events.push_back((5, Some(word)))
-                } else {
-                    println!("scancode: {}", input.scancode);
                 }
             }
-            // Event::WindowEvent {
-            //     event: WindowEvent::KeyboardInput { input, .. },
-            //     window_id,
-            // } if window_id == window.id() => {
-            // }
+
+            Event::WindowEvent {
+                event: WindowEvent::Focused(new_focus),
+                window_id,
+            } if window_id == window.id() => focused = new_focus,
+
             Event::MainEventsCleared => {
                 let start = Instant::now();
                 draw(pixels.get_frame(), &mut cpu);
