@@ -78,6 +78,7 @@ fn window_loop(event_loop: EventLoop<()>, window: Window, mut pixels: Pixels, mu
             // any OS, and there are probably more Linux users than Dvorak users.
             // Also, this won't actually affect me, even on Linux, because the KMAC handles the dvorak mapping in the
             // keyboard itself, rather than an input map; it generates scancodes as though it were a Sholes board.
+            // See this bug: https://github.com/rust-windowing/winit/issues/1443
             Event::DeviceEvent {
                 event: DeviceEvent::Key(input),
                 device_id: _device_id,
