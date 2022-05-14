@@ -502,4 +502,18 @@ mod test {
             ])
         );
     }
+
+    #[test]
+    fn test_relative_blanks() {
+        assert_eq!(assemble_snippet(".org 0x400
+                                    nop $+2
+
+                                    nop 0x111111
+                                    nop 0x222222".lines()),
+        Ok(vec![
+            0x03, 0x08, 0x04, 0x00,
+            0x03, 0x11, 0x11, 0x11,
+            0x03, 0x22, 0x22, 0x22
+        ]))
+    }
 }

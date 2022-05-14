@@ -78,6 +78,12 @@ impl<'a, T: IntoIterator<Item = &'a str>, F: Fn(String) -> Result<T, AssembleErr
                     self.next()
                 }
 
+                // TODO: This makes line numbers on error messages wrong, but it's hard to fix. We need
+                // to rip out and redo the whole error system. Parse lines initially to tuples of their
+                // line and location (file and line number) and then pass one of those tuples to create
+                // an error.
+                Ok(VASMLine::Blank) => { self.next() }
+
                 Ok(normal_line) => Some(Ok(Line {
                     line: normal_line,
                     line_num: self.current_line,
