@@ -64,6 +64,11 @@ impl CPU {
         }
     }
 
+    pub fn new_random() -> Self {
+        let rng = rand::thread_rng();
+        Self::new(Memory::from(rng))
+    }
+
     pub fn reset(&mut self) {
         self.pc = 1024.into();
         self.dp = 256.into();
@@ -75,22 +80,22 @@ impl CPU {
         self.dp_btm = 0x100.into();
     }
 
-    fn push_data<A: Into<Word>>(&mut self, word: A) {
+    pub fn push_data<A: Into<Word>>(&mut self, word: A) {
         self.memory.poke24(self.dp, word);
         self.dp += 3;
     }
 
-    fn push_call<A: Into<Word>>(&mut self, word: A) {
+    pub fn push_call<A: Into<Word>>(&mut self, word: A) {
         self.sp -= 3;
         self.memory.poke24(self.sp, word);
     }
 
-    fn pop_data(&mut self) -> Word {
+    pub fn pop_data(&mut self) -> Word {
         self.dp -= 3;
         self.memory.peek24(self.dp)
     }
 
-    fn pop_call(&mut self) -> Word {
+    pub fn pop_call(&mut self) -> Word {
         let val = self.memory.peek24(self.sp);
         self.sp += 3;
         val
@@ -150,8 +155,8 @@ impl CPU {
                 Opcode::Add => self.push_data(x + y),
                 Opcode::Sub => self.push_data(y - x),
                 Opcode::Mul => self.push_data(y * x),
-                Opcode::Div => self.push_data(y / x),
-                Opcode::Mod => self.push_data(y % x),
+                Opcode::Div => self.push_data(i32::from(y) / i32::from(x)),
+                Opcode::Mod => self.push_data(i32::from(y) % i32::from(x)),
                 Opcode::And => self.push_data(y & x),
                 Opcode::Or => self.push_data(y | x),
                 Opcode::Xor => self.push_data(y ^ x),
@@ -412,9 +417,9 @@ impl CPU {
         );
     }
 
-    pub fn interrupt(&mut self, int: usize, arg: Option<Word>) {
-        if int >= self.iv.len() {
-            panic!("Invalid interrupt: {}", int)
+    pub fn interrupt(&mut self, irq: usize, arg: Option<Word>) {
+        if irq >= self.iv.len() {
+            panic!("Invalid interrupt: {}", irq)
         }
         if self.int_enabled {
             if self.halted {
@@ -429,7 +434,7 @@ impl CPU {
                 if let Some(val) = arg {
                     self.push_data(val)
                 }
-                self.iv[int]
+                self.iv[irq]
             }
         }
     }
@@ -472,6 +477,14 @@ impl CPU {
     pub fn sdp(&self) -> (Word, Word) {
         (self.sp, self.dp)
     }
+    pub fn pc(&self) -> Word { self.pc }
+    pub fn sp(&self) -> Word { self.sp }
+    pub fn dp(&self) -> Word { self.dp }
+    pub fn dp_btm(&self) -> Word { self.dp_btm }
+    pub fn sp_top(&self) -> Word { self.sp_top }
+    pub fn set_pc(&mut self, new_pc: Word) { self.pc = new_pc; }
+    pub fn halted(&self) -> bool { self.halted }
+    pub fn int_enabled(&self) -> bool { self.int_enabled }
 }
 
 #[cfg(test)]
@@ -592,6 +605,7 @@ mod tests {
         simple_opcode_test(vec![5, 3], Mul, vec![15]);
         simple_opcode_test(vec![8, 3], Div, vec![2]);
         simple_opcode_test(vec![10, 3], Mod, vec![1]);
+        simple_opcode_test(vec![12, to_word(-3)], Div, vec![to_word(-4)]);
     }
 
     #[test]
