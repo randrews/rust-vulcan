@@ -33,6 +33,7 @@ pub enum AssembleError {
     ArgError(usize, EvalError),
     NoCode,
     IncludeError(usize, String),
+    FileError(String),
     MacroError(usize),
 }
 
@@ -62,6 +63,9 @@ impl Display for AssembleError {
             }
             AssembleError::MacroError(line) => {
                 write!(f, "Malformed macro control structure on line {}", line)
+            }
+            AssembleError::FileError(file) => {
+                write!(f, "File read error in {}", file)
             }
         }
     }

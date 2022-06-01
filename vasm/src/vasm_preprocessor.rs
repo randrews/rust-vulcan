@@ -35,8 +35,7 @@ enum ControlStructure {
 }
 
 pub struct LineSource<
-    'a,
-    T: IntoIterator<Item = &'a str>,
+    T: IntoIterator<Item = String>,
     F: Fn(String) -> Result<T, AssembleError>,
 > {
     generated_lines: VecDeque<Line>,
@@ -48,8 +47,8 @@ pub struct LineSource<
     include: F,
 }
 
-impl<'a, T: IntoIterator<Item = &'a str>, F: Fn(String) -> Result<T, AssembleError>> Iterator
-    for LineSource<'a, T, F>
+impl<T: IntoIterator<Item = String>, F: Fn(String) -> Result<T, AssembleError>> Iterator
+    for LineSource<T, F>
 {
     type Item = Result<Line, AssembleError>;
 
@@ -68,7 +67,7 @@ impl<'a, T: IntoIterator<Item = &'a str>, F: Fn(String) -> Result<T, AssembleErr
         if let Some((line_idx, line)) = self.iter_stack.last_mut().unwrap().next() {
             self.current_line = line_idx + 1;
             // Try and parse it
-            return match parse_vasm_line(line) {
+            return match parse_vasm_line(line.as_str()) {
                 // We failed to parse it
                 Err(err) => Some(Err(AssembleError::ParseError(self.current_line, err))),
 
@@ -99,9 +98,10 @@ impl<'a, T: IntoIterator<Item = &'a str>, F: Fn(String) -> Result<T, AssembleErr
     }
 }
 
-impl<'a, T: IntoIterator<Item = &'a str>, F: Fn(String) -> Result<T, AssembleError>>
-    LineSource<'a, T, F>
+impl<T: IntoIterator<Item = String>, F: Fn(String) -> Result<T, AssembleError>>
+    LineSource<T, F>
 {
+    // TODO: linesource should take a deref instead so it accepts either str or string.
     pub fn new(file: &str, lines: T, include: F) -> Self {
         LineSource {
             generated_lines: VecDeque::new(),
@@ -206,16 +206,20 @@ mod tests {
     use crate::ast::{Label, Node};
     use vcore::opcodes::Opcode::*;
 
-    fn lines_for(source: Vec<&str>) -> Vec<VASMLine> {
+    fn lines_for(source: Vec<String>) -> Vec<VASMLine> {
         let include = |_name: String| panic!();
         let src = LineSource::new("blah", source, include);
         src.map(|line| line.unwrap().line).collect()
     }
 
+    fn stringify(a: Vec<&str>) -> Vec<String> {
+        a.into_iter().map(String::from).collect()
+    }
+
     #[test]
     fn test_preprocess() {
         let include = |_name: String| panic!();
-        let lines = vec!["add"];
+        let lines = stringify(vec!["add"]);
         let mut src = LineSource::new("blah", lines, include);
         assert_eq!(
             src.next(),
@@ -230,8 +234,8 @@ mod tests {
 
     #[test]
     fn test_preprocess_include() {
-        let include = |_name: String| Ok(vec!["sub"]);
-        let lines = vec!["#include \"foo\"", "add"];
+        let include = |_name: String| Ok(stringify(vec!["sub"]));
+        let lines = stringify(vec!["#include \"foo\"", "add"]);
         let src = LineSource::new("blah", lines, include);
         assert_eq!(
             src.collect::<Vec<Result<Line, AssembleError>>>(),
@@ -253,7 +257,7 @@ mod tests {
     #[test]
     fn test_preprocess_if_end() {
         assert_eq!(
-            lines_for(vec!["#if", "#end"]),
+            lines_for(stringify(vec!["#if", "#end"])),
             vec![
                 VASMLine::Instruction(None, Brz, Some(Node::relative_label("__gensym_1"))),
                 VASMLine::LabelDef(Label::from("__gensym_1"))
@@ -264,7 +268,7 @@ mod tests {
     #[test]
     fn test_preprocess_else() {
         assert_eq!(
-            lines_for(vec!["#if", "add", "#else", "sub", "#end"]),
+            lines_for(stringify(vec!["#if", "add", "#else", "sub", "#end"])),
             vec![
                 VASMLine::Instruction(None, Brz, Some(Node::relative_label("__gensym_1"))),
                 VASMLine::Instruction(None, Add, None),
@@ -279,7 +283,7 @@ mod tests {
     #[test]
     fn test_preprocess_do_end() {
         assert_eq!(
-            lines_for(vec!["#while", "#do", "#end"]),
+            lines_for(stringify(vec!["#while", "#do", "#end"])),
             vec![
                 VASMLine::LabelDef(Label("__gensym_1".to_string())),
                 VASMLine::Instruction(

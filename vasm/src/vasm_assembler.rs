@@ -3,6 +3,7 @@ use crate::parse_error::AssembleError;
 use crate::vasm_evaluator::eval;
 use crate::vasm_preprocessor::{Line, LineSource};
 use std::collections::BTreeMap;
+use std::fs;
 
 /// This will solve all the .equ directives and return a symbol table of them.
 /// .equ directives must be able to be solved in order, that is, in terms of
@@ -162,14 +163,14 @@ fn code_bounds(
 /// bytes long and index 0 will represent 0x400.
 /// ```
 /// assert_eq!(
-///   vasm::assemble_snippet(vec![".org 0x400", "push 5", "add 7"]),
+///   vasm::assemble_snippet(".org 0x400 \n push 5 \n add 7".lines().map(String::from)),
 ///   Ok(vec![0x01, 0x05, 0x05, 0x07])
 /// )
 /// ```
-pub fn assemble_snippet<'a, T: IntoIterator<Item = &'a str>>(
+pub fn assemble_snippet<T: IntoIterator<Item = String>>(
     lines: T,
 ) -> Result<Vec<u8>, AssembleError> {
-    let mut line_results: Vec<Result<Line, AssembleError>> =
+    let line_results: Vec<Result<Line, AssembleError>> =
         LineSource::new("_snippet", lines, |_file| {
             Err(AssembleError::IncludeError(
                 0,
@@ -178,6 +179,19 @@ pub fn assemble_snippet<'a, T: IntoIterator<Item = &'a str>>(
         })
         .collect();
 
+    assemble_line_results(line_results)
+}
+
+pub fn assemble_file(filename: &str) -> Result<Vec<u8>, AssembleError> {
+    let lines = lines_from_file(filename)?;
+    let line_results: Vec<Result<Line, AssembleError>> = LineSource::new(filename, lines, |file| {
+        lines_from_file(file.as_str())
+    }).collect();
+
+    assemble_line_results(line_results)
+}
+
+fn assemble_line_results(mut line_results: Vec<Result<Line, AssembleError>>) -> Result<Vec<u8>, AssembleError> {
     if let Some(Err(error)) = line_results.iter().find(|line| line.is_err()) {
         Err(error.clone())
     } else {
@@ -187,6 +201,11 @@ pub fn assemble_snippet<'a, T: IntoIterator<Item = &'a str>>(
                 .map(|line| line.clone().unwrap().line),
         )
     }
+}
+
+fn lines_from_file(filename: &str) -> Result<Vec<String>, AssembleError> {
+    let file = fs::read_to_string(filename).map_err(|_e| AssembleError::FileError(filename.into()))?;
+    Ok(file.lines().map(String::from).collect())
 }
 
 /// At this point all lines have addresses and lengths, and all arguments are reduced to
@@ -474,9 +493,9 @@ mod test {
 
     #[test]
     fn test_assemble_snippet() {
-        assert_eq!(assemble_snippet(["add"]), Ok(vec![4]));
+        assert_eq!(assemble_snippet(["add"].map(String::from)), Ok(vec![4]));
         assert_eq!(
-            assemble_snippet(["apple"]),
+            assemble_snippet(["apple"].map(String::from)),
             Err(ParseError(
                 1,
                 parse_error::ParseError::InvalidInstruction("apple".into())
@@ -491,7 +510,7 @@ mod test {
                                     hlt
                                     blah: mul 2
                                     ret"
-                .lines()
+                .lines().map(String::from)
             ),
             Ok(vec![
                 0x01, 0x03, // nop 3
@@ -509,7 +528,7 @@ mod test {
                                     nop $+2
 
                                     nop 0x111111
-                                    nop 0x222222".lines()),
+                                    nop 0x222222".lines().map(String::from)),
         Ok(vec![
             0x03, 0x08, 0x04, 0x00,
             0x03, 0x11, 0x11, 0x11,

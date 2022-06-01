@@ -10,3 +10,4 @@ mod vasm_parser;
 mod vasm_preprocessor;
 
 pub use vasm_assembler::assemble_snippet;
+pub use vasm_assembler::assemble_file;
