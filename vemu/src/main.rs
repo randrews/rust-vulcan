@@ -11,8 +11,10 @@ use winit::{
 use crate::keyboard::convert_keycode;
 use pixels::{Pixels, SurfaceTexture};
 use std::collections::VecDeque;
+use std::fs::File;
+use std::io::Read;
 use std::time::{Duration, Instant};
-use vasm::assemble_snippet;
+use vasm::{assemble_file, assemble_snippet};
 use vcore::cpu::CPU;
 use vcore::memory::{Memory, PeekPoke};
 use vcore::word::Word;
@@ -43,7 +45,11 @@ fn main() {
     let memory = Memory::from(rng);
     let mut cpu = CPU::new(memory);
     display::reset(&mut cpu);
-    let code = assemble_snippet(include_str!("typewriter.asm").lines().map(String::from)).expect("Assemble error");
+    // let code = assemble_snippet(include_str!("typewriter.asm").lines().map(String::from)).expect("Assemble error");
+    // let code = assemble_file("init.asm").expect("Assemble error");
+    let mut file = File::open("4th.rom").expect("ROM not found");
+    let mut code = Vec::new();
+    file.read_to_end(&mut code).expect("Couldn't read ROM");
     println!("ROM size: {} bytes", code.len());
     cpu.poke_slice(0x400.into(), code.as_slice());
     cpu.start();
@@ -103,7 +109,8 @@ fn window_loop(event_loop: EventLoop<()>, window: Window, mut pixels: Pixels, mu
                 let start = Instant::now();
                 draw(pixels.get_frame(), &mut cpu);
                 pixels.render().expect("Problem displaying framebuffer");
-                loop { // TODO: this will run the CPU at 100%, need to not spin while halted
+                loop {
+                    // TODO: this will run the CPU at 100%, need to not spin while halted
                     if let Some((int, arg)) = interrupt_events.pop_front() {
                         cpu.interrupt(int, arg)
                     }

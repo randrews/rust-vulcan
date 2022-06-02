@@ -182,16 +182,21 @@ pub fn assemble_snippet<T: IntoIterator<Item = String>>(
     assemble_line_results(line_results)
 }
 
+/// Assemble a file from the filesystem, opening other files as it includes them.
 pub fn assemble_file(filename: &str) -> Result<Vec<u8>, AssembleError> {
     let lines = lines_from_file(filename)?;
     let line_results: Vec<Result<Line, AssembleError>> = LineSource::new(filename, lines, |file| {
+        println!("Including {}", file);
         lines_from_file(file.as_str())
-    }).collect();
+    })
+    .collect();
 
     assemble_line_results(line_results)
 }
 
-fn assemble_line_results(mut line_results: Vec<Result<Line, AssembleError>>) -> Result<Vec<u8>, AssembleError> {
+fn assemble_line_results(
+    mut line_results: Vec<Result<Line, AssembleError>>,
+) -> Result<Vec<u8>, AssembleError> {
     if let Some(Err(error)) = line_results.iter().find(|line| line.is_err()) {
         Err(error.clone())
     } else {
@@ -204,7 +209,8 @@ fn assemble_line_results(mut line_results: Vec<Result<Line, AssembleError>>) -> 
 }
 
 fn lines_from_file(filename: &str) -> Result<Vec<String>, AssembleError> {
-    let file = fs::read_to_string(filename).map_err(|_e| AssembleError::FileError(filename.into()))?;
+    let file =
+        fs::read_to_string(filename).map_err(|_e| AssembleError::FileError(filename.into()))?;
     Ok(file.lines().map(String::from).collect())
 }
 
@@ -510,7 +516,8 @@ mod test {
                                     hlt
                                     blah: mul 2
                                     ret"
-                .lines().map(String::from)
+                .lines()
+                .map(String::from)
             ),
             Ok(vec![
                 0x01, 0x03, // nop 3
@@ -524,15 +531,19 @@ mod test {
 
     #[test]
     fn test_relative_blanks() {
-        assert_eq!(assemble_snippet(".org 0x400
+        assert_eq!(
+            assemble_snippet(
+                ".org 0x400
                                     nop $+2
 
                                     nop 0x111111
-                                    nop 0x222222".lines().map(String::from)),
-        Ok(vec![
-            0x03, 0x08, 0x04, 0x00,
-            0x03, 0x11, 0x11, 0x11,
-            0x03, 0x22, 0x22, 0x22
-        ]))
+                                    nop 0x222222"
+                    .lines()
+                    .map(String::from)
+            ),
+            Ok(vec![
+                0x03, 0x08, 0x04, 0x00, 0x03, 0x11, 0x11, 0x11, 0x03, 0x22, 0x22, 0x22
+            ])
+        )
     }
 }

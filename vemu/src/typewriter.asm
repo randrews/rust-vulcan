@@ -15,7 +15,7 @@ backspace: .equ 0x2a
     call set_video
     push msg
     push screen
-    call print
+    call print_to
 wfi_loop: hlt
     jmpr @wfi_loop
 ;;;;;
@@ -47,7 +47,7 @@ clear_screen:
     pop
     ret
 
-print: ; ( msg addr -- )
+print_to: ; ( msg addr -- )
     pushr
     #while
     dup

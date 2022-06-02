@@ -22,7 +22,7 @@ number = { dec_number | hex_number | bin_number | oct_number | dec_zero | neg_nu
 
 // A label can be any sequence of C-identifier-y characters, as long as it doesn't start with
 // a digit:
-label_char = { ASCII_ALPHA_LOWER | ASCII_ALPHA_UPPER | "_" }
+label_char = { ASCII_ALPHA_LOWER | ASCII_ALPHA_UPPER | "_" | "$" }
 label = @{ label_char ~ (label_char | ASCII_DIGIT | "$")* }
 label_def = { label ~ ":" }
 
