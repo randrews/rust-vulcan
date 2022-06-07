@@ -45,11 +45,12 @@ fn main() {
     let memory = Memory::from(rng);
     let mut cpu = CPU::new(memory);
     display::reset(&mut cpu);
-    // let code = assemble_snippet(include_str!("typewriter.asm").lines().map(String::from)).expect("Assemble error");
+    let code = assemble_snippet(include_str!("typewriter.asm").lines().map(String::from))
+        .expect("Assemble error");
     // let code = assemble_file("init.asm").expect("Assemble error");
-    let mut file = File::open("4th.rom").expect("ROM not found");
-    let mut code = Vec::new();
-    file.read_to_end(&mut code).expect("Couldn't read ROM");
+    // let mut file = File::open("4th.rom").expect("ROM not found");
+    // let mut code = Vec::new();
+    // file.read_to_end(&mut code).expect("Couldn't read ROM");
     println!("ROM size: {} bytes", code.len());
     cpu.poke_slice(0x400.into(), code.as_slice());
     cpu.start();

@@ -3,7 +3,7 @@ resolver = "2"
 members = [
     "vcore",
     "vemu",
-    "vasm",
+    "vasm_core",
     "vtest",
     "vlua"
 ]
