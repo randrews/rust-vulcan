@@ -8,12 +8,11 @@ use std::fs;
 /// This will solve all the .equ directives and return a symbol table of them.
 /// .equ directives must be able to be solved in order, that is, in terms of
 /// only preceding .equ directives. Anything else is an error.
-fn solve_equs(lines: &[VASMLine]) -> Result<Scope, AssembleError> {
+fn solve_equs(lines: &[Line]) -> Result<Scope, AssembleError> {
     let mut scope: Scope = Scope::new();
     let line_nums: BTreeMap<usize, i32> = BTreeMap::new();
-    for (line_idx, line) in lines.iter().enumerate() {
-        let line_num = line_idx + 1;
-        if let VASMLine::Equ(Label(name), expr) = line {
+    for (line_num, line) in lines.iter().enumerate() {
+        if let VASMLine::Equ(Label(name), expr) = &line.line {
             let value = eval(expr, line_num, &line_nums, &scope)
                 .map_err(|e| AssembleError::EquResolveError(line_num, name.to_string(), e))?;
 
@@ -54,12 +53,11 @@ fn arg_length(val: i32) -> usize {
 ///   what we know right now (.equs), are however long that argument is. If we don't
 ///   know right now (based on a label, say) then we'll set aside the full 3 bytes (so it's
 ///   4 bytes long, with the instruction byte).
-fn measure_instructions(lines: &[VASMLine], scope: &Scope) -> LineLengths {
+fn measure_instructions(lines: &[Line], scope: &Scope) -> LineLengths {
     let line_nums: BTreeMap<usize, i32> = BTreeMap::new();
     let mut lengths = LineLengths::new();
-    for (line_idx, line) in lines.iter().enumerate() {
-        let line_num = line_idx + 1;
-        match line {
+    for (line_num, line) in lines.iter().enumerate() {
+        match &line.line {
             VASMLine::Instruction(_, _, None) => {
                 lengths.insert(line_num, 1);
             }
@@ -93,29 +91,27 @@ fn measure_instructions(lines: &[VASMLine], scope: &Scope) -> LineLengths {
 /// But, we'll skip labels that come before .equs: that would make every .equ set to its address,
 /// rather than the argument.
 fn place_labels(
-    lines: &[VASMLine],
+    lines: &[Line],
     scope: Scope,
     lengths: &LineLengths,
 ) -> Result<(LineAddresses, Scope), AssembleError> {
     let mut scope = scope;
     let mut address = 0;
     let mut addresses = LineAddresses::new();
-    for (line_idx, line) in lines.iter().enumerate() {
-        let line_num = line_idx + 1;
-
-        if let VASMLine::Org(_, expr) = line {
+    for (line_num, line) in lines.iter().enumerate() {
+        if let VASMLine::Org(_, expr) = &line.line {
             address = eval(expr, line_num, &addresses, &scope)
                 .map_err(|err| AssembleError::OrgResolveError(line_num, err))?;
             addresses.insert(line_num, address);
         }
 
-        if let Some(Label(label)) = line.label() {
+        if let Some(Label(label)) = &line.line.label() {
             if !scope.contains_key(label) {
                 scope.insert(label.clone(), address as i32);
             }
         }
 
-        match line {
+        match &line.line {
             VASMLine::Org(_, _) => {}
             _ => {
                 addresses.insert(line_num, address);
@@ -135,24 +131,24 @@ fn poke_word(code: &mut Vec<u8>, at: usize, word: i32) {
 
 /// Find the lower and upper bounds where this program will place memory
 fn code_bounds(
-    lines: &[VASMLine],
+    lines: &[Line],
     line_addresses: &LineAddresses,
     line_lengths: &LineLengths,
 ) -> Result<(usize, usize), AssembleError> {
     let mut actual_lines = lines
         .iter()
         .enumerate()
-        .filter(|(_, line)| !line.zero_length());
+        .filter(|(_, line)| !(&line.line).zero_length());
     let (first_idx, _) = actual_lines.next().ok_or(AssembleError::NoCode)?;
-    let start = line_addresses[&(first_idx + 1)] as usize;
+    let start = line_addresses[&(first_idx)] as usize;
 
     let actual_lines = lines
         .iter()
         .enumerate()
-        .filter(|(_, line)| !line.zero_length());
+        .filter(|(_, line)| !(&line.line).zero_length());
     let (last_idx, _) = actual_lines.last().unwrap();
-    let end = line_addresses[&(last_idx + 1)] as usize;
-    let end_length = line_lengths[&(last_idx + 1)];
+    let end = line_addresses[&(last_idx)] as usize;
+    let end_length = line_lengths[&(last_idx)];
 
     Ok((start, end + end_length - 1))
 }
@@ -200,11 +196,7 @@ fn assemble_line_results(
     if let Some(Err(error)) = line_results.iter().find(|line| line.is_err()) {
         Err(error.clone())
     } else {
-        generate_code(
-            line_results
-                .iter_mut()
-                .map(|line| line.clone().unwrap().line),
-        )
+        generate_code(line_results.iter_mut().map(|line| line.clone().unwrap()))
     }
 }
 
@@ -229,8 +221,8 @@ fn lines_from_file(filename: &str) -> Result<Vec<String>, AssembleError> {
 ///
 /// Vulcan is a little-endian architecture: multi-byte arguments / .dbs will store the
 /// least-significant byte at the lowest address, then the more significant bytes following.
-fn generate_code<T: IntoIterator<Item = VASMLine>>(lines: T) -> Result<Vec<u8>, AssembleError> {
-    let lines: Vec<VASMLine> = lines.into_iter().collect();
+fn generate_code<T: IntoIterator<Item = Line>>(lines: T) -> Result<Vec<u8>, AssembleError> {
+    let lines: Vec<Line> = lines.into_iter().collect();
     let scope = solve_equs(&lines)?;
     let line_lengths = measure_instructions(&lines, &scope);
     let (line_addresses, scope) = place_labels(&lines, scope, &line_lengths)?;
@@ -239,9 +231,8 @@ fn generate_code<T: IntoIterator<Item = VASMLine>>(lines: T) -> Result<Vec<u8>, 
     let mut code = vec![0u8; end - start + 1];
     let mut current_addr = start;
 
-    for (line_idx, line) in lines.iter().enumerate() {
-        let line_num = line_idx + 1;
-        match line {
+    for (line_num, line) in lines.iter().enumerate() {
+        match &line.line {
             VASMLine::Instruction(_, opcode, None) => {
                 code[current_addr - start] = u8::from(*opcode) << 2;
                 current_addr += 1;
@@ -294,10 +285,10 @@ mod test {
     use crate::parse_error::EvalError::*;
     use crate::vasm_parser::parse_vasm_line;
 
-    fn parse<'a, T: IntoIterator<Item = &'a str>>(lines: T) -> Vec<VASMLine> {
+    fn parse<'a, T: IntoIterator<Item = &'a str>>(lines: T) -> Vec<Line> {
         lines
             .into_iter()
-            .map(|line| parse_vasm_line(line).unwrap())
+            .map(|line| parse_vasm_line(line).unwrap().into())
             .collect()
     }
 
@@ -345,7 +336,7 @@ mod test {
         assert_eq!(
             solve_equs(&parse(["blah: .equ 5", "foo: .equ banana"])),
             Err(EquResolveError(
-                2,
+                1,
                 "foo".into(),
                 MissingLabel("banana".into())
             ))
@@ -353,14 +344,14 @@ mod test {
         assert_eq!(
             solve_equs(&parse(["blah: .equ foo+3", "foo: .equ 7"])),
             Err(EquResolveError(
-                1,
+                0,
                 "blah".into(),
                 MissingLabel("foo".into())
             ))
         );
         assert_eq!(
             solve_equs(&parse(["blah: .equ 3", "blah: .equ 7"])),
-            Err(EquDuplicateError(2, "blah".into()))
+            Err(EquDuplicateError(1, "blah".into()))
         );
     }
 
@@ -371,29 +362,29 @@ mod test {
                 &parse(["add", "add 1", "add 500", "add 70000", "add -7"]),
                 &[].into()
             ),
-            [(1, 1), (2, 2), (3, 3), (4, 4), (5, 4)].into()
+            [(0, 1), (1, 2), (2, 3), (3, 4), (4, 4)].into()
         );
         assert_eq!(
             measure_instructions(&parse([".db 7", ".db \"hello\\0\""]), &[].into()),
-            [(1, 3), (2, 6)].into()
+            [(0, 3), (1, 6)].into()
         );
         assert_eq!(
             measure_instructions(&parse([".org 256", "blah:", "foo: .equ 7"]), &[].into()),
-            [(1, 0), (2, 0), (3, 0)].into()
+            [(0, 0), (1, 0), (2, 0)].into()
         );
         assert_eq!(
             measure_instructions(
                 &parse([".org 0x400", "push 3", "call blah", "hlt", "blah: mul 2"]),
                 &[].into()
             ),
-            [(1, 0), (2, 2), (3, 4), (4, 1), (5, 2)].into()
+            [(0, 0), (1, 2), (2, 4), (3, 1), (4, 2)].into()
         );
         assert_eq!(
             measure_instructions(
                 &parse(["add 2 + foo", "add 3 + blah", "jmpr @foo"]),
                 &[("blah".to_string(), 300)].into()
             ),
-            [(1, 4), (2, 3), (3, 4)].into()
+            [(0, 4), (1, 3), (2, 4)].into()
         );
     }
 
@@ -402,25 +393,25 @@ mod test {
         assert_eq!(
             place_labels_pass(["start: .org 256", "add", "dup"]),
             Ok((
-                [(1, 256), (2, 256), (3, 257)].into(),
+                [(0, 256), (1, 256), (2, 257)].into(),
                 [("start".to_string(), 256)].into()
             ))
         );
         assert_eq!(
             place_labels_pass(["push 70000", "dup"]),
-            Ok(([(1, 0), (2, 4)].into(), [].into()))
+            Ok(([(0, 0), (1, 4)].into(), [].into()))
         );
         assert_eq!(
             place_labels_pass(["start: .equ 256", "blah: .org start + 4", "add"]),
             Ok((
-                [(1, 0), (2, 260), (3, 260)].into(),
+                [(0, 0), (1, 260), (2, 260)].into(),
                 [("blah".to_string(), 260), ("start".to_string(), 256)].into()
             ))
         );
         assert_eq!(
             place_labels_pass(["start: .org 256", "blah: .org start + 10", "add"]),
             Ok((
-                [(1, 256), (2, 266), (3, 266)].into(),
+                [(0, 256), (1, 266), (2, 266)].into(),
                 [("blah".to_string(), 266), ("start".to_string(), 256)].into()
             ))
         );
@@ -435,12 +426,12 @@ mod test {
             ]),
             Ok((
                 [
+                    (0, 1024),
                     (1, 1024),
-                    (2, 1024),
-                    (3, 1026),
-                    (4, 1030),
-                    (5, 1031),
-                    (6, 1033)
+                    (2, 1026),
+                    (3, 1030),
+                    (4, 1031),
+                    (5, 1033)
                 ]
                 .into(),
                 [("blah".to_string(), 1031)].into()
@@ -452,11 +443,11 @@ mod test {
     fn test_unresolvable_orgs() {
         assert_eq!(
             place_labels_pass([".org 0xffffff - blah"]),
-            Err(OrgResolveError(1, MissingLabel("blah".into())))
+            Err(OrgResolveError(0, MissingLabel("blah".into())))
         );
         assert_eq!(
             place_labels_pass(["blah: .org blah"]),
-            Err(OrgResolveError(1, MissingLabel("blah".into())))
+            Err(OrgResolveError(0, MissingLabel("blah".into())))
         );
     }
 

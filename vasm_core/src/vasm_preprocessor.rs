@@ -7,8 +7,8 @@ use std::iter::Enumerate;
 #[derive(Debug, PartialEq, Clone)]
 pub struct Line {
     pub line: VASMLine,
-    line_num: usize,
-    file: String,
+    pub line_num: usize,
+    pub file: String,
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -34,10 +34,7 @@ enum ControlStructure {
     LoopDo(String, String),
 }
 
-pub struct LineSource<
-    T: IntoIterator<Item = String>,
-    F: Fn(String) -> Result<T, AssembleError>,
-> {
+pub struct LineSource<T: IntoIterator<Item = String>, F: Fn(String) -> Result<T, AssembleError>> {
     generated_lines: VecDeque<Line>,
     current_line: usize,
     filename_stack: Vec<String>,
@@ -45,6 +42,16 @@ pub struct LineSource<
     control_stack: Vec<ControlStructure>,
     iter_stack: Vec<Enumerate<<T as IntoIterator>::IntoIter>>,
     include: F,
+}
+
+impl From<VASMLine> for Line {
+    fn from(other: VASMLine) -> Self {
+        Line {
+            line: other,
+            line_num: 0,
+            file: "<none>".to_string(),
+        }
+    }
 }
 
 impl<T: IntoIterator<Item = String>, F: Fn(String) -> Result<T, AssembleError>> Iterator
@@ -81,7 +88,7 @@ impl<T: IntoIterator<Item = String>, F: Fn(String) -> Result<T, AssembleError>> 
                 // to rip out and redo the whole error system. Parse lines initially to tuples of their
                 // line and location (file and line number) and then pass one of those tuples to create
                 // an error.
-                Ok(VASMLine::Blank) => { self.next() }
+                Ok(VASMLine::Blank) => self.next(),
 
                 Ok(normal_line) => Some(Ok(Line {
                     line: normal_line,
@@ -98,9 +105,7 @@ impl<T: IntoIterator<Item = String>, F: Fn(String) -> Result<T, AssembleError>> 
     }
 }
 
-impl<T: IntoIterator<Item = String>, F: Fn(String) -> Result<T, AssembleError>>
-    LineSource<T, F>
-{
+impl<T: IntoIterator<Item = String>, F: Fn(String) -> Result<T, AssembleError>> LineSource<T, F> {
     // TODO: linesource should take a deref instead so it accepts either str or string.
     pub fn new(file: &str, lines: T, include: F) -> Self {
         LineSource {
