@@ -1,5 +1,5 @@
 use crate::ast::{Label, Scope, VASMLine};
-use crate::parse_error::AssembleError;
+use crate::parse_error::{AssembleError, Location};
 use crate::vasm_evaluator::eval;
 use crate::vasm_preprocessor::{Line, LineSource};
 use std::collections::BTreeMap;
@@ -13,11 +13,15 @@ fn solve_equs(lines: &[Line]) -> Result<Scope, AssembleError> {
     let line_nums: BTreeMap<usize, i32> = BTreeMap::new();
     for (line_num, line) in lines.iter().enumerate() {
         if let VASMLine::Equ(Label(name), expr) = &line.line {
-            let value = eval(expr, line_num, &line_nums, &scope)
-                .map_err(|e| AssembleError::EquResolveError(line_num, name.to_string(), e))?;
+            let value = eval(expr, line_num, &line_nums, &scope).map_err(|e| {
+                AssembleError::EquResolveError(line.location.clone(), name.to_string(), e)
+            })?;
 
             if let Some(_old_value) = scope.insert(name.clone(), value) {
-                return Err(AssembleError::EquDuplicateError(line_num, name.to_string()));
+                return Err(AssembleError::EquDuplicateError(
+                    line.location.clone(),
+                    name.to_string(),
+                ));
             }
         }
     }
@@ -101,7 +105,7 @@ fn place_labels(
     for (line_num, line) in lines.iter().enumerate() {
         if let VASMLine::Org(_, expr) = &line.line {
             address = eval(expr, line_num, &addresses, &scope)
-                .map_err(|err| AssembleError::OrgResolveError(line_num, err))?;
+                .map_err(|err| AssembleError::OrgResolveError(line.location.clone(), err))?;
             addresses.insert(line_num, address);
         }
 
@@ -167,9 +171,9 @@ pub fn assemble_snippet<T: IntoIterator<Item = String>>(
     lines: T,
 ) -> Result<Vec<u8>, AssembleError> {
     let line_results: Vec<Result<Line, AssembleError>> =
-        LineSource::new("_snippet", lines, |_file| {
+        LineSource::new("<none>", lines, |_file| {
             Err(AssembleError::IncludeError(
-                0,
+                Location::default(),
                 "Including is not supported in assembling snippets".to_string(),
             ))
         })
@@ -239,7 +243,7 @@ fn generate_code<T: IntoIterator<Item = Line>>(lines: T) -> Result<Vec<u8>, Asse
             }
             VASMLine::Instruction(_, opcode, Some(arg)) => {
                 let arg = eval(arg, line_num, &line_addresses, &scope)
-                    .map_err(|err| AssembleError::ArgError(line_num, err))?;
+                    .map_err(|err| AssembleError::ArgError(line.location.clone(), err))?;
                 let len = line_lengths[&line_num] - 1;
                 let instr = (u8::from(*opcode) << 2) + len as u8;
                 code[current_addr - start] = instr;
@@ -255,7 +259,7 @@ fn generate_code<T: IntoIterator<Item = Line>>(lines: T) -> Result<Vec<u8>, Asse
             }
             VASMLine::Db(_, arg) => {
                 let arg = eval(arg, line_num, &line_addresses, &scope)
-                    .map_err(|err| AssembleError::ArgError(line_num, err))?;
+                    .map_err(|err| AssembleError::ArgError(line.location.clone(), err))?;
                 poke_word(&mut code, current_addr - start, arg);
                 current_addr += 3;
             }
@@ -280,7 +284,6 @@ fn generate_code<T: IntoIterator<Item = Line>>(lines: T) -> Result<Vec<u8>, Asse
 mod test {
     use super::AssembleError::*;
     use super::*;
-    use crate::ast::VASMLine;
     use crate::parse_error;
     use crate::parse_error::EvalError::*;
     use crate::vasm_parser::parse_vasm_line;
@@ -288,7 +291,11 @@ mod test {
     fn parse<'a, T: IntoIterator<Item = &'a str>>(lines: T) -> Vec<Line> {
         lines
             .into_iter()
-            .map(|line| parse_vasm_line(line).unwrap().into())
+            .enumerate()
+            .map(|(line_num, line)| Line {
+                line: parse_vasm_line(line).unwrap(),
+                location: line_num.into(),
+            })
             .collect()
     }
 
@@ -336,7 +343,7 @@ mod test {
         assert_eq!(
             solve_equs(&parse(["blah: .equ 5", "foo: .equ banana"])),
             Err(EquResolveError(
-                1,
+                1.into(),
                 "foo".into(),
                 MissingLabel("banana".into())
             ))
@@ -344,14 +351,14 @@ mod test {
         assert_eq!(
             solve_equs(&parse(["blah: .equ foo+3", "foo: .equ 7"])),
             Err(EquResolveError(
-                0,
+                0.into(),
                 "blah".into(),
                 MissingLabel("foo".into())
             ))
         );
         assert_eq!(
             solve_equs(&parse(["blah: .equ 3", "blah: .equ 7"])),
-            Err(EquDuplicateError(1, "blah".into()))
+            Err(EquDuplicateError(1.into(), "blah".into()))
         );
     }
 
@@ -443,11 +450,11 @@ mod test {
     fn test_unresolvable_orgs() {
         assert_eq!(
             place_labels_pass([".org 0xffffff - blah"]),
-            Err(OrgResolveError(0, MissingLabel("blah".into())))
+            Err(OrgResolveError(0.into(), MissingLabel("blah".into())))
         );
         assert_eq!(
             place_labels_pass(["blah: .org blah"]),
-            Err(OrgResolveError(0, MissingLabel("blah".into())))
+            Err(OrgResolveError(0.into(), MissingLabel("blah".into())))
         );
     }
 
@@ -494,7 +501,7 @@ mod test {
         assert_eq!(
             assemble_snippet(["apple"].map(String::from)),
             Err(ParseError(
-                1,
+                1.into(),
                 parse_error::ParseError::InvalidInstruction("apple".into())
             ))
         );

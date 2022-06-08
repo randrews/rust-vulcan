@@ -1,5 +1,5 @@
 use crate::ast::{Macro, VASMLine};
-use crate::parse_error::AssembleError;
+use crate::parse_error::{AssembleError, Location};
 use crate::vasm_parser::parse_vasm_line;
 use std::collections::VecDeque;
 use std::iter::Enumerate;
@@ -7,8 +7,7 @@ use std::iter::Enumerate;
 #[derive(Debug, PartialEq, Clone)]
 pub struct Line {
     pub line: VASMLine,
-    pub line_num: usize,
-    pub file: String,
+    pub location: Location,
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -48,8 +47,10 @@ impl From<VASMLine> for Line {
     fn from(other: VASMLine) -> Self {
         Line {
             line: other,
-            line_num: 0,
-            file: "<none>".to_string(),
+            location: Location {
+                line_num: 0,
+                file: "<none>".to_string(),
+            },
         }
     }
 }
@@ -76,7 +77,7 @@ impl<T: IntoIterator<Item = String>, F: Fn(String) -> Result<T, AssembleError>> 
             // Try and parse it
             return match parse_vasm_line(line.as_str()) {
                 // We failed to parse it
-                Err(err) => Some(Err(AssembleError::ParseError(self.current_line, err))),
+                Err(err) => Some(Err(AssembleError::ParseError(self.current_location(), err))),
 
                 // It's a macro, so do it and then try again
                 Ok(VASMLine::Macro(mac)) => {
@@ -92,8 +93,10 @@ impl<T: IntoIterator<Item = String>, F: Fn(String) -> Result<T, AssembleError>> 
 
                 Ok(normal_line) => Some(Ok(Line {
                     line: normal_line,
-                    line_num: self.current_line,
-                    file: self.filename_stack.last().unwrap().clone(),
+                    location: Location {
+                        line_num: self.current_line,
+                        file: self.filename_stack.last().unwrap().clone(),
+                    },
                 })),
             };
         }
@@ -122,14 +125,23 @@ impl<T: IntoIterator<Item = String>, F: Fn(String) -> Result<T, AssembleError>> 
     fn emit(&mut self, line: String) {
         self.generated_lines.push_back(Line {
             line: parse_vasm_line(line.as_str()).unwrap(),
-            line_num: self.current_line,
-            file: self.filename_stack.last().unwrap().clone(),
+            location: Location {
+                line_num: self.current_line,
+                file: self.filename_stack.last().unwrap().clone(),
+            },
         })
     }
 
     fn gensym(&mut self) -> String {
         self.current_sym += 1;
         format!("__gensym_{}", self.current_sym)
+    }
+
+    fn current_location(&self) -> Location {
+        Location {
+            line_num: self.current_line,
+            file: self.filename_stack.last().unwrap().clone(),
+        }
     }
 
     fn handle_macro(&mut self, mac: Macro) -> Option<AssembleError> {
@@ -166,7 +178,7 @@ impl<T: IntoIterator<Item = String>, F: Fn(String) -> Result<T, AssembleError>> 
                     self.emit(format!("jmpr @{}", new_end));
                     self.emit(format!("{}:", old_end));
                 } else {
-                    return Some(AssembleError::MacroError(self.current_line));
+                    return Some(AssembleError::MacroError(self.current_location()));
                 }
             }
 
@@ -188,7 +200,7 @@ impl<T: IntoIterator<Item = String>, F: Fn(String) -> Result<T, AssembleError>> 
                     };
                     self.emit(format!("{} @{}", instr, after));
                 } else {
-                    return Some(AssembleError::MacroError(self.current_line));
+                    return Some(AssembleError::MacroError(self.current_location()));
                 }
             }
 
@@ -198,7 +210,7 @@ impl<T: IntoIterator<Item = String>, F: Fn(String) -> Result<T, AssembleError>> 
                     self.emit(format!("jmpr @{}", start));
                     self.emit(format!("{}:", after));
                 }
-                _ => return Some(AssembleError::MacroError(self.current_line)),
+                _ => return Some(AssembleError::MacroError(self.current_location())),
             },
         }
         None
@@ -229,9 +241,11 @@ mod tests {
         assert_eq!(
             src.next(),
             Some(Ok(Line {
-                line_num: 1,
-                file: "blah".to_string(),
-                line: VASMLine::Instruction(None, Add, None)
+                line: VASMLine::Instruction(None, Add, None),
+                location: Location {
+                    line_num: 1,
+                    file: "blah".to_string(),
+                }
             }))
         );
         assert_eq!(src.next(), None);
@@ -246,14 +260,18 @@ mod tests {
             src.collect::<Vec<Result<Line, AssembleError>>>(),
             vec![
                 Ok(Line {
-                    line_num: 1,
-                    file: "foo".to_string(),
-                    line: VASMLine::Instruction(None, Sub, None)
+                    line: VASMLine::Instruction(None, Sub, None),
+                    location: Location {
+                        line_num: 1,
+                        file: "foo".to_string(),
+                    }
                 }),
                 Ok(Line {
-                    line_num: 2,
-                    file: "blah".to_string(),
-                    line: VASMLine::Instruction(None, Add, None)
+                    line: VASMLine::Instruction(None, Add, None),
+                    location: Location {
+                        line_num: 2,
+                        file: "blah".to_string(),
+                    }
                 })
             ]
         );
