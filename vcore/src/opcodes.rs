@@ -9,7 +9,7 @@ pub enum Opcode {
     Mul,
     Div,
     Mod,
-    Rand,
+    Copy,
     And,
     Or,
     Xor,
@@ -82,8 +82,8 @@ impl Display for Opcode {
             Opcode::Mod => {
                 write!(f, "mod")
             }
-            Opcode::Rand => {
-                write!(f, "rand")
+            Opcode::Copy => {
+                write!(f, "copy")
             }
             Opcode::And => {
                 write!(f, "and")
@@ -206,7 +206,7 @@ impl TryFrom<u8> for Opcode {
             3 => Mul,
             4 => Div,
             5 => Mod,
-            6 => Rand,
+            6 => Copy,
             7 => And,
             8 => Or,
             9 => Xor,
@@ -259,7 +259,7 @@ impl<'a> TryFrom<&'a str> for Opcode {
             "mul" => Mul,
             "div" => Div,
             "mod" => Mod,
-            "rand" => Rand,
+            "copy" => Copy,
             "and" => And,
             "or" => Or,
             "xor" => Xor,
@@ -309,7 +309,7 @@ impl From<Opcode> for u8 {
             Opcode::Mul => 3,
             Opcode::Div => 4,
             Opcode::Mod => 5,
-            Opcode::Rand => 6,
+            Opcode::Copy => 6,
             Opcode::And => 7,
             Opcode::Or => 8,
             Opcode::Xor => 9,
@@ -354,14 +354,14 @@ impl Opcode {
     pub fn arity(self) -> usize {
         use Opcode::*;
         match self {
-            Nop | Rand | Ret | Hlt | Sdp | Popr | Peekr | Debug => 0,
+            Nop | Ret | Hlt | Sdp | Popr | Peekr | Debug => 0,
 
             Not | Pop | Dup | Jmp | Jmpr | Call | Load | Loadw | Setint | Pushr | Pick => 1,
 
             Add | Sub | Mul | Div | Mod | And | Or | Xor | Gt | Lt | Agt | Alt | Lshift
             | Rshift | Arshift | Swap | Brz | Brnz | Store | Storew | Setsdp | Setiv => 2,
 
-            Rot => 3,
+            Rot | Copy => 3,
         }
     }
 
@@ -372,7 +372,7 @@ impl Opcode {
         match self {
             Peekr | Popr | Ret => 1,
 
-            Nop | Rand | Hlt | Sdp | Debug | Not | Pop | Dup | Jmp | Jmpr | Call | Load | Loadw
+            Nop | Copy | Hlt | Sdp | Debug | Not | Pop | Dup | Jmp | Jmpr | Call | Load | Loadw
             | Setint | Setiv | Pushr | Add | Sub | Mul | Div | Mod | And | Or | Xor | Gt | Lt
             | Agt | Alt | Lshift | Rshift | Arshift | Swap | Brz | Brnz | Store | Storew
             | Setsdp | Rot | Pick => 0,
@@ -397,7 +397,7 @@ impl Opcode {
         match self {
             Sdp => 2,
 
-            Peekr | Rand | Dup => 1,
+            Peekr | Dup => 1,
 
             Nop | Hlt | Debug | Not | Call | Load | Loadw | Pushr | Popr | Pick | Rot | Swap => 0,
 
@@ -405,6 +405,8 @@ impl Opcode {
             | Alt | Lshift | Rshift | Arshift | Ret => -1,
 
             Setint | Store | Storew | Setsdp | Setiv | Brz | Brnz => -2,
+
+            Copy => -3,
         }
     }
 }

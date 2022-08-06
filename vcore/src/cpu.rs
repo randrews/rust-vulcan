@@ -208,8 +208,11 @@ impl CPU {
         } else {
             match instruction.opcode {
                 Opcode::Nop => { /* No action required */ }
-                Opcode::Rand => {
-                    todo!()
+                Opcode::Copy => {
+                    let dest = self.pop_data();
+                    let src = self.pop_data();
+                    let len = self.pop_data();
+                    self.copy_region(len, dest, src);
                 }
                 Opcode::Not => {
                     let x = self.pop_data();
@@ -415,6 +418,25 @@ impl CPU {
             stack_str.join(" "),
             call_str.join(" ")
         );
+    }
+
+    fn copy_region(&mut self, len: Word, dest: Word, src: Word) {
+        // Degenerate cases:
+        if dest == src || len == 0 { return }
+
+        // Now, check if we're moving to a greater or lesser address:
+        if dest > src {
+            // If the dest is greater, we need to move from the end of the range backwards,
+            // in case there's overlap:
+            for offset in (0..len.into()).rev() {
+                self.memory.poke(dest + offset, self.memory.peek(src + offset))
+            }
+        } else {
+            // Dest is before src, so we'll move from low index to high, in case of overlap:
+            for offset in 0..len.into() {
+                self.memory.poke(dest + offset, self.memory.peek(src + offset))
+            }
+        }
     }
 
     pub fn interrupt(&mut self, irq: usize, arg: Option<Word>) {
@@ -683,6 +705,62 @@ mod tests {
         simple_opcode_test(vec![0b1100, 2], Rshift, vec![3]);
         simple_opcode_test(vec![0b1100, 2], Lshift, vec![0b110000]);
         simple_opcode_test(vec![0x800010, 2], Arshift, vec![0xe00004]);
+    }
+
+    #[test]
+    fn test_cpu_copy() {
+        // No overlap, forwards
+        memory_opcode_test(
+            vec![3, 2048, 2051],
+            vec![1, 2, 3, 4, 5, 6],
+            Copy,
+            vec![],
+            Some(vec![1, 2, 3, 1, 2, 3]),
+        );
+
+        // No overlap, backwards
+        memory_opcode_test(
+            vec![3, 2051, 2048],
+            vec![1, 2, 3, 4, 5, 6],
+            Copy,
+            vec![],
+            Some(vec![4, 5, 6, 4, 5, 6]),
+        );
+
+        // Overlap, move forward
+        memory_opcode_test(
+            vec![3, 2048, 2050],
+            vec![1, 2, 3, 4, 5, 6],
+            Copy,
+            vec![],
+            Some(vec![1, 2, 1, 2, 3, 6]),
+        );
+
+        // Overlap, move backwards
+        memory_opcode_test(
+            vec![3, 2051, 2049],
+            vec![1, 2, 3, 4, 5, 6],
+            Copy,
+            vec![],
+            Some(vec![1, 4, 5, 6, 5, 6]),
+        );
+
+        // Degenerate cases
+        memory_opcode_test(
+            vec![0, 2051, 2049],
+            vec![1, 2, 3, 4, 5, 6],
+            Copy,
+            vec![],
+            Some(vec![1, 2, 3, 4, 5, 6]),
+        );
+
+        memory_opcode_test(
+            vec![5, 2048, 2048],
+            vec![1, 2, 3, 4, 5, 6],
+            Copy,
+            vec![],
+            Some(vec![1, 2, 3, 4, 5, 6]),
+        );
     }
 
     #[test]
