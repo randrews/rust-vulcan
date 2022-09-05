@@ -4,6 +4,7 @@ members = [
     "vcore",
     "vemu",
     "vasm_core",
+    "vasm",
     "vtest",
     "vlua"
 ]

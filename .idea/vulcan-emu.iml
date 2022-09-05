@@ -5,6 +5,7 @@
       <sourceFolder url="file://$MODULE_DIR$/src" isTestSource="false" />
       <sourceFolder url="file://$MODULE_DIR$/vcore/src" isTestSource="false" />
       <sourceFolder url="file://$MODULE_DIR$/vemu/src" isTestSource="false" />
+      <sourceFolder url="file://$MODULE_DIR$/vasm/src" isTestSource="false" />
       <sourceFolder url="file://$MODULE_DIR$/vtest/src" isTestSource="false" />
       <sourceFolder url="file://$MODULE_DIR$/vlua/src" isTestSource="false" />
       <sourceFolder url="file://$MODULE_DIR$/vasm_core/src" isTestSource="false" />

@@ -1,5 +1,5 @@
 use std::collections::BTreeMap;
-use vasm::assemble_snippet;
+use vasm_core::assemble_snippet;
 use vcore::memory::{Memory, PeekPokeExt};
 use vcore::word::Word;
 use vcore::CPU;
@@ -26,10 +26,7 @@ fn test_rstack<T: IntoIterator<Item = String>>(
     assert_eq!(cpu.get_call(), expected_rstack);
 }
 
-fn test_mem<T: IntoIterator<Item = String>>(
-    code: T,
-    expected_memory: BTreeMap<u32, u8>,
-) -> CPU {
+fn test_mem<T: IntoIterator<Item = String>>(code: T, expected_memory: BTreeMap<u32, u8>) -> CPU {
     let cpu = cpu_test(code);
     for (addr, byte) in expected_memory {
         assert_eq!(cpu.peek8(addr), byte)
@@ -45,7 +42,8 @@ fn test_arithmetic() {
               push 2
               add 3
               hlt"
-        .lines().map(String::from),
+        .lines()
+        .map(String::from),
         vec![5],
     );
 
@@ -55,7 +53,8 @@ fn test_arithmetic() {
         push 7
         mul 1000
         hlt"
-        .lines().map(String::from),
+        .lines()
+        .map(String::from),
         vec![7000],
     );
 }
@@ -69,7 +68,8 @@ fn test_call_stack() {
         hlt
         blah: mul 2
         ret"
-        .lines().map(String::from),
+        .lines()
+        .map(String::from),
         vec![6],
     );
 
@@ -81,7 +81,8 @@ fn test_call_stack() {
         pushr
         pushr
         hlt"
-        .lines().map(String::from),
+        .lines()
+        .map(String::from),
         vec![10],
         vec![3, 4],
     );
@@ -95,7 +96,8 @@ fn test_call_stack() {
         popr
         add
         hlt"
-        .lines().map(String::from),
+        .lines()
+        .map(String::from),
         vec![10, 7],
         vec![20],
     );
@@ -106,7 +108,8 @@ fn test_call_stack() {
         call blah
         blah: pushr 3
         hlt"
-        .lines().map(String::from),
+        .lines()
+        .map(String::from),
         vec![],
         vec![5, 0x406, 3],
     );
@@ -120,7 +123,8 @@ fn test_call_stack() {
         popr
         popr
         hlt"
-        .lines().map(String::from),
+        .lines()
+        .map(String::from),
         vec![5, 20, 20, 10],
         vec![],
     )
@@ -139,7 +143,8 @@ fn test_comparison() {
         push 10
         lt 5
         hlt"
-        .lines().map(String::from),
+        .lines()
+        .map(String::from),
         vec![0, 1, 1, 0],
     );
 
@@ -155,7 +160,8 @@ fn test_comparison() {
         push 10
         alt -5
         hlt"
-        .lines().map(String::from),
+        .lines()
+        .map(String::from),
         vec![0, 1, 1, 0],
     );
 
@@ -164,7 +170,8 @@ fn test_comparison() {
         not 10
         not 0
         hlt"
-        .lines().map(String::from),
+        .lines()
+        .map(String::from),
         vec![0, 1],
     )
 }
@@ -177,7 +184,8 @@ fn test_pick() {
         nop 20
         pick 1
         hlt"
-        .lines().map(String::from),
+        .lines()
+        .map(String::from),
         vec![10, 20, 10],
     );
 
@@ -188,7 +196,8 @@ fn test_pick() {
         pick 2
         pick 5
         hlt"
-        .lines().map(String::from),
+        .lines()
+        .map(String::from),
         vec![10, 20, 0, 0],
     )
 }
@@ -202,7 +211,8 @@ fn test_store() {
         push 0x123456
         storew 203
         hlt"
-        .lines().map(String::from),
+        .lines()
+        .map(String::from),
         [(201, 10), (203, 0x56), (204, 0x34), (205, 0x12)].into(),
     );
 }
@@ -216,7 +226,8 @@ fn test_load() {
         hlt
         .org 0x500
         .db 0x123456"
-            .lines().map(String::from),
+            .lines()
+            .map(String::from),
         vec![0x34, 0x123456],
     )
 }
@@ -231,7 +242,8 @@ fn test_rotate() {
         push 300
         rot
         hlt"
-        .lines().map(String::from),
+        .lines()
+        .map(String::from),
         vec![10, 200, 300, 100],
     )
 }
@@ -244,7 +256,8 @@ fn test_sdp() {
         pushr 20
         sdp
         hlt"
-        .lines().map(String::from),
+        .lines()
+        .map(String::from),
         vec![10, 1021, 265],
     )
 }
@@ -262,7 +275,8 @@ fn test_underflow() {
         onunder: push 200
         store 10
         hlt"
-        .lines().map(String::from),
+        .lines()
+        .map(String::from),
         [(10, 200)].into(),
     );
 
@@ -277,7 +291,8 @@ fn test_underflow() {
         onrunder: push 200
         store 10
         hlt"
-        .lines().map(String::from),
+        .lines()
+        .map(String::from),
         [(10, 200)].into(),
     );
 
@@ -292,7 +307,8 @@ fn test_underflow() {
         onunder: push 200
         store 10
         hlt"
-        .lines().map(String::from),
+        .lines()
+        .map(String::from),
         [(10, 200)].into(),
     );
 }
@@ -311,7 +327,8 @@ fn test_div_zero() {
         ondiv0: push 200
         store 10
         hlt"
-        .lines().map(String::from),
+        .lines()
+        .map(String::from),
         [(10, 200)].into(),
     );
 
@@ -327,7 +344,8 @@ fn test_div_zero() {
         ondiv0: push 200
         store 10
         hlt"
-        .lines().map(String::from),
+        .lines()
+        .map(String::from),
         [(10, 200)].into(),
     );
 }
@@ -348,7 +366,8 @@ fn test_overflow() {
         push 3 ; boom!
         store ; never happens
         onover: hlt"
-            .lines().map(String::from),
+            .lines()
+            .map(String::from),
         [(16, 1), (19, 2)].into(), // expect the two successful pushes to be still there
     );
 
@@ -378,7 +397,8 @@ fn test_simple_overflow() {
         add 5 ; full stack + argument!
         store ; never happens
         onover: hlt"
-            .lines().map(String::from),
+            .lines()
+            .map(String::from),
         [(16, 1), (19, 2)].into(), // expect the two successful pushes to be still there
     );
 
@@ -408,7 +428,8 @@ fn test_overflow_promotion() {
         div ; This is a div 0, but there's no room to handle it, so it's promoted to overflow
         store ; never happens
         onover: hlt"
-            .lines().map(String::from),
+            .lines()
+            .map(String::from),
         [(16, 1), (19, 0)].into(), // expect the two successful pushes to be still there
     );
 
@@ -434,7 +455,8 @@ fn test_invalid_opcode() {
         .db 0xf6 ; this isn't an instruction!
         store ; never happens
         onop: hlt"
-            .lines().map(String::from),
+            .lines()
+            .map(String::from),
         [(256, 1), (259, 2)].into(), // expect the two successful pushes to be still there
     );
 
