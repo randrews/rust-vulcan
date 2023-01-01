@@ -1,0 +1,5 @@
+#!/bin/bash -e
+
+wasm-pack build --target web
+npm run bundle
+cp pkg/vweb_bg.wasm src/index.html build

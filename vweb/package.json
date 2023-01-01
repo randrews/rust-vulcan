@@ -1,0 +1,10 @@
+{
+  "dependencies": {
+    "esbuild": "^0.16.12",
+    "xterm": "^5.0.0",
+    "xterm-readline": "^1.1.1"
+  },
+  "scripts": {
+    "bundle": "node esbuild.js"
+  }
+}

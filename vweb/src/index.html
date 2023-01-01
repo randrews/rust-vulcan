@@ -1,0 +1,187 @@
+<!DOCTYPE html>
+<html lang="en-US">
+<head>
+  <meta charset="utf-8" />
+  <link rel="stylesheet" href="app.css"/>
+  <title>NovaForth REPL</title>
+  <script type="module" src="app.js"></script>
+</head>
+<body>
+  <div class="content">
+    <div class="terminal"></div>
+    <div class="instructions">
+      <h2>NovaForth Console</h2>
+      <p>
+        This is a REPL for NovaForth, using the Vulcan imaginary CPU.
+        You can type lines of Forth code and have them evaluated, and see the results.
+      </p>
+      <p>
+        For a full introduction to NovaForth, read
+        <a href="https://docs.google.com/document/d/12juFyAGWC9TL2qB97Ud3VehlVdge-zpEjy7FSM1BWF4/edit?usp=sharing">
+          this sample chapter
+        </a>
+        from the upcoming Vulcan book. A short tutorial is below:
+      </p>
+      <h3>Tutorial and examples:</h3>
+      <p>
+        Forth programs are a series of "words" separated by whitespace. NovaForth evaluates words line-by-line, and a
+        full dictionary of available words is listed below. Here are some example programs:
+      </p>
+      <p>
+        <pre>5 3 + .</pre>
+        This program pushes the numbers "5" and "3" to the stack, then adds the top two numbers on the stack, and
+        finally pops the top number from the stack (now "8") and prints it.
+      </p>
+      <p>
+        <pre>." Hello, world!"</pre>
+        This program prints a standard greeting.
+      </p>
+      <p>
+        <pre>: square dup * ;
+4 square .</pre>
+        This defines a new word, "square", which multiplies the top value on the stack by itself. The second line then
+        calls that word on the number "4" and prints the result.
+      </p>
+      <p>
+<pre>: collatz
+  dup 2 % if
+    3 * 1 +
+  else
+    2 /
+  then ;
+
+4 collatz 5 collatz .s</pre>
+      This defines a word "collatz" which showcases conditionals: if the number given to it is odd, it returns triple
+      that number plus one; if it's even, it returns half that number. The ".s" word prints the stack without modifying
+      it and is a useful debugging tool.
+      </p>
+      <h3>NovaForth Dictionary</h3>
+      <h4>Arithmetic and stack juggling</h4>
+        <table>
+            <tr><td class="word">+</td><td class="signature">a b -- c</td><td class="meaning">Addition</td></tr>
+            <tr><td class="word">-</td><td class="signature">a b -- c</td><td class="meaning">Subtraction</td></tr>
+            <tr><td class="word">*</td><td class="signature">a b -- c</td><td class="meaning">Multiplication</td></tr>
+            <tr><td class="word">/</td><td class="signature">a b -- c</td><td class="meaning">Division (truncates to integer)</td></tr>
+            <tr><td class="word">%</td><td class="signature">a b -- c</td><td class="meaning">Modulus</td></tr>
+            <tr><td class="word">pop</td><td class="signature">a --</td><td class="meaning">Throw away the top element of the stack</td></tr>
+            <tr><td class="word">dup</td><td class="signature">a -- a a</td><td class="meaning">Duplicate the top element of the stack</td></tr>
+            <tr><td class="word">swap</td><td class="signature">a b -- b a</td><td class="meaning">Swap the top two elements of the stack</td></tr>
+            <tr>
+                <td class="word">pick</td>
+                <td class="signature">* index -- * el</td>
+                <td class="meaning">Copy an element from deep in the stack to the top. "0 pick" is equivalent to dup,
+                    "1 pick" pushes the value one below the top, and so on</td></tr>
+            <tr>
+                <td class="word">rot</td>
+                <td class="signature">a b c -- b c a</td>
+                <td class="meaning">Rotate the top three elements on the stack</td>
+            </tr>
+            <tr>
+                <td class="word">-rot</td>
+                <td class="signature">a b c -- c a b</td>
+                <td class="meaning">Rotate the top three elements on the stack the other direction (prelude word)</td>
+            </tr>
+            <tr><td class="word">?dup</td><td class="signature">a -- a a OR 0 -- 0</td><td class="meaning">Duplicates the top of stack if it's nonzero</td></tr>
+            <tr><td class="word">&gt;r</td><td class="signature">a --</td><td class="meaning">Pushes the top of the stack to the R stack</td></tr>
+            <tr><td class="word">r&gt;</td><td class="signature">-- a</td><td class="meaning">Pushes the top of the R stack to the stack</td></tr>
+            <tr><td class="word">r@</td><td class="signature">-- a</td><td class="meaning">Copies the top of the R stack to the stack, leaving the R stack unchanged</td></tr>
+            <tr><td class="word">rpick</td><td class="signature">index -- a</td><td class="meaning">Picks a value from deep in the R stack, much like "pick" does with the data stack</td></tr>
+            <tr><td class="word">rdrop</td><td class="signature">--</td><td class="meaning">Drop the top value from the R stack (prelude word)</td></tr>
+            <tr><td class="word">lshift</td><td class="signature">a b -- c</td><td class="meaning">Binary-shifts "a" left "b" bits, shifting in zeroes (prelude word)</td></tr>
+            <tr><td class="word">rshift</td><td class="signature">a b -- c</td><td class="meaning">Binary-shifts "a" right "b" bits, shifting in zeroes (prelude word)</td></tr>
+            <tr><td class="word">arshift</td><td class="signature">a b -- c</td><td class="meaning">Arithmetic right shift: right-shift leaving the high order bit untouched (to preserve sign) (prelude word)</td></tr>
+            <tr><td class="word">ror</td><td class="signature">a -- b</td><td class="meaning">Roll one bit right, moving the low bit to the high bit (prelude word)</td></tr>
+            <tr><td class="word">rol</td><td class="signature">a -- b</td><td class="meaning">Roll one bit left, moving the high bit to the low bit (prelude word)</td></tr>
+            <tr><td class="word">over</td><td class="signature">a b -- a b a</td><td class="meaning">Duplicate the value one below top (prelude word)</td></tr>
+            <tr><td class="word">nip</td><td class="signature">a b -- b</td><td class="meaning">Drop the value one below top (prelude word)</td></tr>
+            <tr><td class="word">tuck</td><td class="signature">a b -- b a b</td><td class="meaning">Duplicate the top value, placing it underneath the one below top (prelude word)</td></tr>
+            <tr><td class="word">2dup</td><td class="signature">a b -- a b a b</td><td class="meaning">Duplicate the top two values (prelude word)</td></tr>
+            <tr><td class="word">negate</td><td class="signature">a -- b</td><td class="meaning">Multiply the top of stack by -1 (prelude word)</td></tr>
+            <tr><td class="word">abs</td><td class="signature">a -- b</td><td class="meaning">Return the absolute value of the top of stack (prelude word)</td></tr>
+        </table>
+      <h4>I/O</h4>
+        <table>
+            <tr><td class="word">word <em>word</em></td><td class="signature">-- addr</td><td class="meaning">Copies <em>word</em> to the pad, leaving its address on the stack</td></tr>
+            <tr><td class="word">pad</td><td class="signature">-- addr</td><td class="meaning">Pushes the address of the pad to the stack</td></tr>
+            <tr><td class="word">number <em>str</em></td><td class="signature">-- num 1 OR -- 0</td><td class="meaning">Tries to parse the given word as a number, pushes the number followed by 1 if it's parseable and 0 if it's not</td></tr>
+            <tr><td class="word">hex</td><td class="signature">--</td><td class="meaning">Switches all I/O to hexadecimal mode</td></tr>
+            <tr><td class="word">dec</td><td class="signature">--</td><td class="meaning">Switches all I/O to base-10 mode (the default)</td></tr>
+            <tr><td class="word">.</td><td class="signature">a --</td><td class="meaning">Prints the number on the top of the stack</td></tr>
+            <tr><td class="word">s"</td><td class="signature">-- addr</td><td class="meaning">Reads a string until a double-quote, copies them to the heap, and returns the address of the string</td></tr>
+            <tr><td class="word">."</td><td class="signature">--</td><td class="meaning">Reads a string until a double-quote and prints it</td></tr>
+            <tr><td class="word">emit</td><td class="signature">ch --</td><td class="meaning">Emits a byte (as ASCII) to the console</td></tr>
+            <tr><td class="word">print</td><td class="signature">addr --</td><td class="meaning">Prints a null-terminated string to the console</td></tr>
+            <tr><td class="word">.s</td><td class="signature">--</td><td class="meaning">Prints the stack contents as a debugging aid</td></tr>
+            <tr><td class="word">space</td><td class="signature">--</td><td class="meaning">Prints a space (prelude word)</td></tr>
+            <tr><td class="word">cr</td><td class="signature">--</td><td class="meaning">Prints a newline (10 followed by 13, carriage return and line feed) (prelude word)</td></tr>
+        </table>
+      <h4>Logic and control structures</h4>
+        <table>
+            <tr><td class="word">&gt;</td><td class="signature">a b -- c</td><td class="meaning">Returns a 1 if a is greater than b, 0 otherwise (signed comparison)</td></tr>
+            <tr><td class="word">&lt;</td><td class="signature">a b -- c</td><td class="meaning">Returns a 1 if a is less than b, 0 otherwise (signed comparison)</td></tr>
+            <tr><td class="word">u&gt;</td><td class="signature">a b -- c</td><td class="meaning">Returns a 1 if a is greater than b, 0 otherwise (unsigned comparison) (prelude word)</td></tr>
+            <tr><td class="word">u&lt;</td><td class="signature">a b -- c</td><td class="meaning">Returns a 1 if a is less than b, 0 otherwise (unsigned comparison) (prelude word)</td></tr>
+            <tr><td class="word">=</td><td class="signature">a b -- c</td><td class="meaning">Returns a 1 if a is equal to b, 0 otherwise</td></tr>
+            <tr><td class="word">&amp;</td><td class="signature">a b -- c</td><td class="meaning">Bitwise-and of a and b</td></tr>
+            <tr><td class="word">|</td><td class="signature">a b -- c</td><td class="meaning">Bitwise-or of a and b</td></tr>
+            <tr><td class="word">^</td><td class="signature">a b -- c</td><td class="meaning">Bitwise-xor of a and b</td></tr>
+            <tr><td class="word">not</td><td class="signature">a -- b</td><td class="meaning">If the argument is a 0, returns 1. Otherwise returns 0</td></tr>
+            <tr><td class="word">compare</td><td class="signature">a b -- c</td><td class="meaning">Compares two strings for equality, returns 1 if they're equal and 0 otherwise</td></tr>
+            <tr><td class="word">if / else / then</td><td class="signature">cond --</td><td class="meaning">A conditional branch: "<em>condition</em> if <em>truepath</em> else <em>falsepath</em> then". The "else" branch is optional (prelude words)</td></tr>
+        </table>
+      <h4>Memory management</h4>
+        <table>
+            <tr><td class="word">@</td><td class="signature">addr -- val</td><td class="meaning">Read the 3-byte word at the given address</td></tr>
+            <tr><td class="word">!</td><td class="signature">val addr --</td><td class="meaning">Write a 3-byte word to the given address</td></tr>
+            <tr><td class="word">c@</td><td class="signature">addr -- val</td><td class="meaning">Read one byte from the given address</td></tr>
+            <tr><td class="word">c!</td><td class="signature">val addr --</td><td class="meaning">Write one byte to the given address</td></tr>
+            <tr><td class="word">&amp;heap</td><td class="signature">-- addr</td><td class="meaning">Pushes the address of the heap pointer</td></tr>
+            <tr><td class="word">here</td><td class="signature">-- addr</td><td class="meaning">Pushes the current value of the heap pointer (equivalent to "&amp;heap @")</td></tr>
+            <tr><td class="word">variable <em>name</em></td><td class="signature">--</td><td class="meaning">Creates a variable of the given name, which pushes its address when called (prelude word)</td></tr>
+            <tr><td class="word">+!</td><td class="signature">val addr --</td><td class="meaning">Increments the 3-byte word at "addr" by "val" (prelude word)</td></tr>
+            <tr><td class="word">c+!</td><td class="signature">val addr --</td><td class="meaning">Increments the byte at "addr" by "val" (prelude word)</td></tr>
+            <tr><td class="word">allot</td><td class="signature">val -- addr</td><td class="meaning">Increment the heap by "val" bytes, returning the start address of the allotted region (prelude word)</td></tr>
+            <tr><td class="word">free</td><td class="signature">val -- addr</td><td class="meaning">Decrement the heap by "val" bytes, returning the new heap address (prelude word)</td></tr>
+        </table>
+      <h4>Assembly and compilation</h4>
+        <table>
+            <tr><td class="word">execute</td><td class="signature">addr --</td><td class="meaning">Calls the given address</td></tr>
+            <tr><td class="word">[</td><td class="signature">--</td><td class="meaning">Enters interpret mode</td></tr>
+            <tr><td class="word">]</td><td class="signature">--</td><td class="meaning">Enters compile mode</td></tr>
+            <tr><td class="word">,</td><td class="signature">a --</td><td class="meaning">Compiles a number to the heap</td></tr>
+            <tr><td class="word">:</td><td class="signature">--</td><td class="meaning">Begins definition of a new word: calls create and enters compile mode</td></tr>
+            <tr><td class="word">;</td><td class="signature">--</td><td class="meaning">Ends a word definition: compiles a return instruction and leaves compile mode</td></tr>
+            <tr><td class="word">$ <em>mnemonic</em></td><td class="signature">-- a</td><td class="meaning">Pushes the equivalent opcode to the given instruction mnemonic</td></tr>
+            <tr><td class="word">asm</td><td class="signature">op --</td><td class="meaning">Compiles an instruction of the given opcode (with no argument)</td></tr>
+            <tr><td class="word">#asm</td><td class="signature">op arg --</td><td class="meaning">Compiles an instruction of the given opcode with an argument</td></tr>
+            <tr><td class="word">&gt;asm</td><td class="signature">op --</td><td class="meaning">Compiles an instruction of the given opcode with a blank argument, and stores the argument's address to the R stack</td></tr>
+            <tr><td class="word">resolve</td><td class="signature">addr --</td><td class="meaning">Writes the top of the stack to the address on top of the R stack (used to resolve a blank argument left by &gt;asm)</td></tr>
+            <tr><td class="word">{</td><td class="signature">--</td><td class="meaning">Begins an anonymous function</td></tr>
+            <tr><td class="word">}</td><td class="signature">-- addr</td><td class="meaning">Ends an anonymous function and leaves its address on the stack</td></tr>
+            <tr><td class="word">exit</td><td class="signature">--</td><td class="meaning">Early return from a word definition</td></tr>
+            <tr><td class="word">continue <em>word</em></td><td class="signature">--</td><td class="meaning">Jumps to the given word as a tail call (replacing the current stack frame)</td></tr>
+            <tr><td class="word">postpone <em>word</em></td><td class="signature">--</td><td class="meaning">Delays execution of the given word: compiles a call to a compile-mode word or compiles instructions to compile a call to an interpret-mode word (see the NovaForth guide)</td></tr>
+            <tr><td class="word">literal</td><td class="signature">-- addr</td><td class="meaning">Compiles an instruction to push the number at the top of the stack</td></tr>
+        </table>
+        <h4>Dictionary manipulation</h4>
+        <table>
+            <tr><td class="word">create <em>name</em></td><td class="signature">--</td><td class="meaning">Creates a dictionary entry for a given word (pointing to the heap)</td></tr>
+            <tr><td class="word">immediate</td><td class="signature">--</td><td class="meaning">Moves the most recently defined word from the interpret dictionary to the compile dictionary</td></tr>
+            <tr><td class="word">does&gt;</td><td class="signature">-- addr</td><td class="meaning">Defines the runtime behavior of a defining word (see the NovaForth guide)</td></tr>
+            <tr><td class="word">' <em>word</em></td><td class="signature">-- addr</td><td class="meaning">Consumes a word, looks it up in the dictionary, and returns its address</td></tr>
+            <tr><td class="word">[']</td><td class="signature">-- addr</td><td class="meaning">Consumes a word at runtime, looks it up in the dictionary, and returns its address</td></tr>
+        </table>
+        <h4>Miscellaneous</h4>
+        <table>
+            <tr><td class="word">\</td><td class="signature">--</td><td class="meaning">Begins a comment that lasts to the end of the line</td></tr>
+            <tr><td class="word">(</td><td class="signature">--</td><td class="meaning">Begins a comment that lasts to the matching close paren</td></tr>
+        </table>
+        <h4>Prelude</h4>
+        <p>These definitions are run when the console is loaded:</p>
+        <pre class="prelude"></pre>
+        <hr/>
+        <p>This early-access demo was created by <a href="mailto:ross.andrews@gmail.com">Ross Andrews</a> in January 2023</p>
+    </div>
+  </div>
+</body>
+</html>
