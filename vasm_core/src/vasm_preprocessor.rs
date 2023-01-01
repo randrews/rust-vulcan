@@ -1,7 +1,7 @@
+use std::collections::vec_deque::VecDeque;
 use crate::ast::{Macro, VASMLine};
 use crate::parse_error::{AssembleError, Location};
 use crate::vasm_parser::parse_vasm_line;
-use std::collections::VecDeque;
 use std::iter::Enumerate;
 
 #[derive(Debug, PartialEq, Clone)]

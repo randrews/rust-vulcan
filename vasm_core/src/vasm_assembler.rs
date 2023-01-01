@@ -1,8 +1,8 @@
+use std::collections::btree_map::BTreeMap;
 use crate::ast::{Label, Scope, VASMLine};
 use crate::parse_error::{AssembleError, Location};
 use crate::vasm_evaluator::eval;
 use crate::vasm_preprocessor::{Line, LineSource};
-use std::collections::BTreeMap;
 use std::fs;
 
 /// This will solve all the .equ directives and return a symbol table of them.
@@ -163,7 +163,7 @@ fn code_bounds(
 /// bytes long and index 0 will represent 0x400.
 /// ```
 /// assert_eq!(
-///   vasm::assemble_snippet(".org 0x400 \n push 5 \n add 7".lines().map(String::from)),
+///   vasm_core::assemble_snippet(".org 0x400 \n push 5 \n add 7".lines().map(String::from)),
 ///   Ok(vec![0x01, 0x05, 0x05, 0x07])
 /// )
 /// ```
@@ -186,7 +186,6 @@ pub fn assemble_snippet<T: IntoIterator<Item = String>>(
 pub fn assemble_file(filename: &str) -> Result<Vec<u8>, AssembleError> {
     let lines = lines_from_file(filename)?;
     let line_results: Vec<Result<Line, AssembleError>> = LineSource::new(filename, lines, |file| {
-        println!("Including {}", file);
         lines_from_file(file.as_str())
     })
     .collect();

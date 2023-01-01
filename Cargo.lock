@@ -412,8 +412,10 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "9be70c98951c83b8d2f8f60d7065fa6d5146873094452a1008da8c2f1e4205ad"
 dependencies = [
  "cfg-if 1.0.0",
+ "js-sys",
  "libc",
  "wasi 0.10.2+wasi-snapshot-preview1",
+ "wasm-bindgen",
 ]
 
 [[package]]
@@ -1255,6 +1257,13 @@ checksum = "8ccb82d61f80a663efe1f787a51b16b5a51e3314d6ac365b08639f52387b33f3"
 name = "vasm"
 version = "0.1.0"
 dependencies = [
+ "vasm_core",
+]
+
+[[package]]
+name = "vasm_core"
+version = "0.1.0"
+dependencies = [
  "pest",
  "pest_derive",
  "vcore",
@@ -1264,6 +1273,7 @@ dependencies = [
 name = "vcore"
 version = "0.1.0"
 dependencies = [
+ "getrandom",
  "rand",
 ]
 
@@ -1273,7 +1283,7 @@ version = "0.1.0"
 dependencies = [
  "pixels",
  "rand",
- "vasm",
+ "vasm_core",
  "vcore",
  "winit",
 ]
@@ -1296,8 +1306,16 @@ dependencies = [
 name = "vtest"
 version = "0.1.0"
 dependencies = [
- "vasm",
+ "vasm_core",
  "vcore",
+]
+
+[[package]]
+name = "vweb"
+version = "0.1.0"
+dependencies = [
+ "vcore",
+ "wasm-bindgen",
 ]
 
 [[package]]

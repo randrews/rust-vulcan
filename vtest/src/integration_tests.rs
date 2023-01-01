@@ -1,5 +1,5 @@
-use std::collections::BTreeMap;
-use vasm::assemble_snippet;
+use std::collections::btree_map::BTreeMap;
+use vasm_core::assemble_snippet;
 use vcore::memory::{Memory, PeekPokeExt};
 use vcore::word::Word;
 use vcore::CPU;
