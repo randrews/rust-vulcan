@@ -55,6 +55,11 @@
       that number plus one; if it's even, it returns half that number. The ".s" word prints the stack without modifying
       it and is a useful debugging tool.
       </p>
+      <p>
+<pre>: countdown begin dup . ." ... " 1 - dup not until pop ;
+10 countdown</pre>
+        Demonstrating a loop, this program counts from its argument down to 1.
+      </p>
       <h3>NovaForth Dictionary</h3>
       <h4>Arithmetic and stack juggling</h4>
         <table>
@@ -128,6 +133,7 @@
             <tr><td class="word">not</td><td class="signature">a -- b</td><td class="meaning">If the argument is a 0, returns 1. Otherwise returns 0</td></tr>
             <tr><td class="word">compare</td><td class="signature">a b -- c</td><td class="meaning">Compares two strings for equality, returns 1 if they're equal and 0 otherwise</td></tr>
             <tr><td class="word">if / else / then</td><td class="signature">cond --</td><td class="meaning">A conditional branch: "<em>condition</em> if <em>truepath</em> else <em>falsepath</em> then". The "else" branch is optional (prelude words)</td></tr>
+            <tr><td class="word">begin / until</td><td class="signature">cond --</td><td class="meaning">A post-test loop: "until" jumps back to the corresponding "begin" as long as top of stack is 0 (prelude words)</td></tr>
         </table>
       <h4>Memory management</h4>
         <table>

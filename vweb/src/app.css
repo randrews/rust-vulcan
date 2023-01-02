@@ -31,4 +31,5 @@ td.word, td.signature {
     font-family: monospace;
     font-weight: bold;
     padding-right: 1em;
+    white-space: nowrap;
 }
