@@ -1,8 +1,10 @@
+use std::collections::BTreeMap;
 use std::fs::File;
 use std::io::Write;
 use clap::lazy_static::lazy_static;
 use clap::Parser;
 use regex::Regex;
+use serde_json::json;
 
 /// Vulcan Assembler
 #[derive(Parser, Debug)]
@@ -11,6 +13,10 @@ struct Args {
     /// File to output to
     #[clap(short, long)]
     output: Option<String>,
+
+    /// Whether to generate a JSON file containing the symbol table
+    #[clap(short, long)]
+    symbols: bool,
 
     /// Input file
     #[clap()]
@@ -51,10 +57,22 @@ fn main() {
     args.deduce();
 
     match vasm_core::assemble_file(args.file.as_str()) {
-        Ok(bytes) => {
-            //println!("We got some bytes... {} of them", bytes.len());
-            let mut outfile = File::create(args.output.unwrap()).expect("Failed to open output file");
+        Ok((bytes, scope)) => {
+            let mut outfile = File::create(args.output.as_ref().unwrap()).expect("Failed to open output file");
             outfile.write(bytes.as_slice()).expect("Failed to write to output file");
+
+            if args.symbols {
+                let mut important_symbols : BTreeMap<String, i32> = BTreeMap::new();
+                for (sym, addr) in scope {
+                    if !sym.starts_with("__gensym") {
+                        important_symbols.insert(sym, addr);
+                    }
+                }
+
+                let mut symfile = File::create(format!("{}.sym", args.output.unwrap())).expect("Failed to open symbol file");
+                let json = json!(important_symbols).to_string();
+                symfile.write(json.as_bytes()).expect("Failed to write to symbol file");
+            }
         }
         Err(error) => {
             println!("{}", error)

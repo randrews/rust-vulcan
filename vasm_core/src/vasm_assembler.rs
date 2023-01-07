@@ -179,11 +179,11 @@ pub fn assemble_snippet<T: IntoIterator<Item = String>>(
         })
         .collect();
 
-    assemble_line_results(line_results)
+    assemble_line_results(line_results).map(|(bytes, _)| { bytes })
 }
 
 /// Assemble a file from the filesystem, opening other files as it includes them.
-pub fn assemble_file(filename: &str) -> Result<Vec<u8>, AssembleError> {
+pub fn assemble_file(filename: &str) -> Result<(Vec<u8>, Scope), AssembleError> {
     let lines = lines_from_file(filename)?;
     let line_results: Vec<Result<Line, AssembleError>> = LineSource::new(filename, lines, |file| {
         lines_from_file(file.as_str())
@@ -195,7 +195,7 @@ pub fn assemble_file(filename: &str) -> Result<Vec<u8>, AssembleError> {
 
 fn assemble_line_results(
     mut line_results: Vec<Result<Line, AssembleError>>,
-) -> Result<Vec<u8>, AssembleError> {
+) -> Result<(Vec<u8>, Scope), AssembleError> {
     if let Some(Err(error)) = line_results.iter().find(|line| line.is_err()) {
         Err(error.clone())
     } else {
@@ -224,7 +224,7 @@ fn lines_from_file(filename: &str) -> Result<Vec<String>, AssembleError> {
 ///
 /// Vulcan is a little-endian architecture: multi-byte arguments / .dbs will store the
 /// least-significant byte at the lowest address, then the more significant bytes following.
-fn generate_code<T: IntoIterator<Item = Line>>(lines: T) -> Result<Vec<u8>, AssembleError> {
+fn generate_code<T: IntoIterator<Item = Line>>(lines: T) -> Result<(Vec<u8>, Scope), AssembleError> {
     let lines: Vec<Line> = lines.into_iter().collect();
     let scope = solve_equs(&lines)?;
     let line_lengths = measure_instructions(&lines, &scope);
@@ -276,7 +276,7 @@ fn generate_code<T: IntoIterator<Item = Line>>(lines: T) -> Result<Vec<u8>, Asse
         }
     }
 
-    Ok(code)
+    Ok((code, scope))
 }
 
 #[cfg(test)]
@@ -485,13 +485,13 @@ mod test {
 
     #[test]
     fn test_generate_code() {
-        assert_eq!(generate_code(parse(["add"])), Ok(vec![4]));
+        assert_eq!(generate_code(parse(["add"])).unwrap().0, vec![4]);
         assert_eq!(
-            generate_code(parse([".org 0x400", "add 7"])),
-            Ok(vec![5, 7])
+            generate_code(parse([".org 0x400", "add 7"])).unwrap().0,
+            vec![5, 7]
         );
-        assert_eq!(generate_code(parse([".db 57"])), Ok(vec![57, 0, 0]));
-        assert_eq!(generate_code(parse([".db \"AZ\0\""])), Ok(vec![65, 90, 0]));
+        assert_eq!(generate_code(parse([".db 57"])).unwrap().0, vec![57, 0, 0]);
+        assert_eq!(generate_code(parse([".db \"AZ\0\""])).unwrap().0, vec![65, 90, 0]);
     }
 
     #[test]
