@@ -147,12 +147,14 @@ impl<T: IntoIterator<Item = String>, F: Fn(String) -> Result<T, AssembleError>> 
     fn handle_macro(&mut self, mac: Macro) -> Option<AssembleError> {
         match mac {
             Macro::Include(file) => {
-                let inc_result = (self.include)(file.clone());
-                if let Ok(it) = inc_result {
-                    self.filename_stack.push(file);
-                    self.iter_stack.push(it.into_iter().enumerate());
-                } else {
-                    return inc_result.err();
+                match (self.include)(file.clone()) {
+                    Ok(it) => {
+                        self.filename_stack.push(file);
+                        self.iter_stack.push(it.into_iter().enumerate());
+                    }
+                    Err(err) => {
+                        return Some(err)
+                    }
                 }
             }
 

@@ -7,3 +7,5 @@ edition = "2021"
 
 [dependencies]
 vasm_core = { path = "../vasm_core" }
+clap = { version = "3.1.18", features = ["derive"] }
+regex = "1.7.0"
