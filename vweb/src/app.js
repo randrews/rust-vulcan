@@ -14,14 +14,6 @@ term.loadAddon(rl)
 term.open(document.getElementsByClassName('terminal')[0])
 term.write('Loading...\r\n')
 
-const handleKey = ({key, domEvent: { key: mnemonic }}) => {
-    if (mnemonic === 'Enter') {
-        console.log(mnemonic)
-    } else {
-        term.write(key)
-    }
-}
-
 init().then(async () => {
     const cpu = new WasmCPU()
     syms = JSON.parse(NovaForth.symbols()) // Grab the symbol table for the ROM so we can poke things by name
