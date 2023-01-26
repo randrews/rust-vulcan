@@ -1,7 +1,6 @@
 use std::collections::BTreeMap;
 use std::fs::File;
 use std::io::Write;
-use clap::lazy_static::lazy_static;
 use clap::Parser;
 use regex::Regex;
 use serde_json::json;

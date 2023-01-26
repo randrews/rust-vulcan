@@ -182,6 +182,45 @@ pub fn assemble_snippet<T: IntoIterator<Item = String>>(
     assemble_line_results(line_results).map(|(bytes, _)| { bytes })
 }
 
+/// Turn an iterable of strs into a map from instruction address to line number. This
+/// supports macros but not `#include`, just like `assemble_snippet`. Zero-length lines
+/// won't appear in the map. This is intended to be used for highlighting lines while
+/// stepping through a snippet. Lines in the snippet are indexed from 1 and comment and
+/// blank lines are handled correctly.
+/// ```
+/// use std::collections::BTreeMap;
+/// assert_eq!(
+///   vasm_core::snippet_source_map(".org 0x400 \n push 5 \n add 7".lines().map(String::from)),
+///   Ok(BTreeMap::from([(1024, 2), (1026, 3)]))
+/// )
+/// ```
+pub fn snippet_source_map<T: IntoIterator<Item = String>>(lines: T) -> Result<BTreeMap<i32, usize>, AssembleError> {
+    let line_results = linesource_for_snippet(lines);
+
+    let lines = line_results.iter().map(|line| line.clone().unwrap());
+    let lines: Vec<Line> = lines.into_iter().collect();
+    let scope = solve_equs(&lines)?;
+    let line_lengths = measure_instructions(&lines, &scope);
+    let (line_addresses, _scope) = place_labels(&lines, scope, &line_lengths)?;
+    let mut line_for_addr = BTreeMap::new();
+    for (i, line) in lines.iter().enumerate() {
+        line_for_addr.insert(line_addresses[&i], line.location.line_num);
+    }
+    Ok(line_for_addr)
+}
+
+fn linesource_for_snippet<T: IntoIterator<Item=String>>(lines: T) -> Vec<Result<Line, AssembleError>> {
+    let line_results: Vec<Result<Line, AssembleError>> =
+        LineSource::new("<none>", lines, |_file| {
+            Err(AssembleError::IncludeError(
+                Location::default(),
+                "Including is not supported in assembling snippets".to_string(),
+            ))
+        })
+            .collect();
+    line_results
+}
+
 /// Assemble a file from the filesystem, opening other files as it includes them.
 pub fn assemble_file(filename: &str) -> Result<(Vec<u8>, Scope), AssembleError> {
     let lines = lines_from_file(filename)?;
