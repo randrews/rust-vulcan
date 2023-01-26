@@ -1,6 +1,8 @@
 {
   "dependencies": {
     "esbuild": "^0.16.12",
+    "react": "^18.2.0",
+    "react-dom": "^18.2.0",
     "xterm": "^5.0.0",
     "xterm-readline": "^1.1.1"
   },

@@ -2,4 +2,4 @@
 
 wasm-pack build --target web
 npm run bundle
-cp pkg/vweb_bg.wasm src/index.html build
+cp pkg/vweb_bg.wasm src/index.html src/snippet_emulator_demo.html build
