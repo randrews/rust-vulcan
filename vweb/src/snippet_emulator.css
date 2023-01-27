@@ -35,7 +35,10 @@ body {
 .snippetEmulator .buttons a {
     margin-right: 0.5em;
     cursor: pointer;
+    user-select: none;
 }
 .snippetEmulator .step, .snippetEmulator .run { color: lightgreen }
 .snippetEmulator .reset { color: lightcoral }
 .snippetEmulator .build, .snippetEmulator .edit { color: dodgerblue }
+.snippetEmulator .highlight { background-color: darkgoldenrod }
+.snippetEmulator .src { overflow: scroll }

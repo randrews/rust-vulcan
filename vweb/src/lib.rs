@@ -112,6 +112,8 @@ impl WasmCPU {
         self.0.dp().into()
     }
 
+    pub fn halted(&self) -> bool { self.0.halted() }
+
     pub fn set_pc(&mut self, val: u32) {
         self.0.set_pc(Word::from(val))
     }
@@ -126,5 +128,17 @@ impl WasmCPU {
         }
 
         self.set_pc(0x400)
+    }
+
+    pub fn reset(&mut self) {
+        self.0.reset()
+    }
+
+    pub fn start(&mut self) {
+        self.0.start()
+    }
+
+    pub fn tick(&mut self) {
+        self.0.tick()
     }
 }
