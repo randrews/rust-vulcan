@@ -1,5 +1,5 @@
 require('esbuild').build({
-    entryPoints: ['src/app.js', 'src/snippet_emulator_demo.js'],
+    entryPoints: ['src/app.js', 'src/snippet_emulator_demo.jsx'],
     bundle: true,
     outdir: 'build',
     format: 'esm',

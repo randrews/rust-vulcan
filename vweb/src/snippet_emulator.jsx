@@ -2,9 +2,13 @@ import './snippet_emulator.css'
 import React, {useState, useCallback, useEffect} from 'react'
 import { WasmCPU, assemble_snippet, source_map } from '../pkg/vweb.js'
 
-export default function({ snippet }) {
+export default function({ children }) {
+    if (React.Children.count(children) !== 1) {
+        throw 'Expects a single text node as a child'
+    }
+
     const [editing, setEditing] = useState(false) // Whether we're editing the snippet or running it
-    const [src, setSrc] = useState(snippet) // The source code currently set
+    const [src, setSrc] = useState('') // The source code currently set
     const [message, setMessage] = useState('') // A status / error message
     const onChangeSrc = useCallback((e) => setSrc(e.target.value), []) // Callback for the textarea
     const [binary, setBinary] = useState(null) // The assembled binary
@@ -18,15 +22,19 @@ export default function({ snippet }) {
             setBinary(bin)
             setSourceMap(sm)
             setMessage(`Assembled ${bin.length} bytes`)
-            console.log(sm.Ok)
             return true
         } catch(e) {
             setMessage(e.message)
         }
     }, [])
 
-    // On load, build the stuff
-    useEffect(() => { rebuild(snippet) }, [snippet])
+    // On load, clean the source and build the stuff
+    useEffect(() => {
+        const lines = React.Children.toArray(children)[0].split('\n')
+        const cleaned = lines.map(l => l.trim()).join('\n')
+        setSrc(cleaned)
+        rebuild(cleaned)
+    }, [rebuild, children])
 
     if (editing) {
         return (
