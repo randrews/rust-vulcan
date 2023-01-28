@@ -114,12 +114,28 @@ impl WasmCPU {
 
     pub fn halted(&self) -> bool { self.0.halted() }
 
+    pub fn get_stack(&self) -> Vec<i32> {
+        self.0.get_stack().into_iter().map(i32::from).collect()
+    }
+
+    pub fn get_call(&self) -> Vec<i32> {
+        self.0.get_call().into_iter().map(i32::from).collect()
+    }
+
     pub fn set_pc(&mut self, val: u32) {
         self.0.set_pc(Word::from(val))
     }
 
     pub fn run(&mut self) {
         self.0.run_to_halt()
+    }
+
+    pub fn safe_run(&mut self, max_ticks: usize) {
+        let mut current = 0;
+        while !self.0.halted() && current < max_ticks {
+            current += 1;
+            self.tick()
+        }
     }
 
     pub fn load(&mut self, rom: Vec<u8>) {
