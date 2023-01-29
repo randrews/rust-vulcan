@@ -8,6 +8,40 @@
     <script type="module" src="snippet_emulator_demo.js"></script>
 </head>
 <body>
-    <div class="react-root"></div>
+<div class="main">
+    <p>
+        Lorem ipsum dolor sit amet, consectetur adipiscing elit. Quisque eu diam orci. Aliquam quis pharetra erat.
+        Nullam nec erat vehicula, consectetur est in, iaculis nisl. Vestibulum nec dignissim purus, nec pharetra neque.
+        Quisque tristique diam et purus sagittis, posuere pharetra orci egestas. Praesent imperdiet sapien vel fermentum
+        pulvinar. Nulla ac tortor laoreet, fringilla tellus nec, ullamcorper mi.
+    </p>
+    <div class="snippet">
+        <pre>
+        .org 0x400
+        push 0
+        blah: add 1
+        jmp $-1
+        hlt
+        </pre>
+    </div>
+    <p>
+        Nulla ullamcorper dui lacus. Vivamus sagittis elit non tellus sodales, tempus bibendum magna dapibus. Aliquam
+        erat volutpat. Aliquam erat volutpat. Proin finibus nibh quis neque accumsan, porttitor convallis leo elementum.
+        Mauris semper mi nulla, in cursus felis faucibus non. Vestibulum suscipit, ante eget porta vulputate, lacus ex
+        sodales quam, faucibus tincidunt augue dui ac velit. Etiam ultricies ligula eu est accumsan, eget lobortis massa
+        fermentum. Quisque mattis bibendum tortor quis porttitor. In lobortis diam a diam tincidunt, eu viverra odio
+        volutpat. Suspendisse sed elit mattis, pretium nunc et, ullamcorper mauris. Vivamus mattis tellus at magna
+        congue laoreet. Pellentesque varius porttitor sem, in consectetur libero auctor nec.
+    </p>
+    <div class="snippet">
+        <pre>
+        .org 0x400
+        push 4
+        add 3
+        mul 2
+        hlt
+        </pre>
+    </div>
+</div>
 </body>
 </html>

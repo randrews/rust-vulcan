@@ -1,11 +1,22 @@
 body {
     display: grid;
-    grid-template-columns: 1fr auto 1fr;
+    grid-template-columns: 1fr 50% 1fr;
     grid-template-rows: 2em auto;
     background: #777777;
 }
-.react-root {
+
+.main {
     grid-area: 2 / 2 / 3 / 3;
+}
+
+.main .snippet {
+    display: grid;
+    grid-template-rows: auto;
+    grid-template-columns: 1fr auto 1fr;
+}
+
+.snippet .snippetEmulator {
+    grid-area: 1 / 2 / 2 / 3;
 }
 
 .snippetEmulator {
