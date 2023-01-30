@@ -6,7 +6,8 @@ import init, { WasmCPU, assemble_snippet } from '../pkg/vweb.js'
 document.addEventListener('DOMContentLoaded', () => {
     init().then(() => {
         document.querySelectorAll('.snippet').forEach((el) => {
-            createRoot(el).render(React.createElement(SnippetEmulator, { children: el.innerText }))
+            const props = { children: el.innerText, width: el.getAttribute('data-width') }
+            createRoot(el).render(React.createElement(SnippetEmulator, props))
         })
     })
 })

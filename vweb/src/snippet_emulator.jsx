@@ -1,8 +1,9 @@
 import './snippet_emulator.css'
-import React, {useState, useCallback, useEffect} from 'react'
-import {WasmCPU, assemble_snippet, source_map, NovaForth} from '../pkg/vweb.js'
+import React, { useState, useCallback, useEffect } from 'react'
+import { WasmCPU, assemble_snippet, source_map } from '../pkg/vweb.js'
+import HighlightedLine, { indent } from './highlighted_line'
 
-export default function({ children }) {
+export default function({ children, width = 20 }) {
     // Use this by giving it some source as a body:
     // <SnippetEmulator>
     //   {`.org 0x400
@@ -80,7 +81,7 @@ export default function({ children }) {
     // On load, clean the source and build the stuff
     useEffect(() => {
         const lines = React.Children.toArray(children)[0].split('\n')
-        const cleaned = lines.map(l => l.trim()).join('\n')
+        const cleaned = lines.map(indent).join('\n')
         setSrc(cleaned)
         rebuild(cleaned)
     }, [children])
@@ -95,7 +96,7 @@ export default function({ children }) {
 
     if (editing) {
         return (
-            <div className='snippetEmulator'>
+            <div className='snippetEmulator' style={{ gridTemplateColumns: `${width}em` }}>
                 <textarea value={src} onChange={onChangeSrc}></textarea>
                 <div className='message'>{message}</div>
                 <div className='buttons'>
@@ -105,7 +106,7 @@ export default function({ children }) {
         )
     } else {
         return (
-            <div className='snippetEmulator'>
+            <div className='snippetEmulator' style={{ gridTemplateColumns: `${width}em` }}>
                 <SourceDisplay src={src} activeLine={activeLine}/>
                 <div className='message'>{message}</div>
                 <div className='buttons'>
@@ -124,7 +125,11 @@ function SourceDisplay({ src, activeLine }) {
     const lines = src.split('\n')
     const lineDivs = lines.map((line, i) => {
         // Loop indices are from 0, activeLine numbers are from 1
-        return (<div key={`line_${i}`} className={i + 1 === activeLine ? 'highlight' : ''}>{line || <>&nbsp;</>}</div>)
+        return (
+            <div key={`line_${i}`} className={i + 1 === activeLine ? 'highlight' : ''}>
+                {<HighlightedLine line={line}/> || <>&nbsp;</>}
+            </div>
+        )
     })
     return (
         <div className='src'>{lineDivs}</div>

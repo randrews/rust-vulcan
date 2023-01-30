@@ -53,3 +53,10 @@ body {
 .snippetEmulator .build, .snippetEmulator .edit { color: dodgerblue }
 .snippetEmulator .highlight { background-color: darkgoldenrod }
 .snippetEmulator .src { overflow: scroll }
+
+.snippetEmulator .src .directive { color: darkcyan }
+.snippetEmulator .src .macro { color: mediumpurple }
+.snippetEmulator .src .number { color: lightskyblue }
+.snippetEmulator .src .string { color: darkseagreen }
+.snippetEmulator .src .label { color: chocolate }
+.snippetEmulator .src .comment { color: grey }

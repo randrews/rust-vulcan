@@ -15,13 +15,15 @@
         Quisque tristique diam et purus sagittis, posuere pharetra orci egestas. Praesent imperdiet sapien vel fermentum
         pulvinar. Nulla ac tortor laoreet, fringilla tellus nec, ullamcorper mi.
     </p>
-    <div class="snippet">
+    <div class="snippet" data-width="30">
         <pre>
         .org 0x400
-        push 0
-        blah: add 1
-        jmp $-1
-        hlt
+            push 0 ; A comment
+        blah:
+            add 1
+            jmp $-1
+            hlt
+        .db "A string; \"semicolon-y\"\0"
         </pre>
     </div>
     <p>
