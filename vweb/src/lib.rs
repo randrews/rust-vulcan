@@ -2,7 +2,10 @@ use wasm_bindgen::prelude::*;
 use vcore::{CPU, Word};
 use vcore::memory::{PeekPoke, PeekPokeExt};
 use vasm_core::parse_error::AssembleError;
+use vgfx::display;
 use serde::{ Deserialize, Serialize };
+use wasm_bindgen::Clamped;
+use web_sys::{CanvasRenderingContext2d, ImageData};
 
 #[wasm_bindgen]
 pub struct NovaForth;
@@ -65,7 +68,9 @@ pub fn source_map(snippet: String) -> JsValue {
 impl WasmCPU {
     #[wasm_bindgen(constructor)]
     pub fn new() -> WasmCPU {
-        WasmCPU(CPU::new_random())
+        let mut cpu = WasmCPU(CPU::new_random());
+        display::init_gfx(&mut cpu.0);
+        cpu
     }
 
     pub fn push_data(&mut self, data: i32) {
@@ -156,5 +161,12 @@ impl WasmCPU {
 
     pub fn tick(&mut self) {
         self.0.tick()
+    }
+
+    pub fn draw_frame(&self, ctx: &CanvasRenderingContext2d) -> Result<(), JsValue> {
+        let mut buf = [0u8; 640 * 480 * 4];
+        display::draw(&self.0, &mut buf);
+        let image_data = ImageData::new_with_u8_clamped_array(Clamped(&buf), 640)?;
+        ctx.put_image_data(&image_data, 0.0, 0.0)
     }
 }

@@ -9,13 +9,13 @@ body {
     grid-area: 2 / 2 / 3 / 3;
 }
 
-.main .snippet {
+.main .snippet, .main .display {
     display: grid;
     grid-template-rows: auto;
     grid-template-columns: 1fr auto 1fr;
 }
 
-.snippet .snippetEmulator {
+.main .snippet .snippetEmulator, .main .display canvas {
     grid-area: 1 / 2 / 2 / 3;
 }
 
