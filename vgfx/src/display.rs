@@ -74,7 +74,7 @@ pub fn draw<P: PeekPoke>(machine: &P, frame: &mut [u8]) {
     }
 }
 
-pub fn reset<P: PeekPoke>(machine: &mut P) {
+pub fn init_gfx<P: PeekPoke>(machine: &mut P) {
     init_display_registers(machine, 16.into());
     init_font(machine);
     init_palette(machine);

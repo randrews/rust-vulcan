@@ -1,4 +1,3 @@
-mod display;
 mod keyboard;
 
 use winit::{
@@ -20,6 +19,7 @@ use vcore::memory::{Memory, PeekPoke};
 use vcore::word::Word;
 use winit::event::{DeviceEvent, ElementState};
 use winit::window::Window;
+use vgfx::display;
 
 fn main() {
     let event_loop = EventLoop::new();
@@ -44,7 +44,7 @@ fn main() {
 
     let memory = Memory::from(rng);
     let mut cpu = CPU::new(memory);
-    display::reset(&mut cpu);
+    display::init_gfx(&mut cpu);
     let code = assemble_snippet(include_str!("typewriter.asm").lines().map(String::from))
         .expect("Assemble error");
     // let code = assemble_file("init.asm").expect("Assemble error");
