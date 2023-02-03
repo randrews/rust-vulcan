@@ -8,12 +8,20 @@ export default function({}) {
     const display = useRef(null)
     const request = useRef(null)
 
+    const blah = useRef(0)
+
     const drawFrame = useCallback(() => {
+        for(let n = 0; n < 160 * 120; n++) {
+            cpu.current.poke(0x10000 + n, Math.random() * 256)
+        }
         display.current.draw(cpu.current, ctx.current)
         request.current = requestAnimationFrame(drawFrame)
     }, [])
 
     useEffect(() => {
+        cpu.current.poke(16 + 0, 3)
+        cpu.current.poke24(16 + 10, 160) // Set the virtual h / w
+        cpu.current.poke24(16 + 13, 120)
         ctx.current = canvas.current.getContext('2d')
         display.current = new Display()
         request.current = requestAnimationFrame(drawFrame)
