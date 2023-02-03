@@ -25,6 +25,10 @@ impl NovaForth {
 #[wasm_bindgen]
 pub struct WasmCPU(CPU);
 
+// This has to contain a Box or else it'll use up all the wasm_bindgen stack space
+#[wasm_bindgen]
+pub struct Display(Box<[u8; 640 * 480 * 4]>);
+
 #[wasm_bindgen(inspectable, getter_with_clone)]
 #[derive(Serialize, Deserialize)]
 pub struct JsVasmError {
@@ -68,9 +72,9 @@ pub fn source_map(snippet: String) -> JsValue {
 impl WasmCPU {
     #[wasm_bindgen(constructor)]
     pub fn new() -> WasmCPU {
-        let mut cpu = WasmCPU(CPU::new_random());
-        display::init_gfx(&mut cpu.0);
-        cpu
+        let mut cpu = CPU::new_random();
+        display::init_gfx(&mut cpu);
+        WasmCPU(cpu)
     }
 
     pub fn push_data(&mut self, data: i32) {
@@ -162,11 +166,20 @@ impl WasmCPU {
     pub fn tick(&mut self) {
         self.0.tick()
     }
+}
 
-    pub fn draw_frame(&self, ctx: &CanvasRenderingContext2d) -> Result<(), JsValue> {
-        let mut buf = [0u8; 640 * 480 * 4];
-        display::draw(&self.0, &mut buf);
-        let image_data = ImageData::new_with_u8_clamped_array(Clamped(&buf), 640)?;
-        ctx.put_image_data(&image_data, 0.0, 0.0)
+#[wasm_bindgen]
+impl Display {
+    #[wasm_bindgen(constructor)]
+    pub fn new() -> Display {
+        Display([0u8; 640 * 480 * 4].into())
+    }
+
+    pub fn draw(&mut self, cpu: &WasmCPU, ctx: &CanvasRenderingContext2d) -> Result<(), JsValue> {
+        display::draw(&cpu.0, self.0.as_mut());
+        let image_data = ImageData::new_with_u8_clamped_array(Clamped(self.0.as_mut()), 640)?;
+        ctx.put_image_data(&image_data, 0.0, 0.0);
+        Ok(())
+
     }
 }
