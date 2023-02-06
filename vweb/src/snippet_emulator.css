@@ -21,8 +21,8 @@ body {
 
 .snippetEmulator {
     display: grid;
-    grid-template-rows: 10em 1em 1em 2em;
-    grid-template-columns: 20em;
+    grid-template-rows: auto 1em 1em 2em;
+    grid-template-columns: 40em;
     background: #333333;
     font-family: monospace;
     padding: 0.5em;
@@ -60,3 +60,14 @@ body {
 .snippetEmulator .src .string { color: darkseagreen }
 .snippetEmulator .src .label { color: chocolate }
 .snippetEmulator .src .comment { color: grey }
+
+span.mono {
+    font-family: monospace;
+    font-weight: bolder;
+    color: white;
+}
+p.sidebar {
+    background-color: #555555;
+    border: 1px solid #aaaaaa;
+    padding: 0.5em;
+}

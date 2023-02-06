@@ -1,0 +1,538 @@
+<!DOCTYPE html>
+<html lang="en" xmlns="http://www.w3.org/1999/html">
+<head>
+    <meta charset="UTF-8">
+    <title>Vulcan Basics</title>
+    <link rel="stylesheet" href="app.css"/>
+    <link rel="stylesheet" href="snippet_emulator_demo.css">
+    <script type="module" src="snippet_emulator_demo.js"></script>
+</head>
+<body>
+<div class="main">
+<h2>What is Vulcan?</h2>
+
+<p>
+    Vulcan is an imaginary computer: it doesn't (yet) exist as a real chip, but there are a couple emulators which allow
+    other computers to run Vulcan programs. Vulcan programs are a sequence of numbers stored in memory; each number is
+    an instruction and the computer runs them in sequence to manipulate the state of the machine. Some memory locations
+    in Vulcan are tied to (emulated) devices like a monitor, mouse, keyboard, and mass storage, so reading or writing
+    those locations allows Vulcan to interact with the outside world.
+</p>
+
+<p>
+    Writing programs as a sequence of numbers is obviously very convenient and easy, but I've written some tools anyway:
+    the first is an assembler which will translate textual names of instructions into the numbers they correspond to (as
+    well as do some other bookkeeping). Because even writing assembly language can be tedious, there is also a
+    high-level language called NovaForth that runs on Vulcan itself, and a different high-level language which runs on a
+    normal computer but compiles programs which run on Vulcan.
+</p>
+
+<h2>Vulcan is a stack machine</h2>
+
+<p>
+    The model of computation Vulcan uses is called a <em>stack machine,</em> because instructions manipulate a stack of
+    values in memory and most data transfer in the machine is done through that stack. There are 42 Vulcan instructions,
+    each of which might consume values from the data stack or leave other values on top of the stack. Each instruction
+    can also take a single optional <em>argument,</em> which is pushed to the stack before the instruction runs.
+</p>
+
+<p class="sidebar">
+    Stack machines are a very common model for imaginary computers, although most hardware computers are <em>register
+    machines</em> instead, for efficiency. Vulcan's main design goal is simplicity, over speed, though, so it's
+    appropriate here. It's also very common to emulate a stack machine using a register machine, and translating
+    between the two computation models isn't hard.
+</p>
+
+<h2>First program</h2>
+
+<p>
+    Here's a short example program:
+</p>
+
+<div class="snippet">
+    <pre>
+push 2
+push 3
+add
+hlt
+    </pre>
+</div>
+
+<p>
+    Going line-by-line through this program: the first instruction is a <span class="mono">push</span> instruction with
+    an argument of <span class="mono">2</span>. The <span class="mono">push</span> has no actual effect on the machine
+    (in fact, it's another name for the instruction <span class="mono">nop</span>, for "no operation"). But, the fact
+    that it has an argument means that the argument will be added to the top of the stack, so, after this line, the
+    stack contains a <span class="mono">2</span>. The second instruction is the same, and pushes its argument on top of
+    the 2, so after that line the stack contains <span class="mono">2, 3</span>. The next instruction,
+    <span class="mono">add</span>, has no argument, but the function of the instruction is to remove the top two values
+    from the stack and push their sum in their place: now the stack contains <span class="mono">5</span>. Finally the
+    <span class="mono">hlt</span> instruction (short for "halt") tells the machine to stop running.
+</p>
+
+<p class="sidebar">
+    Why halt? Because Vulcan memory starts out initialized to random values, like all memory: without this, we would
+    continue to run, executing random memory contents as instructions, forever (or until we executed a combination of
+    instructions that caused the machine to enter an error state and reset).
+</p>
+
+<h2>Instruction encoding</h2>
+
+<p>
+    In memory, this program is represented by six bytes: two bytes each for the <span class="mono">push</span>
+    instructions, one byte each foo <span class="mono">add</span> and <span class="mono">hlt</span>. Vulcan instructions
+    are always between one and four bytes long:
+</p>
+
+<pre>Instruction     Argument bytes
+     |          |            |
+     v          v            v
+  |------##|--------|...|--------|
+         ^
+         |
+     Number of
+   argument bytes</pre>
+
+<p>
+    The higher six bits of the first byte determine which instruction it is, and the lower two bits determine how many
+    bytes the argument is: 0-3 bytes, because a standard memory cell in Vulcan is 24 bits (3 bytes) long. The
+    instruction <span class="mono">push 2</span> is therefore two bytes long, <span class="mono">0x0102</span>:
+</p>
+
+<pre>00000001 00000010</pre>
+
+<p>
+    The instruction <span class="mono">0</span> is <span class="mono">push</span> (or <span class="mono">nop</span>), it
+    has one byte of argument, and that one byte is the number <span class="mono">2</span>. The entire program above is:
+    <span class="mono">1, 2, 1, 3, 4, 116</span>.
+</p>
+
+<p>
+    Because any instruction can take an argument, which is treated as a push, we can shorten this program by one
+    instruction:
+</p>
+
+<div class="snippet">
+    <pre>
+push 2
+add 3
+hlt
+    </pre>
+</div>
+
+<p>
+    Any time there's a <span class="mono">push</span> followed by an instruction with no argument, we can remove the
+    push and move its argument to the following instruction. This makes Vulcan programs somewhat easier to understand
+    than otherwise, and also saves some memory; this program is only five bytes long:
+    <span class="mono">1, 2, 5, 3, 116</span>
+</p>
+
+<h2>Memory layout</h2>
+
+<p>
+    Properly, each of these programs should start with a directive telling the assembler where they should go in memory.
+    The default location is fine for these examples (they will run the same way no matter where they are) but we can
+    place them somewhere with a <span class="mono">.org</span> (short for "origin") directive:
+</p>
+
+<div class="snippet">
+    <pre>
+.org 0x400
+push 40
+mul 40
+hlt
+    </pre>
+</div>
+
+<p>
+    The default Vulcan memory map looks like this:
+</p>
+
+<ul>
+    <li>
+        0 to 255 (<span class="mono">0x00</span> to <span class="mono">0xff</span>): reserved for I/O devices
+    </li>
+    <li>
+        256 to 1023 (<span class="mono">0x100</span> to <span class="mono">0x3ff</span>): default location of the stack
+    </li>
+    <li>
+        1024 (<span class="mono">0x400</span>): start executing code here on reset
+    </li>
+    <li>
+        Anything after <span class="mono">1024 + your program size</span>: available for use
+    </li>
+</ul>
+
+<p>
+    The first 256 bytes of memory are reserved for I/O control registers: reading and writing these may affect devices
+    like the screen, serial device, keyboard controller, etc. Not all are used, but you shouldn't use them in your
+    program because someday they might be.
+</p>
+
+<p>
+    The next 768 bytes are the stack: since Vulcan uses a <em>word size</em> of 24 bits, stack cells are 24 bits long,
+    which means the stack is 256 cells long. It can be moved around or made smaller or larger using the
+    <span class="mono">setsdp</span> instruction, but that’s where it starts.
+</p>
+
+<p>
+    Immediately after the stack is location 1024, or <span class="mono">0x400</span>: this is where your program is
+    initially loaded, and when the machine is powered on (or reset) this is where it will start reading and executing
+    instructions.
+</p>
+
+<p>
+    Everything after that is available for use by your program, up to a usual total memory size of 128k... Although for
+    programs that use video, a large portion of that memory is used by the video display.
+</p>
+
+<h2>The call stack</h2>
+
+<p>
+    The Vulcan stack isn't just one stack, there are two: the basic one we've already seen is the <em>data</em> stack,
+    growing upward from location 256, but there is also a <em>call</em> stack (sometimes called a <em>return</em> stack
+    or <em>R</em> stack) growing downward from location 1023. Here’s an example program that uses both stacks:
+</p>
+
+<div class="snippet">
+    <pre>
+.org 0x400
+push 2 ; Push a couple values to the stack
+push 3
+pushr ; Move the one on top to the other stack
+pop ; Remove the 2…
+popr ; Move the 3 back
+hlt
+    </pre>
+</div>
+
+<p>
+    This puts a couple values on the stack and then deletes the one second-from-the-top, by first moving the top value
+    to the other stack to get it out of the way. The <span class="mono">pushr</span> and <span class="mono">popr</span>
+    instructions move the top value from the data to the call stacks and back again, respectively;
+    <span class="mono">pop</span> removes the top value from the data stack.
+</p>
+
+<p>
+    Just having a second stack for temporary storage is somewhat handy, but the actual purpose of the call stack is the
+    <span class="mono">call</span> and <span class="mono">ret</span> instructions: when you execute a
+    <span class="mono">call</span> Vulcan stores the address of the next instruction in the call stack and starts
+    running code at a different address (whatever is on top of the stack). A <span class="mono">ret</span> does the
+    opposite; pops an address from the call stack and goes back to running code there. We can use
+    <span class="mono">call</span> and <span class="mono">ret</span> to make a subroutine and call it repeatedly:
+</p>
+
+<div class="snippet">
+    <pre>
+.org 0x400
+push 1
+call triple
+call triple
+call triple
+hlt
+
+triple:
+mul 3
+ret
+    </pre>
+</div>
+
+<p>
+    There are a few new concepts in this snippet, so we’ll tackle them one-by-one: first, the line
+    <span class="mono">triple:</span> is called a <em>label</em>; it doesn't correspond to an instruction, it just tells
+    the assembler to give a name to a particular location in the program so we can refer to it elsewhere. Whatever the
+    memory address of the next instruction is, whenever we write <span class="mono">triple</span> in our program, it
+    will be replaced with that address.
+</p>
+
+<p>
+    The next instruction is <span class="mono">mul 3</span>, which does exactly what it sounds like: just like
+    <span class="mono">add</span>, <span class="mono">mul</span> pops two values and pushes their product.
+</p>
+
+<p>
+    Which leaves the <span class="mono">call</span> and <span class="mono">ret</span> lines: we're pushing a 1 and
+    calling <span class="mono">triple</span> three times; each call will jump the execution to the
+    <span class="mono">mul 3</span> line, then to the <span class="mono">ret</span> line, which will jump to the
+    location after each call. After tripling a 1 three times we're left with a 27 on the stack and we halt.
+</p>
+
+<p>
+    In terms of a higher level programming language, <span class="mono">triple</span> could be a function that takes a
+    single number as a parameter and returns that number times 3:
+</p>
+
+<pre>function triple(x) {
+  return x * 3
+}</pre>
+
+<h2>Branching and conditionals</h2>
+
+<p>
+    The true power of any computer is its ability to change its operation based on its input: to make decisions; do one
+    thing with one piece of data and a different thing with another. Vulcan has instructions to do this:
+    <span class="mono">brz</span> and <span class="mono">brnz</span> are short for "branch if zero" and "branch if
+    non-zero," and will move to running a different part of the program depending on whether the top-of-stack value is
+    zero or not. Here’s an example program:
+</p>
+<div class="snippet">
+    <pre>
+.org 0x400
+push 1
+call collatz
+push 2
+call collatz
+hlt
+
+collatz:
+dup
+mod 2
+brz @halve
+mul 3
+add 1
+ret
+halve:
+div 2
+ret
+    </pre>
+</div>
+
+<p class="sidebar">
+    The Collatz Conjecture is an unsolved problem in mathematics: suppose you take any positive integer and, if it’s
+    even, divide it by two; if it’s odd, multiply it by three and add one. Repeat this process indefinitely and it will
+    eventually enter a loop going from 1 to 4 to 2 back to 1. But, there is no known proof that this is true, there
+    might be other numbers that form Collatz loops and don’t return to 1.
+</p>
+
+<p>
+    The first part of this program is pretty basic: call the <span class="mono">collatz</span> function on the numbers 1
+    and 2. Where it gets interesting is what that function does: first it uses <span class="mono">dup</span> (short for
+    "duplicate," pushes another copy of the top-of-stack to the stack) and <span class="mono">mod 2</span> (short for
+    "modulus," returns the remainder when two numbers are divided) to tell whether the number is odd or even: an even
+    number will leave a 0 on the stack, and odd number a 1.
+</p>
+
+<p>
+    Then we use <span class="mono">brz</span> to branch to <span class="mono">halve</span> if there's a zero (if the
+    number is even). It's important to note the <span class="mono">@</span> in front of
+    <span class="mono">halve</span>, the <span class="mono">brz</span> instruction takes a relative address, and it's a
+    common mistake to leave off that operator and instead use an absolute address.
+</p>
+
+<p class="sidebar">
+    Relative vs absolute addresses are a simple concept that's easy to forget about: an absolute address is just the
+    address of a given instruction in memory; every instruction has one absolute address, and instructions like
+    <span class="mono">call</span> and <span class="mono">jmp</span> use this number. A relative address is the address
+    of another instruction minus the absolute address of this instruction; you can think of it as "move this many bytes
+    forward or backward." Just like remembering labels, the assembler will calculate relative addresses for us, if we
+    prepend an <span class="mono">@</span> on to the name.
+</p>
+
+<p class="sidebar">
+    Why use relative addressing? To allow for position-independent code: if we used absolute addressing everywhere, our
+    program would only work when loaded into memory at a particular location. Eventually we'll want to write an
+    operating system that loads programs from disk at arbitrary locations and runs them; since the program won't know
+    where it's loaded, it will need to use relative addresses to refer to parts of itself.
+</p>
+
+<p>
+    Whether it actually goes to the other branch or not, <span class="mono">brz</span> consumes the zero-or-one from the
+    stack. If it was a 1, then we just continue on this branch: multiply by 3, add 1, return. If it was a 0, then we
+    skip those three lines, jumping straight to <span class="mono">halve</span>, and divide by 2 and return.
+</p>
+
+<p>
+    We can also use this to write loops:
+</p>
+
+<div class="snippet">
+    <pre>
+.org 0x400
+push 1
+loop:
+dup
+add 1
+dup
+lt 10
+brnz @loop
+hlt
+    </pre>
+</div>
+
+<p>
+    This will leave the numbers 1-10 on the stack: we start with a 1, duplicate it and increment it, and then check if
+    the result is less than 10 (<span class="mono">lt</span>, "less than," consumes two numbers and pushes a 1 if the
+    second is less than the first, 0 otherwise). If it is, we branch back to the <span class="mono">loop</span> label
+    and do it again; otherwise halt. Note that we have to <span class="mono">dup</span> the number before the
+    <span class="mono">lt 10</span> check because <span class="mono">lt</span> consumes both numbers: we need a copy to
+    save on the stack and a copy for <span class="mono">lt</span> to consume!
+</p>
+
+<h2>Variables and memory</h2>
+
+<p>
+    So far all our programs have used the stack to store their data, but of course we have 128k of memory we can store
+    whatever we want in. Here’s a program that puts some of that to good use:
+</p>
+
+<div class="snippet">
+    <pre>
+.org 0x400
+push 1
+loop:
+dup
+loadw sum
+add
+storew sum
+add 1
+dup
+lt 101
+brnz @loop
+pop
+loadw sum
+hlt
+sum: .db 0
+    </pre>
+</div>
+
+<p>
+    Starting with the last line first: the <span class="mono">.db</span> directive is short for "define byte" and, like
+    <span class="mono">.org</span>, doesn't represent an instruction: it just causes the assembler to put three bytes
+    containing whatever value we want into the program. It needs to go at the end because if it were at the start
+    Vulcan would try to execute it as code (which in this case would actually be safe, because three bytes of 0 is just
+    three <span class="mono">nop</span> instructions, but still).
+</p>
+
+<p>
+    Having reserved a memory location for our variable and given it a name (the label <span class="mono">sum</span>) we
+    can do a loop much like the previous example: load the value from <span class="mono">sum</span>, add the top of the
+    stack to it, store it back into <span class="mono">sum</span>, increment the top of the stack, repeat for every
+    number between 1 and 100. Finally throw away the now-useless counter variable and load <span class="mono">sum</span>
+    one last time, leaving the sum of the numbers 1-100 (5050) on top of the stack.
+</p>
+
+<p>
+    Vulcan has four instructions for reading and writing arbitrary memory:
+</p>
+
+<ul>
+    <li>
+        <span class="mono">load</span> and <span class="mono">store</span> read and write a single byte at a time.
+    </li>
+    <li>
+        <span class="mono">loadw</span> and <span class="mono">storew</span> (short for "load word" and "store word")
+        read and write three bytes (one stack cell) at a time.
+    </li>
+</ul>
+
+<p>
+    Most variables in Vulcan are one word long; reading and writing single bytes is usually used for manipulating
+    individual characters in strings.
+</p>
+
+<h2>Assembler macros</h2>
+
+<p>
+    Certain structures in assembly are very common to write, like an if / else condition or a loop. In order to prevent
+    errors writing these the Vulcan assembler provides several <em>macros</em> that generate these common structures for
+    us. Importantly, these aren't new instructions, they're commands to the assembler to generate sequences of
+    instructions (and single-use labels) for us.
+</p>
+
+<p>
+    The simplest of these is the <span class="mono">#if</span> macro:
+</p>
+
+<div class="snippet">
+    <pre>
+.org 0x400
+push 10
+#if
+push 1
+#else
+push 2
+#end
+hlt
+    </pre>
+</div>
+
+<p>
+    When the assembler encounters an <span class="mono">#if</span> it generates a <span class="mono">brz</span> to the
+    corresponding <span class="mono">#else</span> or <span class="mono">#end</span>. Just like a conditional in a
+    high-level language, <span class="mono">#if</span> constructs can have <span class="mono">#else</span> branches
+    (which are executed if the top-of-stack is false) and can be nested inside one another. There is also an
+    <span class="mono">#unless</span> macro that acts the same as <span class="mono">#if</span> but inverted: it only
+    executes its body if the top-of-stack is 0:
+</p>
+
+<div class="snippet">
+    <pre>
+.org 0x400
+push 0
+#unless
+push 1
+#else
+push 2
+#end
+    </pre>
+</div>
+
+<p>
+    The other macro construct is <span class="mono">#while</span>, which is used to create loops:
+</p>
+
+<div class="snippet">
+    <pre>
+.org 0x400
+#while
+loadw counter ; Load the loop counter…
+lt 101 ; and check if it’s still 0..100
+#do
+loadw counter ; Increment the sum by the counter
+loadw sum
+add
+storew sum
+loadw counter ; Increment the counter by 1
+add 1
+storew counter
+#end
+loadw sum ; Finally load the sum and stop
+hlt
+counter: .db 0
+sum: .db 0
+    </pre>
+</div>
+
+<p>
+    The loop is divided into two sections: one <em>condition</em> between the <span class="mono">#while</span> and
+    <span class="mono">#do</span>, and a <em>body</em> between <span class="mono">#do</span> and
+    <span class="mono">#end</span>. The condition is executed first, and only if it leaves a nonzero on the stack (which
+    is consumed) is the body executed. Then the condition is executed again, and so on. Just like
+    <span class="mono">#if</span>, these can be nested (and nested inside conditionals and conditionals inside them),
+    and there's an inverted version called <span class="mono">#until</span>:
+</p>
+
+<div class="snippet">
+    <pre>
+.org 0x400
+#until
+loadw counter ; Load the loop counter…
+gt 100 ; and check if it’s still 0..100
+#do
+loadw counter ; Increment the sum by the counter
+loadw sum
+add
+storew sum
+loadw counter ; Increment the counter by 1
+add 1
+storew counter
+#end
+loadw sum ; Finally load the sum and stop
+hlt
+counter: .db 0
+sum: .db 0
+    </pre>
+</div>
+</div>
+</body>
+</html>
