@@ -18,13 +18,21 @@
     <div class="display"></div>
     <div class="snippet" data-width="30">
         <pre>
-        .org 0x400
-            push 0 ; A comment
-        blah:
-            add 1
-            jmp $-1
-            hlt
-        .db "A string; \"semicolon-y\"\0"
+.org 0x400
+push 1
+loop:
+dup
+loadw sum
+add
+storew sum
+add 1
+dup
+lt 101
+brnz @loop
+pop
+loadw sum
+hlt
+sum: .db 0
         </pre>
     </div>
     <p>
@@ -39,10 +47,12 @@
     <div class="snippet">
         <pre>
         .org 0x400
-        push 4
-        add 3
-        mul 2
-        hlt
+            push 0 ; A comment
+        blah:
+            add 1
+            jmp $-1
+            hlt
+        .db "A string; \"semicolon-y\"\0"
         </pre>
     </div>
 </div>

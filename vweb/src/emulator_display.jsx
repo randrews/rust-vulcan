@@ -11,9 +11,9 @@ export default function({}) {
     const blah = useRef(0)
 
     const drawFrame = useCallback(() => {
-        for(let n = 0; n < 160 * 120; n++) {
-            cpu.current.poke(0x10000 + n, Math.random() * 256)
-        }
+        // for(let n = 0; n < 160 * 120; n++) {
+        //     cpu.current.poke(0x10000 + n, n % 256 /* Math.random() * 256 */)
+        // }
         display.current.draw(cpu.current, ctx.current)
         request.current = requestAnimationFrame(drawFrame)
     }, [])

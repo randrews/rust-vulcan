@@ -1,9 +1,9 @@
 import './snippet_emulator.css'
-import React, { useState, useCallback, useEffect } from 'react'
+import React, {useState, useCallback, useEffect, useMemo} from 'react'
 import { WasmCPU, assemble_snippet, source_map } from '../pkg/vweb.js'
 import HighlightedLine, { indent } from './highlighted_line'
 
-export default function({ children, width = 20 }) {
+export default function({ children, width = 80 }) {
     // Use this by giving it some source as a body:
     // <SnippetEmulator>
     //   {`.org 0x400
@@ -15,6 +15,7 @@ export default function({ children, width = 20 }) {
         throw 'Expects a single text node as a child'
     }
 
+    const initialLines = useMemo(() => React.Children.toArray(children)[0].split('\n').length, [children])
     const [editing, setEditing] = useState(false) // Whether we're editing the snippet or running it
     const [src, setSrc] = useState('') // The source code currently set
     const [message, setMessage] = useState('') // A status / error message
@@ -96,8 +97,8 @@ export default function({ children, width = 20 }) {
 
     if (editing) {
         return (
-            <div className='snippetEmulator' style={{ gridTemplateColumns: `${width}em` }}>
-                <textarea value={src} onChange={onChangeSrc}></textarea>
+            <div className='snippetEmulator'>
+                <textarea value={src} onChange={onChangeSrc} rows={initialLines}></textarea>
                 <div className='message'>{message}</div>
                 <div className='buttons'>
                     <a className='build' onClick={() => { rebuild(src) && setEditing(false) }}>[Build]</a>
@@ -106,7 +107,7 @@ export default function({ children, width = 20 }) {
         )
     } else {
         return (
-            <div className='snippetEmulator' style={{ gridTemplateColumns: `${width}em` }}>
+            <div className='snippetEmulator'>
                 <SourceDisplay src={src} activeLine={activeLine}/>
                 <div className='message'>{message}</div>
                 <div className='buttons'>
