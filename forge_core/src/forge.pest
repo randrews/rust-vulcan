@@ -1,0 +1,67 @@
+WHITESPACE = _{ " " | "\t" | NEWLINE }
+COMMENT = _{ "//" ~ (!"\n" ~ ANY)* }
+
+name_char = { ASCII_ALPHA_LOWER | ASCII_ALPHA_UPPER | "_" | "$" }
+name = @{ name_char ~ (name_char | ASCII_DIGIT)* }
+
+dec_number = @{ ASCII_NONZERO_DIGIT ~ ASCII_DIGIT* }
+neg_number = ${ "-" ~ dec_number }
+hex_number = ${ "0x" ~ ASCII_HEX_DIGIT+ }
+bin_number = ${ "0b" ~ ASCII_BIN_DIGIT+ }
+oct_number = ${ "0o" ~ ASCII_OCT_DIGIT+ }
+dec_zero = @{ "0" }
+number = { dec_number | hex_number | bin_number | oct_number | dec_zero | neg_number }
+
+assignment = { lvalue ~ "=" ~ rvalue }
+lvalue = { arrayref | name }
+rvalue = { expr | string }
+
+sign = { "+" | "-" }
+term_op = { "*" | "/" | "%" }
+expr = { term ~ (sign ~ term)* }
+term = { val ~ (term_op ~ val)* }
+val = { // These are what get evaluated and left on the stack:
+  number | // Literal numbers
+  ("(" ~ expr ~ ")") | // Nested parenthesized exprs
+  // Bare literal ids, fn calls, array references
+  // (call, or pointer arithmetic, since ids all reference addresses)
+  // (multiple calls / subscripts aren't allowed; use CALL or collapse to one
+  // subscript)
+  call | arrayref | name |
+  //(name ~ (arglist | subscript)?) |
+  ("&" ~ name) } // The address for an name
+
+arrayref = { name ~ subscript } // Subscripting is only literal IDs. Anything else can be pointer arithmetic
+call = { name ~ arglist } // Call syntax is only literal IDs. Calling things dynamically is done with a builtin; CALL(foo[3], 1, 2, 3)
+arg = { expr | string }
+arglist = { "(" ~ (arg ~ ("," ~ arg)*)? ~ ")" }
+subscript = { "[" ~ expr ~ "]" }
+
+escape = @{ "\\" ~ ("t" | "r" | "n" | "0" | "\\" | "\"") }
+string_inner = ${ !("\"" | "\\") ~ ANY | escape }
+string = ${ "\"" ~ string_inner* ~ "\"" }
+
+statement = { ((return_stmt | assignment | call | declaration) ~ ";") | conditional | loop_stmt }
+
+block = { "{" ~ statement* ~ "}" }
+
+function = { "fn" ~ name ~ annotations? ~ argnames ~ block }
+annotations = { "<" ~ (annotation ~ ("," ~ annotation)*) ~ ">" }
+annotation = { "inline" | ("org=" ~ number) | ("type=" ~ name) }
+argnames = { "(" ~ (name ~ typename? ~ ("," ~ name ~ typename?)*)? ~ ")" }
+
+program = { (COMMENT | WHITESPACE)? ~ (function | global | struct_decl | const_decl)* ~ EOI }
+
+return_stmt = { "return" ~ expr }
+conditional = { "if" ~ "(" ~ expr ~ ")" ~ block ~ ("else" ~ block)? }
+loop_stmt = { while_stmt | repeat }
+while_stmt = { "while" ~ "(" ~ expr ~ ")" ~ block }
+repeat = { "repeat" ~ "(" ~ expr ~ ")" ~ name ~ block }
+declaration = { "var" ~ name ~ typename? ~ ("=" ~ expr)? }
+global = { "global" ~ name ~ typename? ~ ";" }
+typename = { ":" ~ name }
+const_decl = { "const" ~ name ~ "=" ~ (number | string) ~ ";" }
+
+struct_decl = { "struct" ~ name ~ "{" ~ members ~ "}" }
+member = { name ~ typename? ~ ("[" ~ number ~ "]")? }
+members = { (member ~ ("," ~ member)*)? }

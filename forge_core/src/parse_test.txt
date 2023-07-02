@@ -1,0 +1,66 @@
+ // header comment (the initial space is purposeful)
+
+fn blah() {
+  // comment
+  foo = 3; // normal assignment
+  x = 3 * -2; // unary minus
+  y = 3 - -3;
+  blah = foo + 5 * bar / 2; // Complex expr in assignment
+  arr[3] = 7; // Subscript in lvalue
+  arr[n * 2 - 1] = foo + 7; // expr in subscript
+  a[3] = b[70 - foo]; // subscripted rvalues
+  b = foo * (bar + 3); // expr parens
+  x1 = something(); // fn calls
+  something(1); // unary calls, call statements
+  something(1, foo, bar + 7, ha[0]); // exprs in calls
+  s = "hello"; // strings
+  s2 = "hello\n\tthere\0";
+  print("bah");
+  f = &x;
+}
+
+// fn with args
+fn foo(a, b) {}
+
+// fn with an annotation
+fn foo2<org=0x400>(x) { return x * x; }
+
+fn iftest() {
+  if (blah) {
+    foo();
+  } else {
+    bar();
+  }
+}
+
+fn whiletest() {
+  while (foo) {
+    bar();
+  }
+}
+
+fn repeatTest(x) {
+  repeat(x * 3) a {
+    blah(whatever + a);
+  }
+}
+
+global foo;
+global bar:Thing;
+
+fn varTest(t:Some) {
+  var x;
+  var y = 2 + x;
+  var z:Thingy;
+}
+
+struct Foo {}
+struct Bar {
+  x, y, name:Str
+}
+struct Str {
+  chars[100]
+}
+const LEN = 100;
+const STR = "Hey";
+struct What { foo[100] }

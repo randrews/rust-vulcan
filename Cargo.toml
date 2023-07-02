@@ -8,5 +8,6 @@ members = [
     "vtest",
     "vlua",
     "vweb",
-    "vgfx"
+    "vgfx",
+    "forge_core"
 ]
