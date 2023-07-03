@@ -12,6 +12,10 @@ oct_number = ${ "0o" ~ ASCII_OCT_DIGIT+ }
 dec_zero = @{ "0" }
 number = { dec_number | hex_number | bin_number | oct_number | dec_zero | neg_number }
 
+escape = @{ "\\" ~ ("t" | "r" | "n" | "0" | "\\" | "\"") }
+string_inner = ${ !("\"" | "\\") ~ ANY | escape }
+string = ${ "\"" ~ string_inner* ~ "\"" }
+
 assignment = { lvalue ~ "=" ~ rvalue }
 lvalue = { arrayref | name }
 rvalue = { expr | string }
@@ -37,11 +41,7 @@ arg = { expr | string }
 arglist = { "(" ~ (arg ~ ("," ~ arg)*)? ~ ")" }
 subscript = { "[" ~ expr ~ "]" }
 
-escape = @{ "\\" ~ ("t" | "r" | "n" | "0" | "\\" | "\"") }
-string_inner = ${ !("\"" | "\\") ~ ANY | escape }
-string = ${ "\"" ~ string_inner* ~ "\"" }
-
-statement = { ((return_stmt | assignment | call | declaration) ~ ";") | conditional | loop_stmt }
+statement = { ((return_stmt | assignment | call | var_decl) ~ ";") | conditional | loop_stmt }
 
 block = { "{" ~ statement* ~ "}" }
 
@@ -50,18 +50,21 @@ annotations = { "<" ~ (annotation ~ ("," ~ annotation)*) ~ ">" }
 annotation = { "inline" | ("org=" ~ number) | ("type=" ~ name) }
 argnames = { "(" ~ (name ~ typename? ~ ("," ~ name ~ typename?)*)? ~ ")" }
 
-program = { (COMMENT | WHITESPACE)? ~ (function | global | struct_decl | const_decl)* ~ EOI }
+declaration = { function | global | struct_decl | const_decl }
+program = { (COMMENT | WHITESPACE)? ~ declaration* ~ EOI }
 
 return_stmt = { "return" ~ expr }
 conditional = { "if" ~ "(" ~ expr ~ ")" ~ block ~ ("else" ~ block)? }
 loop_stmt = { while_stmt | repeat }
 while_stmt = { "while" ~ "(" ~ expr ~ ")" ~ block }
 repeat = { "repeat" ~ "(" ~ expr ~ ")" ~ name ~ block }
-declaration = { "var" ~ name ~ typename? ~ ("=" ~ expr)? }
-global = { "global" ~ name ~ typename? ~ ";" }
+var_decl = { "var" ~ name ~ varinfo ~ ("=" ~ expr)? }
+global = { "global" ~ name ~ varinfo ~ ";" }
 typename = { ":" ~ name }
+size = { "[" ~ number ~ "]" }
 const_decl = { "const" ~ name ~ "=" ~ (number | string) ~ ";" }
 
 struct_decl = { "struct" ~ name ~ "{" ~ members ~ "}" }
-member = { name ~ typename? ~ ("[" ~ number ~ "]")? }
+member = { name ~ varinfo }
 members = { (member ~ ("," ~ member)*)? }
+varinfo = { typename? ~ size? }

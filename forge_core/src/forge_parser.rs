@@ -1,4 +1,4 @@
-use pest::Parser;
+use pest::{Parser, RuleType};
 
 mod inner {
     #[derive(Parser)]
@@ -8,11 +8,41 @@ mod inner {
 
 use inner::*;
 use pest::error::{Error, LineColLocation};
+use std::iter::Peekable;
 use std::str::FromStr;
 
-type Pair<'a> = pest::iterators::Pair<'a, Rule>;
+pub(crate) type Pair<'a> = pest::iterators::Pair<'a, Rule>;
+pub(crate) type Pairs<'i, R = Rule> = pest::iterators::Pairs<'i, R>;
 
-fn parse_i32(pair: Pair) -> i32 {
+trait Children {
+    fn first(self) -> Self;
+    fn only(self) -> Self;
+}
+
+impl<'a> Children for Pair<'a> {
+    fn first(self) -> Self {
+        self.into_inner().next().unwrap()
+    }
+
+    fn only(self) -> Pair<'a> {
+        let mut iter = self.into_inner();
+        let child = iter.next().unwrap();
+        debug_assert_eq!(iter.next(), None);
+        child
+    }
+}
+
+trait PairsExt {
+    fn next_if_rule(&mut self, rule: Rule) -> Option<Pair>;
+}
+
+impl PairsExt for Peekable<Pairs<'_>> {
+    fn next_if_rule(&mut self, rule: Rule) -> Option<Pair> {
+        self.next_if(|p| p.as_rule() == rule)
+    }
+}
+
+fn parse_number(pair: Pair) -> i32 {
     let first = pair.into_inner().next().unwrap();
     match first.as_rule() {
         Rule::dec_number | Rule::dec_zero | Rule::neg_number => {
@@ -29,7 +59,7 @@ fn parse_i32(pair: Pair) -> i32 {
 /// reference bytes containing escape sequences, this isn't the same as an &str to the
 /// original code; this is a new string translating those escape sequences to their actual
 /// bytes.
-fn create_string(pair: Pair) -> String {
+fn parse_string(pair: Pair) -> String {
     let mut string = String::with_capacity(pair.as_str().len());
     for inner in pair.into_inner() {
         let string_inner = inner.as_str();
@@ -46,6 +76,10 @@ fn create_string(pair: Pair) -> String {
     string
 }
 
+fn parse_name(pair: Pair) -> &str {
+    pair.as_str()
+}
+
 #[derive(Eq, PartialEq, Clone, Debug)]
 pub struct ParseError(usize, usize, String);
 
@@ -60,27 +94,111 @@ impl From<pest::error::Error<Rule>> for ParseError {
     }
 }
 
+trait Parseable<'a>: From<Pair<'a>> {
+    const RULE: Rule;
+    fn parse(src: &'a str) -> Result<Self, ParseError> {
+        let pair = ForgeParser::parse(Self::RULE, src)
+            .map_err(ParseError::from)?
+            .next()
+            .unwrap();
+        Ok(pair.into())
+    }
+}
+
 #[derive(Eq, PartialEq, Clone, Debug)]
-pub enum Node {
-    Function {
-        name: String,
-        org: Option<i32>,
-        typename: Option<String>,
-        inline: bool,
-    },
-    Global {
-        name: String,
-        typename: Option<String>,
-    },
-    Struct {
-        name: String,
-        members: Vec<Member>,
-    },
-    Const {
-        name: String,
-        value: Option<i32>,
-        string: Option<String>,
-    },
+pub enum Declaration {
+    Function(Function),
+    Global(Global),
+    Struct(Struct),
+    Const(Const),
+}
+
+impl<'a> From<Pair<'a>> for Declaration {
+    fn from(pair: Pair) -> Self {
+        match pair.as_rule() {
+            Rule::function => todo!(),
+            Rule::global => Self::Global(pair.into()),
+            Rule::struct_decl => Self::Struct(pair.into()),
+            Rule::const_decl => Self::Const(pair.into()),
+            _ => todo!(),
+        }
+    }
+}
+
+impl Parseable<'_> for Declaration {
+    const RULE: Rule = Rule::declaration;
+}
+
+#[derive(Eq, PartialEq, Clone, Debug, Default)]
+pub struct Varinfo {
+    typename: Option<String>,
+    size: Option<i32>,
+}
+
+impl Varinfo {
+    fn read_or_default(mut pairs: Peekable<Pairs>) -> Self {
+        pairs
+            .next_if_rule(Rule::varinfo)
+            .map_or(Self::default(), |v| v.into())
+    }
+}
+
+impl From<Pair<'_>> for Varinfo {
+    fn from(pair: Pair<'_>) -> Self {
+        let mut children = pair.into_inner().peekable();
+        let typename = children
+            .next_if_rule(Rule::typename)
+            .map(|t| String::from(t.first().as_str()));
+        let size = children
+            .next_if_rule(Rule::size)
+            .map(|s| parse_number(s.first()));
+        Self { typename, size }
+    }
+}
+
+#[derive(Eq, PartialEq, Clone, Debug)]
+pub struct Global {
+    name: String,
+    typename: Option<String>,
+    size: Option<i32>,
+}
+
+impl From<Pair<'_>> for Global {
+    fn from(global: Pair) -> Self {
+        let mut inner = global.into_inner().peekable();
+        let name = String::from(inner.next().unwrap().as_str());
+        let varinfo = Varinfo::read_or_default(inner);
+
+        Global {
+            name,
+            typename: varinfo.typename,
+            size: varinfo.size,
+        }
+    }
+}
+
+impl Parseable<'_> for Global {
+    const RULE: Rule = Rule::global;
+}
+
+#[derive(Eq, PartialEq, Clone, Debug)]
+pub struct Struct {
+    name: String,
+    members: Vec<Member>,
+}
+
+impl From<Pair<'_>> for Struct {
+    fn from(pair: Pair<'_>) -> Self {
+        let mut inner = pair.into_inner();
+        let name = String::from(inner.next().unwrap().as_str());
+        let member_pairs = inner.next().unwrap().into_inner();
+        let members: Vec<_> = member_pairs.map(|member| member.into()).collect();
+        Struct { name, members }
+    }
+}
+
+impl Parseable<'_> for Struct {
+    const RULE: Rule = Rule::struct_decl;
 }
 
 #[derive(Eq, PartialEq, Clone, Debug)]
@@ -90,82 +208,62 @@ pub struct Member {
     size: Option<i32>,
 }
 
-pub fn string_to_ast(string: &str) -> Result<Vec<Node>, ParseError> {
-    let pairs = ForgeParser::parse(Rule::program, string)
-        .map_err(ParseError::from)?
-        .next()
-        .unwrap()
-        .into_inner();
+impl From<Pair<'_>> for Member {
+    fn from(pair: Pair<'_>) -> Self {
+        let mut inner = pair.into_inner().peekable();
+        let name = String::from(inner.next().unwrap().as_str());
+        let varinfo = Varinfo::read_or_default(inner);
 
-    let mut decls = Vec::new();
-    for pair in pairs {
-        let r = pair.as_rule();
-        match r {
-            Rule::function => {}
-            Rule::global => decls.push(parse_global(pair)),
-            Rule::struct_decl => decls.push(parse_struct(pair)),
-            Rule::const_decl => decls.push(parse_const(pair)),
-            Rule::EOI => {} // Ignore EOI; we have to capture it but it doesn't do anything
+        Member {
+            name,
+            typename: varinfo.typename,
+            size: varinfo.size,
+        }
+    }
+}
+
+impl Parseable<'_> for Member {
+    const RULE: Rule = Rule::member;
+}
+
+#[derive(Eq, PartialEq, Clone, Debug)]
+pub struct Const {
+    name: String,
+    value: Option<i32>,
+    string: Option<String>,
+}
+
+impl From<Pair<'_>> for Const {
+    fn from(pair: Pair) -> Self {
+        let mut inner = pair.into_inner();
+        let name = String::from(inner.next().unwrap().as_str());
+        let value = inner.next().unwrap();
+        match value.as_rule() {
+            Rule::string => Const {
+                name,
+                string: Some(String::from(parse_string(value))),
+                value: None,
+            },
+            Rule::number => Const {
+                name,
+                string: None,
+                value: Some(parse_number(value)),
+            },
             _ => unreachable!(),
         }
     }
-
-    Ok(decls)
 }
 
-fn parse_global(global: Pair) -> Node {
-    let mut inner = global.into_inner();
-    let name = String::from(inner.next().unwrap().as_str());
-    let typename = inner
-        .next()
-        .map(|p| String::from(p.into_inner().next().unwrap().as_str()));
-    Node::Global { name, typename }
+impl Parseable<'_> for Const {
+    const RULE: Rule = Rule::const_decl;
 }
 
-fn parse_const(pair: Pair) -> Node {
-    let mut inner = pair.into_inner();
-    let name = String::from(inner.next().unwrap().as_str());
-    let value = inner.next().unwrap();
-    match value.as_rule() {
-        Rule::string => Node::Const {
-            name,
-            string: Some(String::from(create_string(value))),
-            value: None,
-        },
-        Rule::number => Node::Const {
-            name,
-            string: None,
-            value: Some(parse_i32(value)),
-        },
-        _ => unreachable!(),
-    }
-}
-
-fn parse_member(pair: Pair) -> Member {
-    let mut inner = pair.into_inner();
-    let mut member = Member {
-        name: String::from(inner.next().unwrap().as_str()),
-        typename: None,
-        size: None,
-    };
-    for child in inner {
-        match child.as_rule() {
-            Rule::number => member.size = Some(parse_i32(child)),
-            Rule::typename => {
-                member.typename = Some(String::from(child.into_inner().next().unwrap().as_str()))
-            }
-            _ => unreachable!(),
-        }
-    }
-    member
-}
-
-fn parse_struct(pair: Pair) -> Node {
-    let mut inner = pair.into_inner();
-    let name = String::from(inner.next().unwrap().as_str());
-    let mut member_pairs = inner.next().unwrap().into_inner();
-    let members: Vec<_> = member_pairs.map(|member| parse_member(member)).collect();
-    Node::Struct { name, members }
+#[derive(Eq, PartialEq, Clone, Debug)]
+pub struct Function {
+    name: String,
+    org: Option<i32>,
+    typename: Option<String>,
+    inline: bool,
 }
 
 #[cfg(test)]
@@ -174,66 +272,81 @@ mod test {
 
     #[test]
     fn parse_globals() {
-        let ast = string_to_ast("global foo;");
         assert_eq!(
-            ast,
-            Ok(vec![Node::Global {
+            Global::parse("global foo;"),
+            Ok(Global {
                 name: "foo".into(),
-                typename: None
-            }])
+                typename: None,
+                size: None
+            })
         );
-
-        let ast = string_to_ast("global bar:Sometype;");
         assert_eq!(
-            ast,
-            Ok(vec![Node::Global {
-                name: "bar".into(),
-                typename: Some("Sometype".into())
-            }])
+            Global::parse("global foo:Thing;"),
+            Ok(Global {
+                name: "foo".into(),
+                typename: Some("Thing".into()),
+                size: None
+            })
+        );
+        assert_eq!(
+            Global::parse("global foo:Thing[10];"),
+            Ok(Global {
+                name: "foo".into(),
+                typename: Some("Thing".into()),
+                size: Some(10)
+            })
+        );
+        assert_eq!(
+            Global::parse("global foo[10];"),
+            Ok(Global {
+                name: "foo".into(),
+                typename: None,
+                size: Some(10)
+            })
         );
     }
 
     #[test]
     fn parse_consts() {
         assert_eq!(
-            string_to_ast("const a = 123;"),
-            Ok(vec![Node::Const {
+            Const::parse("const a = 123;"),
+            Ok(Const {
                 name: "a".into(),
                 value: Some(123),
                 string: None
-            }])
+            })
         );
         assert_eq!(
-            string_to_ast("const a = 0xaa;"),
-            Ok(vec![Node::Const {
+            Const::parse("const a = 0xaa;"),
+            Ok(Const {
                 name: "a".into(),
                 value: Some(0xaa),
                 string: None
-            }])
+            })
         );
         assert_eq!(
-            string_to_ast("const a = -7;"),
-            Ok(vec![Node::Const {
+            Const::parse("const a = -7;"),
+            Ok(Const {
                 name: "a".into(),
                 value: Some(-7),
                 string: None
-            }])
+            })
         );
         assert_eq!(
-            string_to_ast("const a = \"foo bar\";"),
-            Ok(vec![Node::Const {
+            Const::parse("const a = \"foo bar\";"),
+            Ok(Const {
                 name: "a".into(),
                 value: None,
                 string: Some("foo bar".into())
-            }])
+            })
         )
     }
 
     #[test]
     fn parse_structs() {
         assert_eq!(
-            string_to_ast("struct Point { x, y }"),
-            Ok(vec![Node::Struct {
+            Struct::parse("struct Point { x, y }"),
+            Ok(Struct {
                 name: "Point".into(),
                 members: vec![
                     Member {
@@ -247,31 +360,31 @@ mod test {
                         size: None
                     },
                 ]
-            }])
+            })
         );
 
         assert_eq!(
-            string_to_ast("struct Foo { bar[100] }"),
-            Ok(vec![Node::Struct {
+            Struct::parse("struct Foo { bar[100] }"),
+            Ok(Struct {
                 name: "Foo".into(),
                 members: vec![Member {
                     name: "bar".into(),
                     typename: None,
                     size: Some(100)
                 },]
-            }])
+            })
         );
 
         assert_eq!(
-            string_to_ast("struct Foo { bar:Thing[100] }"),
-            Ok(vec![Node::Struct {
+            Struct::parse("struct Foo { bar:Thing[100] }"),
+            Ok(Struct {
                 name: "Foo".into(),
                 members: vec![Member {
                     name: "bar".into(),
                     typename: Some("Thing".into()),
                     size: Some(100)
                 },]
-            }])
+            })
         );
     }
 }
