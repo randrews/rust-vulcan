@@ -16,12 +16,17 @@ pub(crate) type Pairs<'i, R = Rule> = pest::iterators::Pairs<'i, R>;
 
 trait Children {
     fn first(self) -> Self;
+    fn first_as_string(self) -> String;
     fn only(self) -> Self;
 }
 
 impl<'a> Children for Pair<'a> {
     fn first(self) -> Self {
         self.into_inner().next().unwrap()
+    }
+
+    fn first_as_string(self) -> String {
+        String::from(self.first().as_str())
     }
 
     fn only(self) -> Pair<'a> {
@@ -34,11 +39,16 @@ impl<'a> Children for Pair<'a> {
 
 trait PairsExt {
     fn next_if_rule(&mut self, rule: Rule) -> Option<Pair>;
+    fn first(&mut self) -> Pair;
 }
 
 impl PairsExt for Peekable<Pairs<'_>> {
     fn next_if_rule(&mut self, rule: Rule) -> Option<Pair> {
         self.next_if(|p| p.as_rule() == rule)
+    }
+
+    fn first(&mut self) -> Pair {
+        self.next().unwrap().first()
     }
 }
 
@@ -264,6 +274,65 @@ pub struct Function {
     org: Option<i32>,
     typename: Option<String>,
     inline: bool,
+    args: Vec<Argname>,
+}
+
+impl From<Pair<'_>> for Function {
+    fn from(pair: Pair<'_>) -> Self {
+        let mut inner = pair.into_inner().peekable();
+        let name = String::from(inner.next().unwrap().as_str());
+        let mut inline = false;
+        let mut org = None;
+        let mut typename = None;
+        if let Some(annotations) = inner.next_if_rule(Rule::annotations) {
+            for annotation in annotations.into_inner() {
+                let annotation = annotation.first();
+                match annotation.as_rule() {
+                    Rule::inline_annotation => inline = true,
+                    Rule::org_annotation => org = Some(parse_number(annotation.first())),
+                    Rule::type_annotation => typename = Some(annotation.first_as_string()),
+                    _ => unreachable!(),
+                }
+            }
+        }
+        let args: Vec<_> = inner
+            .next()
+            .unwrap()
+            .into_inner()
+            .map(|a| Argname::from(a))
+            .collect();
+
+        Self {
+            name,
+            org,
+            typename,
+            inline,
+            args,
+        }
+    }
+}
+
+impl Parseable<'_> for Function {
+    const RULE: Rule = Rule::function;
+}
+
+#[derive(Eq, PartialEq, Clone, Debug)]
+pub struct Argname {
+    name: String,
+    typename: Option<String>,
+}
+
+impl From<Pair<'_>> for Argname {
+    fn from(pair: Pair<'_>) -> Self {
+        let mut inner = pair.into_inner().peekable();
+        let name = String::from(inner.next().unwrap().as_str());
+        let typename = inner.next().map(|t| String::from(t.first().as_str()));
+        Self { name, typename }
+    }
+}
+
+impl Parseable<'_> for Argname {
+    const RULE: Rule = Rule::argname;
 }
 
 #[cfg(test)]
@@ -384,6 +453,84 @@ mod test {
                     typename: Some("Thing".into()),
                     size: Some(100)
                 },]
+            })
+        );
+    }
+
+    #[test]
+    fn parse_function_headers() {
+        assert_eq!(
+            Function::parse("fn foo() {}"),
+            Ok(Function {
+                name: "foo".into(),
+                inline: false,
+                org: None,
+                typename: None,
+                args: vec![],
+            })
+        );
+        assert_eq!(
+            Function::parse("fn foo(a, b) {}"),
+            Ok(Function {
+                name: "foo".into(),
+                inline: false,
+                org: None,
+                typename: None,
+                args: vec![
+                    Argname {
+                        name: "a".into(),
+                        typename: None
+                    },
+                    Argname {
+                        name: "b".into(),
+                        typename: None
+                    }
+                ],
+            })
+        );
+        assert_eq!(
+            Function::parse("fn foo(a:Blah, b) {}"),
+            Ok(Function {
+                name: "foo".into(),
+                inline: false,
+                org: None,
+                typename: None,
+                args: vec![
+                    Argname {
+                        name: "a".into(),
+                        typename: Some("Blah".into())
+                    },
+                    Argname {
+                        name: "b".into(),
+                        typename: None
+                    }
+                ],
+            })
+        );
+        assert_eq!(
+            Function::parse("fn foo<inline, org=0x400>(a) {}"),
+            Ok(Function {
+                name: "foo".into(),
+                inline: true,
+                org: Some(0x400),
+                typename: None,
+                args: vec![Argname {
+                    name: "a".into(),
+                    typename: None
+                },],
+            })
+        );
+        assert_eq!(
+            Function::parse("fn foo<org=0x400, inline>(a) {}"),
+            Ok(Function {
+                name: "foo".into(),
+                inline: true,
+                org: Some(0x400),
+                typename: None,
+                args: vec![Argname {
+                    name: "a".into(),
+                    typename: None
+                },],
             })
         );
     }

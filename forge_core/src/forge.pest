@@ -47,8 +47,13 @@ block = { "{" ~ statement* ~ "}" }
 
 function = { "fn" ~ name ~ annotations? ~ argnames ~ block }
 annotations = { "<" ~ (annotation ~ ("," ~ annotation)*) ~ ">" }
-annotation = { "inline" | ("org=" ~ number) | ("type=" ~ name) }
-argnames = { "(" ~ (name ~ typename? ~ ("," ~ name ~ typename?)*)? ~ ")" }
+annotation = { inline_annotation | org_annotation | type_annotation }
+inline_annotation = { "inline" }
+org_annotation = { "org=" ~ number }
+type_annotation = { "type=" ~ name }
+
+argnames = { "(" ~ (argname ~ ("," ~ argname)*)? ~ ")" }
+argname = { name ~ typename? }
 
 declaration = { function | global | struct_decl | const_decl }
 program = { (COMMENT | WHITESPACE)? ~ declaration* ~ EOI }
