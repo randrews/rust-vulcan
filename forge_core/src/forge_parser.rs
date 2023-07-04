@@ -6,6 +6,7 @@ mod inner {
     pub struct ForgeParser;
 }
 
+use crate::ast::*;
 use inner::*;
 use pest::error::{Error, LineColLocation};
 use std::iter::Peekable;
@@ -14,13 +15,20 @@ use std::str::FromStr;
 pub(crate) type Pair<'a> = pest::iterators::Pair<'a, Rule>;
 pub(crate) type Pairs<'i, R = Rule> = pest::iterators::Pairs<'i, R>;
 
-trait Children {
+trait PairExt {
     fn first(self) -> Self;
     fn first_as_string(self) -> String;
     fn only(self) -> Self;
+    fn into_number(self) -> i32;
+
+    /// Create a String containing the string represented by a given pair. Since the pair will
+    /// reference bytes containing escape sequences, this isn't the same as an &str to the
+    /// original code; this is a new string translating those escape sequences to their actual
+    /// bytes.
+    fn into_quoted_string(self) -> String;
 }
 
-impl<'a> Children for Pair<'a> {
+impl<'a> PairExt for Pair<'a> {
     fn first(self) -> Self {
         self.into_inner().next().unwrap()
     }
@@ -34,6 +42,36 @@ impl<'a> Children for Pair<'a> {
         let child = iter.next().unwrap();
         debug_assert_eq!(iter.next(), None);
         child
+    }
+
+    fn into_number(self) -> i32 {
+        let first = self.into_inner().next().unwrap();
+        match first.as_rule() {
+            Rule::dec_number | Rule::dec_zero | Rule::neg_number => {
+                i32::from_str(first.as_str()).unwrap()
+            }
+            Rule::hex_number => i32::from_str_radix(first.as_str().get(2..).unwrap(), 16).unwrap(),
+            Rule::bin_number => i32::from_str_radix(first.as_str().get(2..).unwrap(), 2).unwrap(),
+            Rule::oct_number => i32::from_str_radix(first.as_str().get(2..).unwrap(), 8).unwrap(),
+            _ => panic!("Expected a number, got {}", first.as_str()),
+        }
+    }
+
+    fn into_quoted_string(self) -> String {
+        let mut string = String::with_capacity(self.as_str().len());
+        for inner in self.into_inner() {
+            let string_inner = inner.as_str();
+            match string_inner {
+                "\\t" => string.push('\t'),
+                "\\r" => string.push('\r'),
+                "\\n" => string.push('\n'),
+                "\\0" => string.push('\0'),
+                "\\\\" => string.push('\\'),
+                "\\\"" => string.push('\"'),
+                _ => string.push_str(string_inner),
+            }
+        }
+        string
     }
 }
 
@@ -52,44 +90,6 @@ impl PairsExt for Peekable<Pairs<'_>> {
     }
 }
 
-fn parse_number(pair: Pair) -> i32 {
-    let first = pair.into_inner().next().unwrap();
-    match first.as_rule() {
-        Rule::dec_number | Rule::dec_zero | Rule::neg_number => {
-            i32::from_str(first.as_str()).unwrap()
-        }
-        Rule::hex_number => i32::from_str_radix(first.as_str().get(2..).unwrap(), 16).unwrap(),
-        Rule::bin_number => i32::from_str_radix(first.as_str().get(2..).unwrap(), 2).unwrap(),
-        Rule::oct_number => i32::from_str_radix(first.as_str().get(2..).unwrap(), 8).unwrap(),
-        _ => panic!("Expected a number, got {}", first.as_str()),
-    }
-}
-
-/// Create a String containing the string represented by a given pair. Since the pair will
-/// reference bytes containing escape sequences, this isn't the same as an &str to the
-/// original code; this is a new string translating those escape sequences to their actual
-/// bytes.
-fn parse_string(pair: Pair) -> String {
-    let mut string = String::with_capacity(pair.as_str().len());
-    for inner in pair.into_inner() {
-        let string_inner = inner.as_str();
-        match string_inner {
-            "\\t" => string.push('\t'),
-            "\\r" => string.push('\r'),
-            "\\n" => string.push('\n'),
-            "\\0" => string.push('\0'),
-            "\\\\" => string.push('\\'),
-            "\\\"" => string.push('\"'),
-            _ => string.push_str(string_inner),
-        }
-    }
-    string
-}
-
-fn parse_name(pair: Pair) -> &str {
-    pair.as_str()
-}
-
 #[derive(Eq, PartialEq, Clone, Debug)]
 pub struct ParseError(usize, usize, String);
 
@@ -104,78 +104,70 @@ impl From<pest::error::Error<Rule>> for ParseError {
     }
 }
 
-trait Parseable<'a>: From<Pair<'a>> {
+trait AstNode: Sized {
     const RULE: Rule;
-    fn parse(src: &'a str) -> Result<Self, ParseError> {
+    fn from_pair(pair: Pair) -> Self;
+}
+
+trait Parseable: Sized {
+    fn parse(src: &str) -> Result<Self, ParseError>;
+}
+
+impl<T: AstNode> Parseable for T {
+    fn parse(src: &str) -> Result<Self, ParseError> {
         let pair = ForgeParser::parse(Self::RULE, src)
             .map_err(ParseError::from)?
             .next()
             .unwrap();
-        Ok(pair.into())
+        Ok(Self::from_pair(pair))
     }
 }
 
-#[derive(Eq, PartialEq, Clone, Debug)]
-pub enum Declaration {
-    Function(Function),
-    Global(Global),
-    Struct(Struct),
-    Const(Const),
-}
+///////////////////////////////////////////////////////////////////////////////////////////
 
-impl<'a> From<Pair<'a>> for Declaration {
-    fn from(pair: Pair) -> Self {
+impl AstNode for Declaration {
+    const RULE: Rule = Rule::declaration;
+    fn from_pair(pair: Pair) -> Self {
         match pair.as_rule() {
-            Rule::function => todo!(),
-            Rule::global => Self::Global(pair.into()),
-            Rule::struct_decl => Self::Struct(pair.into()),
-            Rule::const_decl => Self::Const(pair.into()),
+            Rule::function => Self::Function(Function::from_pair(pair)),
+            Rule::global => Self::Global(Global::from_pair(pair)),
+            Rule::struct_decl => Self::Struct(Struct::from_pair(pair)),
+            Rule::const_decl => Self::Const(Const::from_pair(pair)),
             _ => todo!(),
         }
     }
 }
 
-impl Parseable<'_> for Declaration {
-    const RULE: Rule = Rule::declaration;
-}
-
-#[derive(Eq, PartialEq, Clone, Debug, Default)]
-pub struct Varinfo {
-    typename: Option<String>,
-    size: Option<i32>,
-}
+///////////////////////////////////////////////////////////////////////////////////////////
 
 impl Varinfo {
     fn read_or_default(mut pairs: Peekable<Pairs>) -> Self {
         pairs
             .next_if_rule(Rule::varinfo)
-            .map_or(Self::default(), |v| v.into())
+            .map_or(Self::default(), Self::from_pair)
     }
 }
 
-impl From<Pair<'_>> for Varinfo {
-    fn from(pair: Pair<'_>) -> Self {
+impl AstNode for Varinfo {
+    const RULE: Rule = Rule::varinfo;
+    fn from_pair(pair: Pair) -> Self {
         let mut children = pair.into_inner().peekable();
         let typename = children
             .next_if_rule(Rule::typename)
             .map(|t| String::from(t.first().as_str()));
         let size = children
             .next_if_rule(Rule::size)
-            .map(|s| parse_number(s.first()));
+            .map(|s| s.first().into_number());
         Self { typename, size }
     }
 }
 
-#[derive(Eq, PartialEq, Clone, Debug)]
-pub struct Global {
-    name: String,
-    typename: Option<String>,
-    size: Option<i32>,
-}
+///////////////////////////////////////////////////////////////////////////////////////////
 
-impl From<Pair<'_>> for Global {
-    fn from(global: Pair) -> Self {
-        let mut inner = global.into_inner().peekable();
+impl AstNode for Global {
+    const RULE: Rule = Rule::global;
+    fn from_pair(pair: Pair) -> Self {
+        let mut inner = pair.into_inner().peekable();
         let name = String::from(inner.next().unwrap().as_str());
         let varinfo = Varinfo::read_or_default(inner);
 
@@ -187,39 +179,22 @@ impl From<Pair<'_>> for Global {
     }
 }
 
-impl Parseable<'_> for Global {
-    const RULE: Rule = Rule::global;
-}
+///////////////////////////////////////////////////////////////////////////////////////////
 
-#[derive(Eq, PartialEq, Clone, Debug)]
-pub struct Struct {
-    name: String,
-    members: Vec<Member>,
-}
-
-impl From<Pair<'_>> for Struct {
-    fn from(pair: Pair<'_>) -> Self {
+impl AstNode for Struct {
+    const RULE: Rule = Rule::struct_decl;
+    fn from_pair(pair: Pair<'_>) -> Self {
         let mut inner = pair.into_inner();
         let name = String::from(inner.next().unwrap().as_str());
         let member_pairs = inner.next().unwrap().into_inner();
-        let members: Vec<_> = member_pairs.map(|member| member.into()).collect();
+        let members: Vec<_> = member_pairs.map(Member::from_pair).collect();
         Struct { name, members }
     }
 }
 
-impl Parseable<'_> for Struct {
-    const RULE: Rule = Rule::struct_decl;
-}
-
-#[derive(Eq, PartialEq, Clone, Debug)]
-pub struct Member {
-    name: String,
-    typename: Option<String>,
-    size: Option<i32>,
-}
-
-impl From<Pair<'_>> for Member {
-    fn from(pair: Pair<'_>) -> Self {
+impl AstNode for Member {
+    const RULE: Rule = Rule::member;
+    fn from_pair(pair: Pair<'_>) -> Self {
         let mut inner = pair.into_inner().peekable();
         let name = String::from(inner.next().unwrap().as_str());
         let varinfo = Varinfo::read_or_default(inner);
@@ -232,53 +207,35 @@ impl From<Pair<'_>> for Member {
     }
 }
 
-impl Parseable<'_> for Member {
-    const RULE: Rule = Rule::member;
-}
+///////////////////////////////////////////////////////////////////////////////////////////
 
-#[derive(Eq, PartialEq, Clone, Debug)]
-pub struct Const {
-    name: String,
-    value: Option<i32>,
-    string: Option<String>,
-}
-
-impl From<Pair<'_>> for Const {
-    fn from(pair: Pair) -> Self {
+impl AstNode for Const {
+    const RULE: Rule = Rule::const_decl;
+    fn from_pair(pair: Pair) -> Self {
         let mut inner = pair.into_inner();
         let name = String::from(inner.next().unwrap().as_str());
         let value = inner.next().unwrap();
         match value.as_rule() {
             Rule::string => Const {
                 name,
-                string: Some(String::from(parse_string(value))),
+                string: Some(String::from(value.into_quoted_string())),
                 value: None,
             },
             Rule::number => Const {
                 name,
                 string: None,
-                value: Some(parse_number(value)),
+                value: Some(value.into_number()),
             },
             _ => unreachable!(),
         }
     }
 }
 
-impl Parseable<'_> for Const {
-    const RULE: Rule = Rule::const_decl;
-}
+///////////////////////////////////////////////////////////////////////////////////////////
 
-#[derive(Eq, PartialEq, Clone, Debug)]
-pub struct Function {
-    name: String,
-    org: Option<i32>,
-    typename: Option<String>,
-    inline: bool,
-    args: Vec<Argname>,
-}
-
-impl From<Pair<'_>> for Function {
-    fn from(pair: Pair<'_>) -> Self {
+impl AstNode for Function {
+    const RULE: Rule = Rule::function;
+    fn from_pair(pair: Pair<'_>) -> Self {
         let mut inner = pair.into_inner().peekable();
         let name = String::from(inner.next().unwrap().as_str());
         let mut inline = false;
@@ -289,7 +246,7 @@ impl From<Pair<'_>> for Function {
                 let annotation = annotation.first();
                 match annotation.as_rule() {
                     Rule::inline_annotation => inline = true,
-                    Rule::org_annotation => org = Some(parse_number(annotation.first())),
+                    Rule::org_annotation => org = Some(annotation.first().into_number()),
                     Rule::type_annotation => typename = Some(annotation.first_as_string()),
                     _ => unreachable!(),
                 }
@@ -299,7 +256,7 @@ impl From<Pair<'_>> for Function {
             .next()
             .unwrap()
             .into_inner()
-            .map(|a| Argname::from(a))
+            .map(Argname::from_pair)
             .collect();
 
         Self {
@@ -312,18 +269,9 @@ impl From<Pair<'_>> for Function {
     }
 }
 
-impl Parseable<'_> for Function {
-    const RULE: Rule = Rule::function;
-}
-
-#[derive(Eq, PartialEq, Clone, Debug)]
-pub struct Argname {
-    name: String,
-    typename: Option<String>,
-}
-
-impl From<Pair<'_>> for Argname {
-    fn from(pair: Pair<'_>) -> Self {
+impl AstNode for Argname {
+    const RULE: Rule = Rule::argname;
+    fn from_pair(pair: Pair<'_>) -> Self {
         let mut inner = pair.into_inner().peekable();
         let name = String::from(inner.next().unwrap().as_str());
         let typename = inner.next().map(|t| String::from(t.first().as_str()));
@@ -331,9 +279,7 @@ impl From<Pair<'_>> for Argname {
     }
 }
 
-impl Parseable<'_> for Argname {
-    const RULE: Rule = Rule::argname;
-}
+///////////////////////////////////////////////////////////////////////////////////////////
 
 #[cfg(test)]
 mod test {
