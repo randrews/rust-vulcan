@@ -53,3 +53,75 @@ pub struct Argname {
     pub name: String,
     pub typename: Option<String>,
 }
+
+#[derive(Eq, PartialEq, Clone, Debug)]
+pub struct Block {
+    pub statements: Vec<Statement>,
+}
+
+#[derive(Eq, PartialEq, Clone, Debug)]
+pub enum Statement {
+    Return(Return),
+    Assignment(Assignment),
+    Call(Call),
+    VarDecl(VarDecl),
+    Conditional(Conditional),
+    WhileLoop(WhileLoop),
+    RepeatLoop(RepeatLoop),
+}
+
+#[derive(Eq, PartialEq, Clone, Debug)]
+pub struct Return {}
+
+#[derive(Eq, PartialEq, Clone, Debug)]
+pub struct Assignment {}
+
+#[derive(Eq, PartialEq, Clone, Debug)]
+pub struct Call {}
+
+#[derive(Eq, PartialEq, Clone, Debug)]
+pub struct VarDecl {}
+
+#[derive(Eq, PartialEq, Clone, Debug)]
+pub struct Conditional {}
+
+#[derive(Eq, PartialEq, Clone, Debug)]
+pub struct WhileLoop {}
+
+#[derive(Eq, PartialEq, Clone, Debug)]
+pub struct RepeatLoop {}
+
+/// One of the five arithmetical operators
+#[derive(Debug, PartialEq, Copy, Clone)]
+pub enum Operator {
+    Add,
+    Sub,
+    Mul,
+    Div,
+    Mod,
+}
+
+#[derive(PartialEq, Clone, Debug)]
+pub enum Node {
+    Number(i32),
+    Call(Call),
+    ArrayRef(ArrayRef),
+    Name(String),
+    Address(String),
+    Expr(Box<Node>, Vec<(Operator, Node)>),
+}
+
+impl From<i32> for Node {
+    fn from(val: i32) -> Self {
+        Self::Number(val)
+    }
+}
+
+impl From<&str> for Node {
+    fn from(s: &str) -> Self {
+        Self::Name(String::from(s))
+    }
+}
+
+#[derive(Eq, PartialEq, Clone, Debug)]
+pub struct ArrayRef {}

@@ -281,6 +281,153 @@ impl AstNode for Argname {
 
 ///////////////////////////////////////////////////////////////////////////////////////////
 
+impl AstNode for Statement {
+    const RULE: Rule = Rule::declaration;
+    fn from_pair(pair: Pair) -> Self {
+        match pair.as_rule() {
+            Rule::return_stmt => Self::Return(Return::from_pair(pair)),
+            Rule::assignment => Self::Assignment(Assignment::from_pair(pair)),
+            Rule::call => Self::Call(Call::from_pair(pair)),
+            Rule::var_decl => Self::VarDecl(VarDecl::from_pair(pair)),
+            Rule::conditional => Self::Conditional(Conditional::from_pair(pair)),
+            Rule::while_loop => Self::WhileLoop(WhileLoop::from_pair(pair)),
+            Rule::repeat_loop => Self::RepeatLoop(RepeatLoop::from_pair(pair)),
+            _ => todo!(),
+        }
+    }
+}
+
+///////////////////////////////////////////////////////////////////////////////////////////
+
+impl AstNode for Return {
+    const RULE: Rule = Rule::return_stmt;
+    fn from_pair(pair: Pair) -> Self {
+        todo!()
+    }
+}
+
+///////////////////////////////////////////////////////////////////////////////////////////
+
+impl AstNode for Assignment {
+    const RULE: Rule = Rule::assignment;
+    fn from_pair(pair: Pair) -> Self {
+        todo!()
+    }
+}
+
+///////////////////////////////////////////////////////////////////////////////////////////
+
+impl AstNode for Call {
+    const RULE: Rule = Rule::call;
+    fn from_pair(pair: Pair) -> Self {
+        todo!()
+    }
+}
+
+///////////////////////////////////////////////////////////////////////////////////////////
+
+impl AstNode for VarDecl {
+    const RULE: Rule = Rule::var_decl;
+    fn from_pair(pair: Pair) -> Self {
+        todo!()
+    }
+}
+
+///////////////////////////////////////////////////////////////////////////////////////////
+
+impl AstNode for Conditional {
+    const RULE: Rule = Rule::conditional;
+    fn from_pair(pair: Pair) -> Self {
+        todo!()
+    }
+}
+
+///////////////////////////////////////////////////////////////////////////////////////////
+
+impl AstNode for WhileLoop {
+    const RULE: Rule = Rule::while_loop;
+    fn from_pair(pair: Pair) -> Self {
+        todo!()
+    }
+}
+
+///////////////////////////////////////////////////////////////////////////////////////////
+
+impl AstNode for RepeatLoop {
+    const RULE: Rule = Rule::repeat_loop;
+    fn from_pair(pair: Pair) -> Self {
+        todo!()
+    }
+}
+
+///////////////////////////////////////////////////////////////////////////////////////////
+
+impl AstNode for Node {
+    const RULE: Rule = Rule::expr; // Also used for vals / terms / the whole tree
+    fn from_pair(pair: Pair) -> Self {
+        let expr = match pair.as_rule() {
+            Rule::val => Node::from_pair(pair.first()),
+            Rule::number => Node::Number(pair.into_number()),
+            Rule::name => Node::Name(String::from(pair.as_str())),
+            Rule::call => todo!(),
+            Rule::arrayref => todo!(),
+            Rule::address => todo!(),
+            Rule::expr | Rule::term => {
+                let mut children = pair.into_inner();
+                let car = Node::from_pair(children.next().unwrap());
+                Node::Expr(Box::new(car), parse_expr(children))
+            }
+            _ => unreachable!(),
+        };
+        shake_expr(expr)
+    }
+}
+
+fn parse_expr(mut cdr: Pairs) -> Vec<(Operator, Node)> {
+    let mut terms = Vec::new();
+    while let Some(operator) = cdr.next() {
+        let rhs = cdr.next().unwrap();
+        let rhs_r = rhs.as_rule();
+        let rhs = Node::from_pair(rhs);
+        let op = Operator::from_pair(operator);
+        terms.push((op, rhs));
+    }
+    terms
+}
+
+fn shake_expr(node: Node) -> Node {
+    match node {
+        Node::Expr(car, cdr) => {
+            let shaken_car = shake_expr(*car);
+            if cdr.is_empty() {
+                shaken_car
+            } else {
+                let shaken_cdr = cdr.into_iter().map(|(op, n)| (op, shake_expr(n))).collect();
+                Node::Expr(Box::from(shaken_car), shaken_cdr)
+            }
+        }
+        _ => node,
+    }
+}
+
+///////////////////////////////////////////////////////////////////////////////////////////
+
+impl AstNode for Operator {
+    const RULE: Rule = Rule::sign; // also term_op
+    fn from_pair(pair: Pair) -> Self {
+        match pair.as_str() {
+            "+" => Self::Add,
+            "-" => Self::Sub,
+            "*" => Self::Mul,
+            "/" => Self::Div,
+            "%" => Self::Mod,
+            _ => unreachable!(),
+        }
+    }
+}
+
+///////////////////////////////////////////////////////////////////////////////////////////
+
 #[cfg(test)]
 mod test {
     use super::*;
@@ -478,6 +625,58 @@ mod test {
                     typename: None
                 },],
             })
+        );
+    }
+
+    #[test]
+    fn parse_exprs() {
+        use Node::*;
+        use Operator::*;
+        // A very, very basic expression
+        assert_eq!(Node::parse("23"), Ok(Number(23)));
+
+        // Two vals with an operator
+        assert_eq!(
+            Node::parse("23 + 5"),
+            Ok(Expr(Number(23).into(), vec![(Add, Number(5))]))
+        );
+
+        // Multiple terms at the same precedence level
+        assert_eq!(
+            Node::parse("1 + 2 + 3"),
+            Ok(Expr(
+                Number(1).into(),
+                vec![(Add, 2.into()), (Add, 3.into())]
+            ))
+        );
+
+        // Higher precedence levels
+        assert_eq!(
+            Node::parse("1 + 2 * 3"),
+            Ok(Node::Expr(
+                Number(1).into(),
+                vec![(Add, Expr(Number(2).into(), vec![(Mul, 3.into())]))]
+            ))
+        );
+        assert_eq!(
+            Node::parse("2 * 3"),
+            Ok(Expr(Number(2).into(), vec![(Mul, 3.into())]))
+        );
+        assert_eq!(
+            Node::parse("2 * 3 + 4"),
+            Ok(Expr(
+                Expr(Number(2).into(), vec![(Mul, 3.into())]).into(),
+                vec![(Add, 4.into())]
+            ))
+        );
+
+        // Parens
+        assert_eq!(
+            Node::parse("(1 + 2) * 3"),
+            Ok(Node::Expr(
+                Expr(Number(1).into(), vec![(Add, 2.into())]).into(),
+                vec![(Mul, 3.into())]
+            ))
         );
     }
 }

@@ -31,17 +31,16 @@ val = { // These are what get evaluated and left on the stack:
   // (call, or pointer arithmetic, since ids all reference addresses)
   // (multiple calls / subscripts aren't allowed; use CALL or collapse to one
   // subscript)
-  call | arrayref | name |
-  //(name ~ (arglist | subscript)?) |
-  ("&" ~ name) } // The address for an name
+  call | arrayref | name | address }
 
+address = { "&" ~ name } // The address for a name
 arrayref = { name ~ subscript } // Subscripting is only literal IDs. Anything else can be pointer arithmetic
 call = { name ~ arglist } // Call syntax is only literal IDs. Calling things dynamically is done with a builtin; CALL(foo[3], 1, 2, 3)
 arg = { expr | string }
 arglist = { "(" ~ (arg ~ ("," ~ arg)*)? ~ ")" }
 subscript = { "[" ~ expr ~ "]" }
 
-statement = { ((return_stmt | assignment | call | var_decl) ~ ";") | conditional | loop_stmt }
+statement = { ((return_stmt | assignment | call | var_decl) ~ ";") | conditional | while_loop | repeat_loop }
 
 block = { "{" ~ statement* ~ "}" }
 
@@ -60,9 +59,8 @@ program = { (COMMENT | WHITESPACE)? ~ declaration* ~ EOI }
 
 return_stmt = { "return" ~ expr }
 conditional = { "if" ~ "(" ~ expr ~ ")" ~ block ~ ("else" ~ block)? }
-loop_stmt = { while_stmt | repeat }
-while_stmt = { "while" ~ "(" ~ expr ~ ")" ~ block }
-repeat = { "repeat" ~ "(" ~ expr ~ ")" ~ name ~ block }
+while_loop = { "while" ~ "(" ~ expr ~ ")" ~ block }
+repeat_loop = { "repeat" ~ "(" ~ expr ~ ")" ~ name ~ block }
 var_decl = { "var" ~ name ~ varinfo ~ ("=" ~ expr)? }
 global = { "global" ~ name ~ varinfo ~ ";" }
 typename = { ":" ~ name }
