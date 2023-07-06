@@ -375,7 +375,7 @@ impl AstNode for Node {
             Rule::expr | Rule::term => {
                 let mut children = pair.into_inner();
                 let car = Node::from_pair(children.next().unwrap());
-                Node::Expr(Box::new(car), parse_expr(children))
+                Node::Expr(car.into(), parse_expr(children))
             }
             _ => unreachable!(),
         };
@@ -398,12 +398,12 @@ fn parse_expr(mut cdr: Pairs) -> Vec<(Operator, Node)> {
 fn shake_expr(node: Node) -> Node {
     match node {
         Node::Expr(car, cdr) => {
-            let shaken_car = shake_expr(*car);
+            let shaken_car = shake_expr(car.into());
             if cdr.is_empty() {
                 shaken_car
             } else {
                 let shaken_cdr = cdr.into_iter().map(|(op, n)| (op, shake_expr(n))).collect();
-                Node::Expr(Box::from(shaken_car), shaken_cdr)
+                Node::Expr(shaken_car.into(), shaken_cdr)
             }
         }
         _ => node,
@@ -638,24 +638,21 @@ mod test {
         // Two vals with an operator
         assert_eq!(
             Node::parse("23 + 5"),
-            Ok(Expr(Number(23).into(), vec![(Add, Number(5))]))
+            Ok(Expr(23.into(), vec![(Add, Number(5))]))
         );
 
         // Multiple terms at the same precedence level
         assert_eq!(
             Node::parse("1 + 2 + 3"),
-            Ok(Expr(
-                Number(1).into(),
-                vec![(Add, 2.into()), (Add, 3.into())]
-            ))
+            Ok(Expr(1.into(), vec![(Add, 2.into()), (Add, 3.into())]))
         );
 
         // Higher precedence levels
         assert_eq!(
             Node::parse("1 + 2 * 3"),
             Ok(Node::Expr(
-                Number(1).into(),
-                vec![(Add, Expr(Number(2).into(), vec![(Mul, 3.into())]))]
+                1.into(),
+                vec![(Add, Expr(2.into(), vec![(Mul, 3.into())]))]
             ))
         );
         assert_eq!(
@@ -665,7 +662,7 @@ mod test {
         assert_eq!(
             Node::parse("2 * 3 + 4"),
             Ok(Expr(
-                Expr(Number(2).into(), vec![(Mul, 3.into())]).into(),
+                Expr(2.into(), vec![(Mul, 3.into())]).into(),
                 vec![(Add, 4.into())]
             ))
         );
@@ -674,7 +671,7 @@ mod test {
         assert_eq!(
             Node::parse("(1 + 2) * 3"),
             Ok(Node::Expr(
-                Expr(Number(1).into(), vec![(Add, 2.into())]).into(),
+                Expr(1.into(), vec![(Add, 2.into())]).into(),
                 vec![(Mul, 3.into())]
             ))
         );

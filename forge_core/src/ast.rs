@@ -108,7 +108,7 @@ pub enum Node {
     ArrayRef(ArrayRef),
     Name(String),
     Address(String),
-    Expr(Box<Node>, Vec<(Operator, Node)>),
+    Expr(BoxNode, Vec<(Operator, Node)>),
 }
 
 impl From<i32> for Node {
@@ -120,6 +120,28 @@ impl From<i32> for Node {
 impl From<&str> for Node {
     fn from(s: &str) -> Self {
         Self::Name(String::from(s))
+    }
+}
+
+#[repr(transparent)]
+#[derive(PartialEq, Clone, Debug)]
+pub struct BoxNode(pub Box<Node>);
+
+impl From<i32> for BoxNode {
+    fn from(val: i32) -> Self {
+        BoxNode(Box::from(Node::Number(val)))
+    }
+}
+
+impl From<Node> for BoxNode {
+    fn from(val: Node) -> Self {
+        BoxNode(Box::from(val))
+    }
+}
+
+impl From<BoxNode> for Node {
+    fn from(val: BoxNode) -> Self {
+        *(val.0)
     }
 }
 
