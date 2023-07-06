@@ -145,5 +145,8 @@ impl From<BoxNode> for Node {
     }
 }
 
-#[derive(Eq, PartialEq, Clone, Debug)]
-pub struct ArrayRef {}
+#[derive(PartialEq, Clone, Debug)]
+pub struct ArrayRef {
+    pub name: String,
+    pub subscript: BoxNode,
+}

@@ -370,8 +370,8 @@ impl AstNode for Node {
             Rule::number => Node::Number(pair.into_number()),
             Rule::name => Node::Name(String::from(pair.as_str())),
             Rule::call => todo!(),
-            Rule::arrayref => todo!(),
-            Rule::address => todo!(),
+            Rule::arrayref => Node::ArrayRef(ArrayRef::from_pair(pair)),
+            Rule::address => Node::Address(pair.first_as_string()),
             Rule::expr | Rule::term => {
                 let mut children = pair.into_inner();
                 let car = Node::from_pair(children.next().unwrap());
@@ -422,6 +422,22 @@ impl AstNode for Operator {
             "/" => Self::Div,
             "%" => Self::Mod,
             _ => unreachable!(),
+        }
+    }
+}
+
+///////////////////////////////////////////////////////////////////////////////////////////
+
+impl AstNode for ArrayRef {
+    const RULE: Rule = Rule::arrayref;
+
+    fn from_pair(pair: Pair) -> Self {
+        let mut inner = pair.into_inner();
+        let name = String::from(inner.next().unwrap().as_str());
+        let subscript = Node::from_pair(inner.next().unwrap().first());
+        Self {
+            name,
+            subscript: subscript.into(),
         }
     }
 }
@@ -675,5 +691,44 @@ mod test {
                 vec![(Mul, 3.into())]
             ))
         );
+    }
+
+    #[test]
+    fn parse_arrayrefs() {
+        use crate::ast::ArrayRef as AR;
+        use Node::*;
+        use Operator::*;
+
+        // Normal numbers
+        assert_eq!(
+            AR::parse("foo[7]"),
+            Ok(AR {
+                name: "foo".into(),
+                subscript: Number(7).into()
+            })
+        );
+
+        // Full exprs (this is the last one of these; the full expr test above covers it
+        assert_eq!(
+            AR::parse("foo[7+x]"),
+            Ok(AR {
+                name: "foo".into(),
+                subscript: Expr(Number(7).into(), vec![(Add, Name("x".into()))]).into()
+            })
+        );
+
+        // Exprs that are actually arrayrefs
+        assert_eq!(
+            Node::parse("foo[7]"),
+            Ok(ArrayRef(AR {
+                name: "foo".into(),
+                subscript: Number(7).into()
+            }))
+        );
+    }
+
+    #[test]
+    fn parse_addresses() {
+        assert_eq!(Node::parse("&foo"), Ok(Node::Address("foo".into())));
     }
 }
