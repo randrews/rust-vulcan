@@ -54,12 +54,12 @@ pub struct Argname {
     pub typename: Option<String>,
 }
 
-#[derive(Eq, PartialEq, Clone, Debug)]
+#[derive(PartialEq, Clone, Debug)]
 pub struct Block {
     pub statements: Vec<Statement>,
 }
 
-#[derive(Eq, PartialEq, Clone, Debug)]
+#[derive(PartialEq, Clone, Debug)]
 pub enum Statement {
     Return(Return),
     Assignment(Assignment),
@@ -70,17 +70,40 @@ pub enum Statement {
     RepeatLoop(RepeatLoop),
 }
 
-#[derive(Eq, PartialEq, Clone, Debug)]
-pub struct Return {}
+#[derive(PartialEq, Clone, Debug)]
+pub struct Return(pub Option<Node>);
 
-#[derive(Eq, PartialEq, Clone, Debug)]
-pub struct Assignment {}
+#[derive(PartialEq, Clone, Debug)]
+pub struct Assignment {
+    pub lvalue: Lvalue,
+    pub rvalue: Rvalue,
+}
 
-#[derive(Eq, PartialEq, Clone, Debug)]
-pub struct Call {}
+#[derive(PartialEq, Clone, Debug)]
+pub struct Call {
+    pub name: String,
+    pub args: Vec<Rvalue>,
+}
 
-#[derive(Eq, PartialEq, Clone, Debug)]
-pub struct VarDecl {}
+#[derive(PartialEq, Clone, Debug)]
+pub enum Lvalue {
+    ArrayRef(ArrayRef),
+    Name(String),
+}
+
+#[derive(PartialEq, Clone, Debug)]
+pub enum Rvalue {
+    Expr(Node),
+    String(String),
+}
+
+#[derive(PartialEq, Clone, Debug)]
+pub struct VarDecl {
+    pub name: String,
+    pub typename: Option<String>,
+    pub size: Option<i32>,
+    pub initial: Option<Node>,
+}
 
 #[derive(Eq, PartialEq, Clone, Debug)]
 pub struct Conditional {}

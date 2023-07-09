@@ -36,8 +36,7 @@ val = { // These are what get evaluated and left on the stack:
 address = { "&" ~ name } // The address for a name
 arrayref = { name ~ subscript } // Subscripting is only literal IDs. Anything else can be pointer arithmetic
 call = { name ~ arglist } // Call syntax is only literal IDs. Calling things dynamically is done with a builtin; CALL(foo[3], 1, 2, 3)
-arg = { expr | string }
-arglist = { "(" ~ (arg ~ ("," ~ arg)*)? ~ ")" }
+arglist = { "(" ~ (rvalue ~ ("," ~ rvalue)*)? ~ ")" }
 subscript = { "[" ~ expr ~ "]" }
 
 statement = { ((return_stmt | assignment | call | var_decl) ~ ";") | conditional | while_loop | repeat_loop }
@@ -57,7 +56,7 @@ argname = { name ~ typename? }
 declaration = { function | global | struct_decl | const_decl }
 program = { (COMMENT | WHITESPACE)? ~ declaration* ~ EOI }
 
-return_stmt = { "return" ~ expr }
+return_stmt = { "return" ~ expr? }
 conditional = { "if" ~ "(" ~ expr ~ ")" ~ block ~ ("else" ~ block)? }
 while_loop = { "while" ~ "(" ~ expr ~ ")" ~ block }
 repeat_loop = { "repeat" ~ "(" ~ expr ~ ")" ~ name ~ block }

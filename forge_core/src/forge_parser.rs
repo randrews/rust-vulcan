@@ -1,4 +1,4 @@
-use pest::{Parser, RuleType};
+use pest::Parser;
 
 mod inner {
     #[derive(Parser)]
@@ -133,7 +133,7 @@ impl AstNode for Declaration {
             Rule::global => Self::Global(Global::from_pair(pair)),
             Rule::struct_decl => Self::Struct(Struct::from_pair(pair)),
             Rule::const_decl => Self::Const(Const::from_pair(pair)),
-            _ => todo!(),
+            _ => unreachable!(),
         }
     }
 }
@@ -169,12 +169,12 @@ impl AstNode for Global {
     fn from_pair(pair: Pair) -> Self {
         let mut inner = pair.into_inner().peekable();
         let name = String::from(inner.next().unwrap().as_str());
-        let varinfo = Varinfo::read_or_default(inner);
+        let Varinfo { typename, size } = Varinfo::read_or_default(inner);
 
         Global {
             name,
-            typename: varinfo.typename,
-            size: varinfo.size,
+            typename,
+            size,
         }
     }
 }
@@ -197,12 +197,12 @@ impl AstNode for Member {
     fn from_pair(pair: Pair<'_>) -> Self {
         let mut inner = pair.into_inner().peekable();
         let name = String::from(inner.next().unwrap().as_str());
-        let varinfo = Varinfo::read_or_default(inner);
+        let Varinfo { typename, size } = Varinfo::read_or_default(inner);
 
         Member {
             name,
-            typename: varinfo.typename,
-            size: varinfo.size,
+            typename,
+            size,
         }
     }
 }
@@ -218,7 +218,7 @@ impl AstNode for Const {
         match value.as_rule() {
             Rule::string => Const {
                 name,
-                string: Some(String::from(value.into_quoted_string())),
+                string: Some(value.into_quoted_string()),
                 value: None,
             },
             Rule::number => Const {
@@ -282,8 +282,9 @@ impl AstNode for Argname {
 ///////////////////////////////////////////////////////////////////////////////////////////
 
 impl AstNode for Statement {
-    const RULE: Rule = Rule::declaration;
+    const RULE: Rule = Rule::statement;
     fn from_pair(pair: Pair) -> Self {
+        let pair = pair.first();
         match pair.as_rule() {
             Rule::return_stmt => Self::Return(Return::from_pair(pair)),
             Rule::assignment => Self::Assignment(Assignment::from_pair(pair)),
@@ -292,7 +293,7 @@ impl AstNode for Statement {
             Rule::conditional => Self::Conditional(Conditional::from_pair(pair)),
             Rule::while_loop => Self::WhileLoop(WhileLoop::from_pair(pair)),
             Rule::repeat_loop => Self::RepeatLoop(RepeatLoop::from_pair(pair)),
-            _ => todo!(),
+            _ => unreachable!(),
         }
     }
 }
@@ -302,7 +303,9 @@ impl AstNode for Statement {
 impl AstNode for Return {
     const RULE: Rule = Rule::return_stmt;
     fn from_pair(pair: Pair) -> Self {
-        todo!()
+        pair.into_inner()
+            .next()
+            .map_or(Self(None), |expr| Self(Some(Node::from_pair(expr))))
     }
 }
 
@@ -311,7 +314,30 @@ impl AstNode for Return {
 impl AstNode for Assignment {
     const RULE: Rule = Rule::assignment;
     fn from_pair(pair: Pair) -> Self {
-        todo!()
+        let mut pairs = pair.into_inner();
+        let lvalue_pair = pairs.next().unwrap().first();
+        let lvalue = match lvalue_pair.as_rule() {
+            Rule::arrayref => Lvalue::ArrayRef(ArrayRef::from_pair(lvalue_pair)),
+            Rule::name => Lvalue::Name(String::from(lvalue_pair.as_str())),
+            _ => unreachable!(),
+        };
+        let rvalue = Rvalue::from_pair(pairs.next().unwrap());
+        Self { lvalue, rvalue }
+    }
+}
+
+///////////////////////////////////////////////////////////////////////////////////////////
+
+impl AstNode for Rvalue {
+    const RULE: Rule = Rule::rvalue;
+
+    fn from_pair(pair: Pair) -> Self {
+        let pair = pair.first();
+        match pair.as_rule() {
+            Rule::string => Self::String(pair.into_quoted_string()),
+            Rule::expr => Self::Expr(Node::from_pair(pair)),
+            _ => unreachable!(),
+        }
     }
 }
 
@@ -320,7 +346,11 @@ impl AstNode for Assignment {
 impl AstNode for Call {
     const RULE: Rule = Rule::call;
     fn from_pair(pair: Pair) -> Self {
-        todo!()
+        let mut inner = pair.into_inner();
+        let name = String::from(inner.next().unwrap().as_str());
+        let arg_pairs = inner.next().unwrap().into_inner();
+        let args: Vec<Rvalue> = arg_pairs.map(Rvalue::from_pair).collect();
+        Self { name, args }
     }
 }
 
@@ -329,7 +359,16 @@ impl AstNode for Call {
 impl AstNode for VarDecl {
     const RULE: Rule = Rule::var_decl;
     fn from_pair(pair: Pair) -> Self {
-        todo!()
+        let mut inner = pair.into_inner();
+        let name = String::from(inner.next().unwrap().as_str());
+        let Varinfo { typename, size } = Varinfo::from_pair(inner.next().unwrap());
+        let initial = inner.next().map(Node::from_pair);
+        Self {
+            name,
+            typename,
+            size,
+            initial,
+        }
     }
 }
 
@@ -369,7 +408,7 @@ impl AstNode for Node {
             Rule::val => Node::from_pair(pair.first()),
             Rule::number => Node::Number(pair.into_number()),
             Rule::name => Node::Name(String::from(pair.as_str())),
-            Rule::call => todo!(),
+            Rule::call => Node::Call(Call::from_pair(pair)),
             Rule::arrayref => Node::ArrayRef(ArrayRef::from_pair(pair)),
             Rule::address => Node::Address(pair.first_as_string()),
             Rule::expr | Rule::term => {
@@ -387,7 +426,6 @@ fn parse_expr(mut cdr: Pairs) -> Vec<(Operator, Node)> {
     let mut terms = Vec::new();
     while let Some(operator) = cdr.next() {
         let rhs = cdr.next().unwrap();
-        let rhs_r = rhs.as_rule();
         let rhs = Node::from_pair(rhs);
         let op = Operator::from_pair(operator);
         terms.push((op, rhs));
@@ -730,5 +768,97 @@ mod test {
     #[test]
     fn parse_addresses() {
         assert_eq!(Node::parse("&foo"), Ok(Node::Address("foo".into())));
+    }
+
+    #[test]
+    fn parse_calls() {
+        use Node::Number;
+
+        let blah = Call {
+            name: "blah".into(),
+            args: vec![],
+        };
+
+        // Can Node parse a call?
+        assert_eq!(Node::parse("blah()"), Ok(Node::Call(blah.clone())));
+
+        // Can Statement parse a call?
+        assert_eq!(Statement::parse("blah();"), Ok(Statement::Call(blah)));
+
+        // Calls with args
+        assert_eq!(
+            Call::parse("blah(1, 2)"),
+            Ok(Call {
+                name: "blah".into(),
+                args: vec![Rvalue::Expr(Number(1)), Rvalue::Expr(Number(2))]
+            })
+        );
+
+        // Calls with strings
+        assert_eq!(
+            Call::parse("blah(\"foo\", 2)"),
+            Ok(Call {
+                name: "blah".into(),
+                args: vec![Rvalue::String("foo".into()), Rvalue::Expr(Number(2))]
+            })
+        );
+    }
+
+    #[test]
+    fn parse_return() {
+        assert_eq!(
+            Statement::parse("return;"),
+            Ok(Statement::Return(Return(None)))
+        );
+
+        assert_eq!(
+            Statement::parse("return 17;"),
+            Ok(Statement::Return(Return(Some(Node::Number(17)))))
+        );
+    }
+
+    #[test]
+    fn parse_assignment() {
+        assert_eq!(
+            Statement::parse("foo = 7;"),
+            Ok(Statement::Assignment(Assignment {
+                lvalue: Lvalue::Name("foo".into()),
+                rvalue: Rvalue::Expr(Node::Number(7))
+            }))
+        );
+
+        assert_eq!(
+            Assignment::parse("foo[45] = 7"),
+            Ok(Assignment {
+                lvalue: Lvalue::ArrayRef(ArrayRef {
+                    name: "foo".into(),
+                    subscript: Node::Number(45).into(),
+                }),
+                rvalue: Rvalue::Expr(Node::Number(7))
+            })
+        );
+    }
+
+    #[test]
+    fn parse_var_decl() {
+        assert_eq!(
+            Statement::parse("var blah;"),
+            Ok(Statement::VarDecl(VarDecl {
+                name: "blah".into(),
+                typename: None,
+                size: None,
+                initial: None,
+            }))
+        );
+
+        assert_eq!(
+            VarDecl::parse("var blah:Foo[7] = 35"),
+            Ok(VarDecl {
+                name: "blah".into(),
+                typename: Some("Foo".into()),
+                size: Some(7),
+                initial: Some(Node::Number(35)),
+            })
+        );
     }
 }
