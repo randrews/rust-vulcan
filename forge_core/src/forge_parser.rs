@@ -128,6 +128,7 @@ impl<T: AstNode> Parseable for T {
 impl AstNode for Declaration {
     const RULE: Rule = Rule::declaration;
     fn from_pair(pair: Pair) -> Self {
+        let pair = pair.first();
         match pair.as_rule() {
             Rule::function => Self::Function(Function::from_pair(pair)),
             Rule::global => Self::Global(Global::from_pair(pair)),
@@ -259,12 +260,15 @@ impl AstNode for Function {
             .map(Argname::from_pair)
             .collect();
 
+        let body = Block::from_pair(inner.next().unwrap());
+
         Self {
             name,
             org,
             typename,
             inline,
             args,
+            body,
         }
     }
 }
@@ -374,10 +378,28 @@ impl AstNode for VarDecl {
 
 ///////////////////////////////////////////////////////////////////////////////////////////
 
+impl AstNode for Block {
+    const RULE: Rule = Rule::block;
+
+    fn from_pair(pair: Pair) -> Self {
+        Self(pair.into_inner().map(Statement::from_pair).collect())
+    }
+}
+
+///////////////////////////////////////////////////////////////////////////////////////////
+
 impl AstNode for Conditional {
     const RULE: Rule = Rule::conditional;
     fn from_pair(pair: Pair) -> Self {
-        todo!()
+        let mut inner = pair.into_inner();
+        let condition = Node::from_pair(inner.next().unwrap());
+        let body = Block::from_pair(inner.next().unwrap());
+        let alternative = inner.next().map(Block::from_pair);
+        Self {
+            condition,
+            body,
+            alternative,
+        }
     }
 }
 
@@ -386,7 +408,11 @@ impl AstNode for Conditional {
 impl AstNode for WhileLoop {
     const RULE: Rule = Rule::while_loop;
     fn from_pair(pair: Pair) -> Self {
-        todo!()
+        let mut inner = pair.into_inner();
+        Self {
+            condition: Node::from_pair(inner.next().unwrap()),
+            body: Block::from_pair(inner.next().unwrap()),
+        }
     }
 }
 
@@ -395,7 +421,13 @@ impl AstNode for WhileLoop {
 impl AstNode for RepeatLoop {
     const RULE: Rule = Rule::repeat_loop;
     fn from_pair(pair: Pair) -> Self {
-        todo!()
+        let mut inner = pair.into_inner().peekable();
+        let count = Node::from_pair(inner.next().unwrap());
+        let name = inner
+            .next_if_rule(Rule::name)
+            .map(|p| String::from(p.as_str()));
+        let body = Block::from_pair(inner.next().unwrap());
+        Self { count, name, body }
     }
 }
 
@@ -477,6 +509,22 @@ impl AstNode for ArrayRef {
             name,
             subscript: subscript.into(),
         }
+    }
+}
+
+///////////////////////////////////////////////////////////////////////////////////////////
+
+impl AstNode for Program {
+    const RULE: Rule = Rule::program;
+    fn from_pair(pair: Pair) -> Self {
+        // Program captures EOI, to make sure that it's parsing the entire stream. We need to
+        // ignore that though:
+        Self(
+            pair.into_inner()
+                .filter(|p| p.as_rule() != Rule::EOI)
+                .map(Declaration::from_pair)
+                .collect(),
+        )
     }
 }
 
@@ -614,6 +662,7 @@ mod test {
                 org: None,
                 typename: None,
                 args: vec![],
+                body: Block(vec![]),
             })
         );
         assert_eq!(
@@ -633,6 +682,7 @@ mod test {
                         typename: None
                     }
                 ],
+                body: Block(vec![]),
             })
         );
         assert_eq!(
@@ -652,34 +702,27 @@ mod test {
                         typename: None
                     }
                 ],
+                body: Block(vec![]),
             })
         );
+
+        let func = Function {
+            name: "foo".into(),
+            inline: true,
+            org: Some(0x400),
+            typename: None,
+            args: vec![Argname {
+                name: "a".into(),
+                typename: None,
+            }],
+            body: Block(vec![]),
+        };
+
         assert_eq!(
             Function::parse("fn foo<inline, org=0x400>(a) {}"),
-            Ok(Function {
-                name: "foo".into(),
-                inline: true,
-                org: Some(0x400),
-                typename: None,
-                args: vec![Argname {
-                    name: "a".into(),
-                    typename: None
-                },],
-            })
+            Ok(func.clone())
         );
-        assert_eq!(
-            Function::parse("fn foo<org=0x400, inline>(a) {}"),
-            Ok(Function {
-                name: "foo".into(),
-                inline: true,
-                org: Some(0x400),
-                typename: None,
-                args: vec![Argname {
-                    name: "a".into(),
-                    typename: None
-                },],
-            })
-        );
+        assert_eq!(Function::parse("fn foo<org=0x400, inline>(a) {}"), Ok(func));
     }
 
     #[test]
@@ -860,5 +903,86 @@ mod test {
                 initial: Some(Node::Number(35)),
             })
         );
+    }
+
+    #[test]
+    fn parse_block() {
+        assert_eq!(
+            Block::parse("{ foo(); bar(); }"),
+            Ok(Block(vec![
+                Statement::Call(Call {
+                    name: "foo".into(),
+                    args: vec![]
+                }),
+                Statement::Call(Call {
+                    name: "bar".into(),
+                    args: vec![]
+                }),
+            ]))
+        );
+    }
+
+    #[test]
+    fn parse_conditional() {
+        assert_eq!(
+            Statement::parse("if(cond) { foo(); }"),
+            Ok(Statement::Conditional(Conditional {
+                condition: Node::parse("cond").unwrap(),
+                body: Block::parse("{ foo(); }").unwrap(),
+                alternative: None
+            }))
+        );
+
+        assert_eq!(
+            Statement::parse("if(cond) { foo(); } else { bar(); }"),
+            Ok(Statement::Conditional(Conditional {
+                condition: Node::parse("cond").unwrap(),
+                body: Block::parse("{ foo(); }").unwrap(),
+                alternative: Some(Block::parse("{ bar(); }").unwrap()),
+            }))
+        );
+    }
+
+    #[test]
+    fn parse_while_loops() {
+        assert_eq!(
+            Statement::parse("while(cond) { foo(); }"),
+            Ok(Statement::WhileLoop(WhileLoop {
+                condition: Node::parse("cond").unwrap(),
+                body: Block::parse("{ foo(); }").unwrap(),
+            }))
+        );
+    }
+
+    #[test]
+    fn parse_repeat_loops() {
+        assert_eq!(
+            Statement::parse("repeat(10) x { foo(x); }"),
+            Ok(Statement::RepeatLoop(RepeatLoop {
+                count: Node::Number(10),
+                name: Some("x".into()),
+                body: Block::parse("{ foo(x); }").unwrap(),
+            }))
+        );
+
+        assert_eq!(
+            Statement::parse("repeat(10) { foo(); }"),
+            Ok(Statement::RepeatLoop(RepeatLoop {
+                count: Node::Number(10),
+                name: None,
+                body: Block::parse("{ foo(); }").unwrap(),
+            }))
+        );
+    }
+
+    #[test]
+    fn parse_program() {
+        assert_eq!(
+            Program::parse("global foo; struct Point { x, y }"),
+            Ok(Program(vec![
+                Declaration::parse("global foo;").unwrap(),
+                Declaration::parse("struct Point { x, y }").unwrap(),
+            ]))
+        )
     }
 }

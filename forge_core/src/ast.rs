@@ -1,4 +1,7 @@
-#[derive(Eq, PartialEq, Clone, Debug)]
+#[derive(PartialEq, Clone, Debug)]
+pub struct Program(pub Vec<Declaration>);
+
+#[derive(PartialEq, Clone, Debug)]
 pub enum Declaration {
     Function(Function),
     Global(Global),
@@ -39,24 +42,23 @@ pub struct Const {
     pub string: Option<String>,
 }
 
-#[derive(Eq, PartialEq, Clone, Debug)]
+#[derive(PartialEq, Clone, Debug)]
+pub struct Block(pub Vec<Statement>);
+
+#[derive(PartialEq, Clone, Debug)]
 pub struct Function {
     pub name: String,
     pub org: Option<i32>,
     pub typename: Option<String>,
     pub inline: bool,
     pub args: Vec<Argname>,
+    pub body: Block,
 }
 
 #[derive(Eq, PartialEq, Clone, Debug)]
 pub struct Argname {
     pub name: String,
     pub typename: Option<String>,
-}
-
-#[derive(PartialEq, Clone, Debug)]
-pub struct Block {
-    pub statements: Vec<Statement>,
 }
 
 #[derive(PartialEq, Clone, Debug)]
@@ -105,14 +107,25 @@ pub struct VarDecl {
     pub initial: Option<Node>,
 }
 
-#[derive(Eq, PartialEq, Clone, Debug)]
-pub struct Conditional {}
+#[derive(PartialEq, Clone, Debug)]
+pub struct Conditional {
+    pub condition: Node,
+    pub body: Block,
+    pub alternative: Option<Block>,
+}
 
-#[derive(Eq, PartialEq, Clone, Debug)]
-pub struct WhileLoop {}
+#[derive(PartialEq, Clone, Debug)]
+pub struct WhileLoop {
+    pub condition: Node,
+    pub body: Block,
+}
 
-#[derive(Eq, PartialEq, Clone, Debug)]
-pub struct RepeatLoop {}
+#[derive(PartialEq, Clone, Debug)]
+pub struct RepeatLoop {
+    pub count: Node,
+    pub name: Option<String>,
+    pub body: Block,
+}
 
 /// One of the five arithmetical operators
 #[derive(Debug, PartialEq, Copy, Clone)]
