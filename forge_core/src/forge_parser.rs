@@ -22,6 +22,7 @@ lazy_static::lazy_static! {
             .op(Op::infix(lshift, Left) | Op::infix(rshift, Left))
             .op(Op::infix(add, Left) | Op::infix(sub, Left))
             .op(Op::infix(mul, Left) | Op::infix(div, Left) | Op::infix(modulus, Left))
+            .op(Op::prefix(Rule::prefix))
     };
 }
 
@@ -467,6 +468,7 @@ impl AstNode for Node {
                     rule => unreachable!("Expr::parse expected atom, found {:?}", rule),
                 }
             })
+            .map_prefix(|op, rhs| Node::Prefix(Prefix::from_pair(op), rhs.into()))
             .map_infix(|lhs, op, rhs| Node::Expr(lhs.into(), Operator::from_pair(op), rhs.into()))
             .parse(pair.into_inner())
     }
@@ -496,6 +498,18 @@ impl AstNode for Operator {
             "!=" => Self::Ne,
             "<<" => Self::Lshift,
             ">>" => Self::Rshift,
+            _ => unreachable!(),
+        }
+    }
+}
+
+impl AstNode for Prefix {
+    const RULE: Rule = Rule::prefix;
+
+    fn from_pair(pair: Pair) -> Self {
+        match pair.as_str() {
+            "!" => Self::Not,
+            "-" => Self::Neg,
             _ => unreachable!(),
         }
     }
@@ -765,6 +779,7 @@ mod test {
             Ok(Expr(Expr(2.into(), Mul, 3.into()).into(), Add, 4.into()))
         );
 
+        // Various operators
         assert_eq!(
             Node::from_str("1 || 2 && 3"),
             Ok(Expr(1.into(), Or, Expr(2.into(), And, 3.into()).into()))
@@ -797,6 +812,23 @@ mod test {
         assert_eq!(
             Node::from_str("1 << 6"),
             Ok(Expr(1.into(), Lshift, 6.into()))
+        );
+
+        assert_eq!(
+            Node::from_str("!a - -3"),
+            Ok(Expr(
+                Prefix(crate::ast::Prefix::Not, Name("a".into()).into()).into(),
+                Sub,
+                Prefix(crate::ast::Prefix::Neg, 3.into()).into()
+            ))
+        );
+
+        assert_eq!(
+            Node::from_str("-(4 * 5)"),
+            Ok(Prefix(
+                crate::ast::Prefix::Neg,
+                Expr(4.into(), Mul, 5.into()).into()
+            ))
         );
 
         // Parens

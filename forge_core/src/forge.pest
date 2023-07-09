@@ -5,6 +5,8 @@ name_char = { ASCII_ALPHA_LOWER | ASCII_ALPHA_UPPER | "_" | "$" }
 name = @{ name_char ~ (name_char | ASCII_DIGIT)* }
 
 dec_number = @{ ASCII_NONZERO_DIGIT ~ ASCII_DIGIT* }
+// Literal numbers use this rule, but in exprs it's the prefix operator. The difference
+// is that some things (const initialization) only accept literal numbers.
 neg_number = ${ "-" ~ dec_number }
 hex_number = ${ "0x" ~ ASCII_HEX_DIGIT+ }
 bin_number = ${ "0b" ~ ASCII_BIN_DIGIT+ }
@@ -38,6 +40,7 @@ eq = { "==" }
 ne = { "!=" }
 lshift = { "<<" }
 rshift = { ">>" }
+prefix = { "-" | "!" }
 
 operator = _{
  add | sub |
@@ -47,7 +50,7 @@ operator = _{
  lshift | rshift |
  lt | le | gt | ge |
  eq | ne }
-expr = { val ~ (operator ~ val)* }
+expr = { prefix? ~ val ~ (operator ~ prefix? ~ val)* }
 val = { // These are what get evaluated and left on the stack:
   number | // Literal numbers
   ("(" ~ expr ~ ")") | // Nested parenthesized exprs

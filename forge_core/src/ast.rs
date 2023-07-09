@@ -38,7 +38,7 @@ pub struct Member {
 #[derive(Eq, PartialEq, Clone, Debug)]
 pub struct Const {
     pub name: String,
-    pub value: Option<i32>,
+    pub value: Option<i32>, // todo: this should take a Node
     pub string: Option<String>,
 }
 
@@ -150,6 +150,12 @@ pub enum Operator {
     Rshift,
 }
 
+#[derive(Debug, PartialEq, Copy, Clone)]
+pub enum Prefix {
+    Neg,
+    Not,
+}
+
 #[derive(PartialEq, Clone, Debug)]
 pub enum Node {
     Number(i32),
@@ -158,6 +164,7 @@ pub enum Node {
     Name(String),
     Address(String),
     Expr(BoxNode, Operator, BoxNode),
+    Prefix(Prefix, BoxNode),
 }
 
 impl From<i32> for Node {
