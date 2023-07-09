@@ -9,36 +9,36 @@ pub enum Declaration {
     Const(Const),
 }
 
-#[derive(Eq, PartialEq, Clone, Debug, Default)]
+#[derive(PartialEq, Clone, Debug, Default)]
 pub struct Varinfo {
     pub typename: Option<String>,
-    pub size: Option<i32>,
+    pub size: Option<Node>,
 }
 
-#[derive(Eq, PartialEq, Clone, Debug)]
+#[derive(PartialEq, Clone, Debug)]
 pub struct Global {
     pub name: String,
     pub typename: Option<String>,
-    pub size: Option<i32>,
+    pub size: Option<Node>,
 }
 
-#[derive(Eq, PartialEq, Clone, Debug)]
+#[derive(PartialEq, Clone, Debug)]
 pub struct Struct {
     pub name: String,
     pub members: Vec<Member>,
 }
 
-#[derive(Eq, PartialEq, Clone, Debug)]
+#[derive(PartialEq, Clone, Debug)]
 pub struct Member {
     pub name: String,
     pub typename: Option<String>,
-    pub size: Option<i32>,
+    pub size: Option<Node>,
 }
 
-#[derive(Eq, PartialEq, Clone, Debug)]
+#[derive(PartialEq, Clone, Debug)]
 pub struct Const {
     pub name: String,
-    pub value: Option<i32>, // todo: this should take a Node
+    pub value: Option<Node>,
     pub string: Option<String>,
 }
 
@@ -103,7 +103,7 @@ pub enum Rvalue {
 pub struct VarDecl {
     pub name: String,
     pub typename: Option<String>,
-    pub size: Option<i32>,
+    pub size: Option<Node>,
     pub initial: Option<Node>,
 }
 

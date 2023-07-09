@@ -66,9 +66,7 @@ impl<'a> PairExt for Pair<'a> {
     fn into_number(self) -> i32 {
         let first = self.into_inner().next().unwrap();
         match first.as_rule() {
-            Rule::dec_number | Rule::dec_zero | Rule::neg_number => {
-                i32::from_str(first.as_str()).unwrap()
-            }
+            Rule::dec_number | Rule::dec_zero => i32::from_str(first.as_str()).unwrap(),
             Rule::hex_number => i32::from_str_radix(first.as_str().get(2..).unwrap(), 16).unwrap(),
             Rule::bin_number => i32::from_str_radix(first.as_str().get(2..).unwrap(), 2).unwrap(),
             Rule::oct_number => i32::from_str_radix(first.as_str().get(2..).unwrap(), 8).unwrap(),
@@ -177,7 +175,7 @@ impl AstNode for Varinfo {
             .map(|t| String::from(t.first().as_str()));
         let size = children
             .next_if_rule(Rule::size)
-            .map(|s| s.first().into_number());
+            .map(|s| Node::from_pair(s.first()));
         Self { typename, size }
     }
 }
@@ -241,10 +239,10 @@ impl AstNode for Const {
                 string: Some(value.into_quoted_string()),
                 value: None,
             },
-            Rule::number => Const {
+            Rule::expr => Const {
                 name,
                 string: None,
-                value: Some(value.into_number()),
+                value: Some(Node::from_pair(value)),
             },
             _ => unreachable!(),
         }
@@ -576,7 +574,7 @@ mod test {
             Ok(Global {
                 name: "foo".into(),
                 typename: Some("Thing".into()),
-                size: Some(10)
+                size: Some(Node::Number(10))
             })
         );
         assert_eq!(
@@ -584,7 +582,7 @@ mod test {
             Ok(Global {
                 name: "foo".into(),
                 typename: None,
-                size: Some(10)
+                size: Some(Node::Number(10))
             })
         );
     }
@@ -595,7 +593,7 @@ mod test {
             Const::from_str("const a = 123;"),
             Ok(Const {
                 name: "a".into(),
-                value: Some(123),
+                value: Some(Node::Number(123)),
                 string: None
             })
         );
@@ -603,7 +601,7 @@ mod test {
             Const::from_str("const a = 0xaa;"),
             Ok(Const {
                 name: "a".into(),
-                value: Some(0xaa),
+                value: Some(Node::Number(0xaa)),
                 string: None
             })
         );
@@ -611,7 +609,10 @@ mod test {
             Const::from_str("const a = -7;"),
             Ok(Const {
                 name: "a".into(),
-                value: Some(-7),
+                value: Some(Node::Prefix(
+                    crate::ast::Prefix::Neg,
+                    Node::Number(7).into()
+                )),
                 string: None
             })
         );
@@ -653,7 +654,7 @@ mod test {
                 members: vec![Member {
                     name: "bar".into(),
                     typename: None,
-                    size: Some(100)
+                    size: Some(Node::Number(100))
                 },]
             })
         );
@@ -665,7 +666,7 @@ mod test {
                 members: vec![Member {
                     name: "bar".into(),
                     typename: Some("Thing".into()),
-                    size: Some(100)
+                    size: Some(Node::Number(100))
                 },]
             })
         );
@@ -963,7 +964,7 @@ mod test {
             Ok(VarDecl {
                 name: "blah".into(),
                 typename: Some("Foo".into()),
-                size: Some(7),
+                size: Some(Node::Number(7)),
                 initial: Some(Node::Number(35)),
             })
         );
