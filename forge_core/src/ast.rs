@@ -135,6 +135,19 @@ pub enum Operator {
     Mul,
     Div,
     Mod,
+    And,
+    Or,
+    BitAnd,
+    BitOr,
+    Xor,
+    Lt,
+    Le,
+    Gt,
+    Ge,
+    Eq,
+    Ne,
+    Lshift,
+    Rshift,
 }
 
 #[derive(PartialEq, Clone, Debug)]

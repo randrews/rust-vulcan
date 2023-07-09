@@ -25,8 +25,28 @@ sub = { "-" }
 mul = { "*" }
 div = { "/" }
 modulus = { "%" }
+log_and = { "&&" }
+log_or = { "||" }
+bit_and = { "&" }
+bit_or = { "|" }
+xor = { "^" }
+lt = { "<" }
+le = { "<=" }
+gt = { ">" }
+ge = { ">=" }
+eq = { "==" }
+ne = { "!=" }
+lshift = { "<<" }
+rshift = { ">>" }
 
-operator = _{ add | sub | mul | div | modulus }
+operator = _{
+ add | sub |
+ mul | div | modulus |
+ log_and | log_or |
+ bit_and | bit_or | xor |
+ lshift | rshift |
+ lt | le | gt | ge |
+ eq | ne }
 expr = { val ~ (operator ~ val)* }
 val = { // These are what get evaluated and left on the stack:
   number | // Literal numbers

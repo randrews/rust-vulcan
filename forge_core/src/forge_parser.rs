@@ -12,6 +12,14 @@ lazy_static::lazy_static! {
 
         // Precedence is defined lowest to highest
         PrattParser::new()
+            .op(Op::infix(log_or, Left))
+            .op(Op::infix(log_and, Left))
+            .op(Op::infix(bit_or, Left))
+            .op(Op::infix(xor, Left))
+            .op(Op::infix(bit_and, Left))
+            .op(Op::infix(eq, Left) | Op::infix(ne, Left))
+            .op(Op::infix(gt, Left) | Op::infix(ge, Left) | Op::infix(lt, Left) | Op::infix(le, Left))
+            .op(Op::infix(lshift, Left) | Op::infix(rshift, Left))
             .op(Op::infix(add, Left) | Op::infix(sub, Left))
             .op(Op::infix(mul, Left) | Op::infix(div, Left) | Op::infix(modulus, Left))
     };
@@ -475,6 +483,19 @@ impl AstNode for Operator {
             "*" => Self::Mul,
             "/" => Self::Div,
             "%" => Self::Mod,
+            "&&" => Self::And,
+            "||" => Self::Or,
+            "&" => Self::BitAnd,
+            "|" => Self::BitOr,
+            "^" => Self::Xor,
+            ">" => Self::Gt,
+            ">=" => Self::Ge,
+            "<" => Self::Lt,
+            "<=" => Self::Le,
+            "==" => Self::Eq,
+            "!=" => Self::Ne,
+            "<<" => Self::Lshift,
+            ">>" => Self::Rshift,
             _ => unreachable!(),
         }
     }
@@ -742,6 +763,40 @@ mod test {
         assert_eq!(
             Node::from_str("2 * 3 + 4"),
             Ok(Expr(Expr(2.into(), Mul, 3.into()).into(), Add, 4.into()))
+        );
+
+        assert_eq!(
+            Node::from_str("1 || 2 && 3"),
+            Ok(Expr(1.into(), Or, Expr(2.into(), And, 3.into()).into()))
+        );
+
+        assert_eq!(
+            Node::from_str("2 && &blah"),
+            Ok(Expr(2.into(), And, Address("blah".into()).into()))
+        );
+
+        assert_eq!(
+            Node::from_str("2 & &blah"),
+            Ok(Expr(2.into(), BitAnd, Address("blah".into()).into()))
+        );
+
+        assert_eq!(
+            Node::from_str("1 | 2 ^ 3"),
+            Ok(Expr(1.into(), BitOr, Expr(2.into(), Xor, 3.into()).into()))
+        );
+
+        assert_eq!(
+            Node::from_str("x == y > z"),
+            Ok(Expr(
+                Name("x".into()).into(),
+                Eq,
+                Expr(Name("y".into()).into(), Gt, Name("z".into()).into()).into()
+            ))
+        );
+
+        assert_eq!(
+            Node::from_str("1 << 6"),
+            Ok(Expr(1.into(), Lshift, 6.into()))
         );
 
         // Parens
