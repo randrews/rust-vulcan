@@ -144,7 +144,7 @@ pub enum Node {
     ArrayRef(ArrayRef),
     Name(String),
     Address(String),
-    Expr(BoxNode, Vec<(Operator, Node)>),
+    Expr(BoxNode, Operator, BoxNode),
 }
 
 impl From<i32> for Node {

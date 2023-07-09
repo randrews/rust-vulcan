@@ -20,10 +20,14 @@ assignment = { lvalue ~ "=" ~ rvalue }
 lvalue = { arrayref | name }
 rvalue = { expr | string }
 
-sign = { "+" | "-" }
-term_op = { "*" | "/" | "%" }
-expr = { term ~ (sign ~ term)* }
-term = { val ~ (term_op ~ val)* }
+add = { "+" }
+sub = { "-" }
+mul = { "*" }
+div = { "/" }
+modulus = { "%" }
+
+operator = _{ add | sub | mul | div | modulus }
+expr = { val ~ (operator ~ val)* }
 val = { // These are what get evaluated and left on the stack:
   number | // Literal numbers
   ("(" ~ expr ~ ")") | // Nested parenthesized exprs
