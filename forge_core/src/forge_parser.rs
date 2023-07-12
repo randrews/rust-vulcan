@@ -140,6 +140,10 @@ impl<T: AstNode> Parseable for T {
     }
 }
 
+pub fn parse(src: &str) -> Result<Program, ParseError> {
+    Program::from_str(src)
+}
+
 ///////////////////////////////////////////////////////////////////////////////////////////
 
 impl AstNode for Declaration {
@@ -469,6 +473,12 @@ impl AstNode for Node {
             .map_prefix(|op, rhs| Node::Prefix(Prefix::from_pair(op), rhs.into()))
             .map_infix(|lhs, op, rhs| Node::Expr(lhs.into(), Operator::from_pair(op), rhs.into()))
             .parse(pair.into_inner())
+    }
+}
+
+impl Node {
+    pub(crate) fn parse(src: &str) -> Result<Self, ParseError> {
+        Self::from_str(src)
     }
 }
 

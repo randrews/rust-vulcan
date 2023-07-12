@@ -3,4 +3,5 @@ extern crate pest;
 extern crate pest_derive;
 
 mod ast;
+mod compiler;
 mod forge_parser;
