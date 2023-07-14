@@ -1,5 +1,5 @@
 use crate::ast::*;
-use crate::forge_parser::parse;
+
 use std::collections::btree_map::Entry::Vacant;
 use std::collections::{BTreeMap, HashMap};
 use std::fmt::{Display, Formatter};
@@ -37,9 +37,10 @@ pub enum Variable {
 ///
 /// The stack frame is managed by the function through a global pointer called "frame". When
 /// the function is called, it can assume that all memory after "frame" is free for use (this
-/// isn't actually true because you can blow out the stack, but within reason it is). So the
-/// preamble code needs to increment frame by the current frame size and then returns need to
-/// decrement it back. Locals can be found by subtracting some offset from the frame pointer.
+/// isn't actually true because you can blow out the stack, but within reason it is). So when
+/// you make a call to another function, you need to increment frame by the current frame size,
+/// and then after the other function has returned, decrement it back so that frame again points
+/// at your stack frame. Locals can be found by adding some offset from the frame pointer.
 #[derive(Clone, PartialEq, Debug, Default)]
 pub struct Signature {
     pub label: String,
@@ -52,8 +53,8 @@ impl Signature {
     /// Add a name to the local scope, which:
     /// - Increases the size of the stack frame by that much
     /// - Records the offset into the local stack frame where that variable is stored
-    fn add_local(&mut self, name: String) -> Result<(), CompileError> {
-        if let Vacant(e) = self.local_scope.entry(name.clone()) {
+    fn add_local(&mut self, name: &str) -> Result<(), CompileError> {
+        if let Vacant(e) = self.local_scope.entry(name.into()) {
             e.insert(Variable::Local(self.frame_size));
             self.frame_size += 3; // todo: variously-sized structs
             Ok(())
@@ -100,6 +101,20 @@ impl State {
     /// Return whether a name exists in the global scope already
     fn defined(&self, name: &str) -> bool {
         self.global_scope.contains_key(name)
+    }
+
+    fn add_global<F: Fn(&mut State) -> Variable>(
+        &mut self,
+        name: &str,
+        val: F,
+    ) -> Result<(), CompileError> {
+        if self.defined(name) {
+            Err(CompileError(0, 0, format!("name {} already defined", name)))
+        } else {
+            let val = val(self);
+            self.global_scope.insert(name.into(), val);
+            Ok(())
+        }
     }
 }
 
@@ -160,37 +175,31 @@ impl Compilable for Function {
             if arg.typename.is_some() {
                 todo!("Structs are not yet supported")
             }
-            sig.add_local(arg.name)?
+            sig.add_local(&arg.name)?
         }
 
         // Compile each statement: todo this should be broken into several different Compilables
         for stmt in self.body.0 {
             match stmt {
                 Statement::Return(_) => {}
-                Statement::Assignment(Assignment {
-                    lvalue: _,
-                    rvalue: Rvalue::String(_),
-                }) => todo!(),
-                Statement::Assignment(Assignment {
-                    lvalue,
-                    rvalue: Rvalue::Expr(rvalue),
-                }) => {
-                    if let Ok(val) = eval_const(rvalue.clone(), &state.global_scope) {
-                        sig.emit_arg("push", val)
-                    } else {
-                        eval_expr(rvalue, &state.global_scope, &mut sig)?;
-                    }
-                    eval_lvalue(lvalue, &state.global_scope, &mut sig)?;
-                    sig.emit("storew");
-                }
+                Statement::Assignment(assign) => assign.process(state, Some(&mut sig))?,
                 Statement::Call(_) => todo!(),
                 Statement::VarDecl(v) => {
                     if v.typename.is_some() || v.size.is_some() {
                         todo!("Structs and arrays are not yet supported")
                     }
-                    sig.add_local(v.name)?;
-                    if v.initial.is_some() {
-                        todo!("Initializers are not yet supported")
+                    if let Some(initial) = v.initial {
+                        // If it's got an initial value, we have to compile that before we add
+                        // the name to scope, or else UB will ensue if it refers to itself:
+                        initial.process(state, Some(&mut sig))?;
+                        // But then add it to scope and assign:
+                        sig.add_local(&v.name)?;
+                        // We'll just whip up an lvalue real quick...
+                        Lvalue::Name(v.name).process(state, Some(&mut sig))?;
+                        sig.emit("storew"); // And store the initial value there
+                    } else {
+                        // Otherwise, just add it to scope and leave garbage in there:
+                        sig.add_local(&v.name)?;
                     }
                 }
                 Statement::Conditional(_) | Statement::WhileLoop(_) | Statement::RepeatLoop(_) => {
@@ -199,16 +208,10 @@ impl Compilable for Function {
             }
         }
 
-        if let Vacant(e) = state.functions.entry(self.name.clone()) {
-            e.insert(sig);
-            Ok(())
-        } else {
-            Err(CompileError(
-                0,
-                0,
-                format!("Function {} already defined", self.name),
-            ))
-        }
+        state.add_global(&self.name, |_| Variable::Label(sig.label.clone()))?;
+        // This can't fail because if it were a dupe name, the one before it would fail
+        state.functions.insert(self.name.clone(), sig);
+        Ok(())
     }
 }
 
@@ -223,136 +226,171 @@ fn lookup<'a>(name: &str, global_scope: &'a Scope, local_scope: &'a Scope) -> Op
     }
 }
 
+///////////////////////////////////////////////////////////
+
+impl Compilable for Assignment {
+    fn process(self, state: &mut State, sig: Option<&mut Signature>) -> Result<(), CompileError> {
+        let Assignment { lvalue, rvalue } = self;
+        let sig = sig.expect("Assignment outside function");
+
+        match rvalue {
+            Rvalue::Expr(rvalue) => {
+                rvalue.process(state, Some(sig))?;
+                lvalue.process(state, Some(sig))?;
+                sig.emit("storew");
+            }
+            Rvalue::String(_) => todo!(),
+        }
+        Ok(())
+    }
+}
+
+///////////////////////////////////////////////////////////
+
 /// Evaluate an lvalue and leave its address on the stack (ready to be consumed by storew)
-/// todo this can be an impl Compilable, just straight up
-fn eval_lvalue(
-    lvalue: Lvalue,
-    global_scope: &Scope,
-    sig: &mut Signature,
-) -> Result<(), CompileError> {
-    match lvalue {
-        Lvalue::ArrayRef(_) => todo!("Arrays are not implemented yet"),
-        Lvalue::Name(name) => {
-            if let Some(var) = lookup(&name, global_scope, &sig.local_scope) {
-                match var {
-                    Variable::Literal(_) => {
-                        Err(CompileError(0, 0, format!("Invalid lvalue {}", name)))
-                    }
-                    Variable::Label(label) => {
-                        let label = label.clone();
-                        sig.emit_arg("push", label);
-                        Ok(())
-                    }
-                    Variable::Local(offset) => {
-                        let offset = *offset;
-                        sig.emit_arg("loadw", "frame");
-                        if offset > 0 {
-                            sig.emit_arg("sub", offset);
+impl Compilable for Lvalue {
+    fn process(self, state: &mut State, sig: Option<&mut Signature>) -> Result<(), CompileError> {
+        let global_scope = &state.global_scope;
+        let mut sig = sig.expect("lvalue outside a function");
+        match self {
+            Lvalue::ArrayRef(_) => todo!("Arrays are not implemented yet"),
+            Lvalue::Name(name) => {
+                if let Some(var) = lookup(&name, global_scope, &sig.local_scope) {
+                    match var {
+                        Variable::Literal(_) => {
+                            Err(CompileError(0, 0, format!("Invalid lvalue {}", name)))
                         }
-                        Ok(())
+                        Variable::Label(label) => {
+                            let label = label.clone();
+                            sig.emit_arg("push", label);
+                            Ok(())
+                        }
+                        Variable::Local(offset) => {
+                            let offset = *offset;
+                            sig.emit_arg("loadw", "frame");
+                            if offset > 0 {
+                                sig.emit_arg("add", offset);
+                            }
+                            Ok(())
+                        }
                     }
+                } else {
+                    Err(CompileError(0, 0, format!("Unknown name {}", name)))
                 }
-            } else {
-                Err(CompileError(0, 0, format!("Unknown name {}", name)))
             }
         }
     }
 }
 
+///////////////////////////////////////////////////////////
+
 /// Evaluate an expression in the context of a local scope. The runtime brother to eval_const.
 /// This recursively evaluates a Node and leaves its value on the stack.
-/// todo this could also just be the impl Compilable for Node.
-fn eval_expr(expr: Node, global_scope: &Scope, sig: &mut Signature) -> Result<(), CompileError> {
-    match expr {
-        Node::Number(n) => {
-            // Numbers are just pushed as literals
-            sig.body.push(format!("push {}", n));
-            Ok(())
+impl Compilable for Node {
+    fn process(self, state: &mut State, sig: Option<&mut Signature>) -> Result<(), CompileError> {
+        let mut sig = sig.expect("Non-const expression outside a function");
+        let global_scope = &state.global_scope;
+
+        // First, a sanity check: try and eval_const this. If it's something incredibly basic
+        // that just becomes an i32, then we don't need to do anything else:
+        if let Ok(val) = eval_const(self.clone(), &state.global_scope) {
+            sig.emit_arg("push", val);
+            return Ok(());
         }
-        Node::Call(_) | Node::ArrayRef(_) | Node::Address(_) => todo!(),
-        Node::Name(name) => match lookup(&name, global_scope, &sig.local_scope) {
-            // Names are treated differently depending on what they are
-            Some(Variable::Literal(val)) => {
-                // Names of constants are just that number
-                sig.emit_arg("push", *val);
+
+        // Okay, looks like we need something that's in scope. Let's recurse:
+        match self {
+            Node::Number(n) => {
+                // Numbers are just pushed as literals
+                sig.body.push(format!("push {}", n));
                 Ok(())
             }
-            Some(Variable::Label(label)) => {
-                // Names pointing at labels are loaded (rvalue; for lvalues they aren't)
-                sig.emit_arg("loadw", label.clone());
-                Ok(())
-            }
-            Some(Variable::Local(offset)) => {
-                // Names of locals are subtracted from the frame pointer
-                let offset = *offset;
-                sig.emit("loadw frame");
-                if offset > 0 {
-                    sig.emit_arg("sub", offset);
-                    sig.emit("loadw");
+            Node::Call(_) | Node::ArrayRef(_) | Node::Address(_) => todo!(),
+            Node::Name(name) => match lookup(&name, global_scope, &sig.local_scope) {
+                // Names are treated differently depending on what they are
+                Some(Variable::Literal(val)) => {
+                    // Names of constants are just that number
+                    sig.emit_arg("push", *val);
+                    Ok(())
+                }
+                Some(Variable::Label(label)) => {
+                    // Names pointing at labels are loaded (rvalue; for lvalues they aren't)
+                    sig.emit_arg("loadw", label.clone());
+                    Ok(())
+                }
+                Some(Variable::Local(offset)) => {
+                    // Names of locals are added from the frame pointer
+                    let offset = *offset;
+                    sig.emit("loadw frame");
+                    if offset > 0 {
+                        sig.emit_arg("add", offset);
+                        sig.emit("loadw");
+                    }
+                    Ok(())
+                }
+                None => Err(CompileError(0, 0, format!("Unknown name {}", name))),
+            },
+            Node::Expr(lhs, op, rhs) => {
+                // Recurse on expressions, handling operators
+                lhs.0.process(state, Some(&mut sig))?;
+                rhs.0.process(state, Some(&mut sig))?;
+                match op {
+                    // Basic math
+                    Operator::Add => sig.emit("add"),
+                    Operator::Sub => sig.emit("sub"),
+                    Operator::Mul => sig.emit("mul"),
+                    Operator::Div => sig.emit("div"),
+                    Operator::Mod => sig.emit("mod"),
+                    Operator::And => {
+                        // Vulcan "and" is bitwise, so we need to flag-ify both args to make it logical
+                        sig.emit("gt 0");
+                        sig.emit("swap");
+                        sig.emit("gt 0");
+                        sig.emit("and");
+                    }
+                    Operator::Or => {
+                        // Same as and, flag-ify both args
+                        sig.emit("gt 0");
+                        sig.emit("swap");
+                        sig.emit("gt 0");
+                        sig.emit("or");
+                    }
+                    Operator::BitAnd => sig.emit("and"),
+                    Operator::BitOr => sig.emit("or"),
+                    Operator::Xor => sig.emit("xor"),
+                    Operator::Lt => sig.emit("alt"),
+                    Operator::Le => {
+                        // LE and GE are the inverses of GT and LT (arithmetic versions)
+                        sig.emit("agt");
+                        sig.emit("not");
+                    }
+                    Operator::Gt => sig.emit("agt"),
+                    Operator::Ge => {
+                        sig.emit("alt");
+                        sig.emit("not");
+                    }
+                    Operator::Eq => {
+                        sig.emit("xor");
+                        sig.emit("not");
+                    }
+                    Operator::Ne => sig.emit("xor"),
+                    Operator::Lshift => sig.emit("lshift"),
+                    Operator::Rshift => sig.emit("arshift"),
                 }
                 Ok(())
             }
-            None => Err(CompileError(0, 0, format!("Unknown name {}", name))),
-        },
-        Node::Expr(lhs, op, rhs) => {
-            // Recurse on expressions, handling operators
-            eval_expr(lhs.into(), global_scope, sig)?;
-            eval_expr(rhs.into(), global_scope, sig)?;
-            match op {
-                // Basic math
-                Operator::Add => sig.emit("add"),
-                Operator::Sub => sig.emit("sub"),
-                Operator::Mul => sig.emit("mul"),
-                Operator::Div => sig.emit("div"),
-                Operator::Mod => sig.emit("mod"),
-                Operator::And => {
-                    // Vulcan "and" is bitwise, so we need to flag-ify both args to make it logical
-                    sig.emit("gt 0");
-                    sig.emit("swap");
-                    sig.emit("gt 0");
-                    sig.emit("and");
+            Node::Prefix(prefix, node) => {
+                node.0.process(state, Some(sig))?;
+                match prefix {
+                    Prefix::Neg => {
+                        // To arithmetically negate something, invert and increment (2s complement)
+                        sig.emit("xor -1");
+                        sig.emit("add 1");
+                    }
+                    Prefix::Not => sig.emit("not"),
                 }
-                Operator::Or => {
-                    // Same as and, flag-ify both args
-                    sig.emit("gt 0");
-                    sig.emit("swap");
-                    sig.emit("gt 0");
-                    sig.emit("or");
-                }
-                Operator::BitAnd => sig.emit("and"),
-                Operator::BitOr => sig.emit("or"),
-                Operator::Xor => sig.emit("xor"),
-                Operator::Lt => sig.emit("alt"),
-                Operator::Le => {
-                    // LE and GE are the inverses of GT and LT (arithmetic versions)
-                    sig.emit("agt");
-                    sig.emit("not");
-                }
-                Operator::Gt => sig.emit("agt"),
-                Operator::Ge => {
-                    sig.emit("alt");
-                    sig.emit("not");
-                }
-                Operator::Eq => {
-                    sig.emit("xor");
-                    sig.emit("not");
-                }
-                Operator::Ne => sig.emit("xor"),
-                Operator::Lshift => sig.emit("lshift"),
-                Operator::Rshift => sig.emit("arshift"),
+                Ok(())
             }
-            Ok(())
-        }
-        Node::Prefix(prefix, node) => {
-            eval_expr(node.into(), global_scope, sig)?;
-            match prefix {
-                Prefix::Neg => {
-                    sig.emit("xor -1");
-                    sig.emit("add 1");
-                }
-                Prefix::Not => sig.emit("not"),
-            }
-            Ok(())
         }
     }
 }
@@ -364,18 +402,7 @@ impl Compilable for Global {
         if self.typename.is_some() || self.size.is_some() {
             todo!("Structs and arrays are not yet supported")
         }
-        if state.defined(&self.name) {
-            // todo this is a recurring problem; detecting name collisions. Should be moved up.
-            Err(CompileError(
-                0,
-                0,
-                format!("name {} already defined", self.name),
-            ))
-        } else {
-            let label = state.gensym();
-            state.global_scope.insert(self.name, Variable::Label(label));
-            Ok(())
-        }
+        state.add_global(&self.name, |s| Variable::Label(s.gensym()))
     }
 }
 
@@ -383,22 +410,13 @@ impl Compilable for Global {
 
 impl Compilable for Const {
     fn process(self, state: &mut State, _: Option<&mut Signature>) -> Result<(), CompileError> {
-        if let Some(_) = self.string {
+        if self.string.is_some() {
             todo!("Strings are not yet supported")
         }
 
         if let Some(expr) = self.value {
             let val = eval_const(expr, &state.global_scope)?;
-            if state.defined(self.name.as_str()) {
-                Err(CompileError(
-                    0,
-                    0,
-                    format!("name {} already defined", self.name),
-                ))
-            } else {
-                state.global_scope.insert(self.name, Variable::Literal(val));
-                Ok(())
-            }
+            state.add_global(&self.name, |_| Variable::Literal(val))
         } else {
             unreachable!()
         }
@@ -476,6 +494,7 @@ pub fn eval_const(expr: Node, scope: &Scope) -> Result<i32, CompileError> {
 #[cfg(test)]
 mod test {
     use super::*;
+    use crate::forge_parser::parse;
 
     #[test]
     fn test_eval_const() {
@@ -557,8 +576,35 @@ mod test {
                 "loadw frame", // This is looking up the "a" arg, at frame + 0
                 "add",         // 17 + a
                 "loadw frame", // Calculate the lvalue
-                "sub 3",       // "b" arg is frame + 3
+                "add 3",       // "b" arg is frame + 3
                 "storew",      // Finally store
+            ]
+            .join("\n")
+        )
+    }
+
+    #[test]
+    fn test_var_decls() {
+        let mut state = State::default();
+        parse("fn blah() { var a; var b = 7; a = b * 2; }")
+            .unwrap()
+            .process(&mut state, None)
+            .expect("Failed to compile");
+        let body = body_as_string(state.functions.get("blah").unwrap());
+        assert_eq!(
+            body,
+            vec![
+                "push 7",      // Start calculating the rvalue, push the literal
+                "loadw frame", // "b" is the second local var at frame - 3
+                "add 3",
+                "storew",      // Do the initialization
+                "loadw frame", // Now we're evaluating b * 2
+                "add 3",       // b is at frame + 3...
+                "loadw",       // load it to the stack
+                "push 2",
+                "mul",         // b * 2 evaluated
+                "loadw frame", // Loading "a" as an lvalue
+                "storew",      // doing the assignment
             ]
             .join("\n")
         )
