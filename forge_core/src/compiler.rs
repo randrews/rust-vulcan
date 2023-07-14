@@ -43,7 +43,7 @@ pub enum Variable {
 /// at your stack frame. Locals can be found by adding some offset from the frame pointer.
 #[derive(Clone, PartialEq, Debug, Default)]
 pub struct Signature {
-    pub label: String,
+    pub label: Label,
     pub frame_size: usize,
     pub local_scope: Scope,
     pub body: Vec<String>,
@@ -80,6 +80,9 @@ impl Signature {
 /// Maps from names to the variables they represent
 pub type Scope = BTreeMap<String, Variable>;
 
+/// So we don't get confused between string-strings and assembly-label strings
+pub type Label = String;
+
 /// The compiler state:
 #[derive(Clone, PartialEq, Debug, Default)]
 struct State {
@@ -89,11 +92,13 @@ struct State {
     pub global_scope: Scope,
     /// The functions
     pub functions: BTreeMap<String, Signature>,
+    /// The string table
+    pub strings: Vec<(Label, String)>,
 }
 
 impl State {
     /// Generate a guaranteed-unique symbolic name
-    fn gensym(&mut self) -> String {
+    fn gensym(&mut self) -> Label {
         self.gensym_index += 1;
         format!("_gensym_{}", self.gensym_index)
     }
@@ -103,6 +108,7 @@ impl State {
         self.global_scope.contains_key(name)
     }
 
+    /// Add a symbol to the global namespace, catching name collisions
     fn add_global<F: Fn(&mut State) -> Variable>(
         &mut self,
         name: &str,
@@ -115,6 +121,12 @@ impl State {
             self.global_scope.insert(name.into(), val);
             Ok(())
         }
+    }
+
+    fn add_string(&mut self, string: &str) -> Label {
+        let sym = self.gensym();
+        self.strings.push((sym.clone(), string.into()));
+        sym
     }
 }
 
@@ -178,30 +190,13 @@ impl Compilable for Function {
             sig.add_local(&arg.name)?
         }
 
-        // Compile each statement: todo this should be broken into several different Compilables
+        // Compile each statement:
         for stmt in self.body.0 {
             match stmt {
                 Statement::Return(_) => {}
                 Statement::Assignment(assign) => assign.process(state, Some(&mut sig))?,
                 Statement::Call(_) => todo!(),
-                Statement::VarDecl(v) => {
-                    if v.typename.is_some() || v.size.is_some() {
-                        todo!("Structs and arrays are not yet supported")
-                    }
-                    if let Some(initial) = v.initial {
-                        // If it's got an initial value, we have to compile that before we add
-                        // the name to scope, or else UB will ensue if it refers to itself:
-                        initial.process(state, Some(&mut sig))?;
-                        // But then add it to scope and assign:
-                        sig.add_local(&v.name)?;
-                        // We'll just whip up an lvalue real quick...
-                        Lvalue::Name(v.name).process(state, Some(&mut sig))?;
-                        sig.emit("storew"); // And store the initial value there
-                    } else {
-                        // Otherwise, just add it to scope and leave garbage in there:
-                        sig.add_local(&v.name)?;
-                    }
-                }
+                Statement::VarDecl(vardecl) => vardecl.process(state, Some(&mut sig))?,
                 Statement::Conditional(_) | Statement::WhileLoop(_) | Statement::RepeatLoop(_) => {
                     todo!()
                 }
@@ -233,13 +228,43 @@ impl Compilable for Assignment {
         let Assignment { lvalue, rvalue } = self;
         let sig = sig.expect("Assignment outside function");
 
+        // For a normal expr, eval and leave on the stack; for a string literal, add it to
+        // the str table and push the label's address
         match rvalue {
-            Rvalue::Expr(rvalue) => {
-                rvalue.process(state, Some(sig))?;
-                lvalue.process(state, Some(sig))?;
-                sig.emit("storew");
+            Rvalue::Expr(rvalue) => rvalue.process(state, Some(sig))?,
+            Rvalue::String(string) => {
+                let label = state.add_string(&string);
+                sig.emit_arg("push", label);
             }
-            Rvalue::String(_) => todo!(),
+        }
+
+        // Then process the lvalue and storew
+        lvalue.process(state, Some(sig))?;
+        sig.emit("storew");
+        Ok(())
+    }
+}
+
+///////////////////////////////////////////////////////////
+
+impl Compilable for VarDecl {
+    fn process(self, state: &mut State, sig: Option<&mut Signature>) -> Result<(), CompileError> {
+        let mut sig = sig.expect("Var declaration outside function");
+        if self.typename.is_some() || self.size.is_some() {
+            todo!("Structs and arrays are not yet supported")
+        }
+        if let Some(initial) = self.initial {
+            // If it's got an initial value, we have to compile that before we add
+            // the name to scope, or else UB will ensue if it refers to itself:
+            initial.process(state, Some(sig))?;
+            // But then add it to scope and assign:
+            sig.add_local(&self.name)?;
+            // We'll just whip up an lvalue real quick...
+            Lvalue::Name(self.name).process(state, Some(sig))?;
+            sig.emit("storew"); // And store the initial value there
+        } else {
+            // Otherwise, just add it to scope and leave garbage in there:
+            sig.add_local(&self.name)?;
         }
         Ok(())
     }
@@ -410,16 +435,17 @@ impl Compilable for Global {
 
 impl Compilable for Const {
     fn process(self, state: &mut State, _: Option<&mut Signature>) -> Result<(), CompileError> {
-        if self.string.is_some() {
-            todo!("Strings are not yet supported")
-        }
-
-        if let Some(expr) = self.value {
-            let val = eval_const(expr, &state.global_scope)?;
-            state.add_global(&self.name, |_| Variable::Literal(val))
+        let var = if self.string.is_some() {
+            // If it's a string, add it to the string table
+            Variable::Label(state.add_string(&self.string.unwrap()))
+        } else if let Some(expr) = self.value {
+            // Otherwise eval_const it
+            Variable::Literal(eval_const(expr, &state.global_scope)?)
         } else {
             unreachable!()
-        }
+        };
+        // Add it to the global namespace
+        state.add_global(&self.name, |_| var.clone())
     }
 }
 
@@ -608,5 +634,26 @@ mod test {
             ]
             .join("\n")
         )
+    }
+
+    #[test]
+    fn test_literal_strings() {
+        let mut state = State::default();
+        parse("const s1 = \"foo\"; fn blah() { var x; x = \"bar\"; }")
+            .unwrap()
+            .process(&mut state, None)
+            .expect("Failed to compile");
+        let body = body_as_string(state.functions.get("blah").unwrap());
+        assert_eq!(
+            state.strings,
+            vec![
+                ("_gensym_1".into(), "foo".into()),
+                ("_gensym_3".into(), "bar".into()) // gensym 2 is the entrypoint of blah()
+            ]
+        );
+        assert_eq!(
+            body,
+            vec!["push _gensym_3", "loadw frame", "storew"].join("\n")
+        ) // todo we want to allow strings in initializers also
     }
 }
