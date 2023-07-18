@@ -1,0 +1,114 @@
+// C++-style whitespace and comments
+WHITESPACE = _{ " " | "\t" | NEWLINE }
+COMMENT    = _{ "//" ~ (!"\n" ~ ANY)* }
+
+// C-style names
+name_char =  { ASCII_ALPHA_LOWER | ASCII_ALPHA_UPPER | "_" | "$" }
+name      = @{ name_char ~ (name_char | ASCII_DIGIT)* }
+
+// Numbers in the usual formats
+dec_number = @{ ASCII_NONZERO_DIGIT ~ ASCII_DIGIT* }
+hex_number = ${ "0x" ~ ASCII_HEX_DIGIT+ }
+bin_number = ${ "0b" ~ ASCII_BIN_DIGIT+ }
+oct_number = ${ "0o" ~ ASCII_OCT_DIGIT+ }
+dec_zero   = @{ "0" }
+number     =  { dec_number | hex_number | bin_number | oct_number | dec_zero }
+
+// Quoted strings as per normal
+escape       = @{ "\\" ~ ("t" | "r" | "n" | "0" | "\\" | "\"") }
+string_inner = ${ !("\"" | "\\") ~ ANY | escape }
+string       = ${ "\"" ~ string_inner* ~ "\"" }
+
+assignment = { lvalue ~ "=" ~ rvalue }
+lvalue     = { name ~ subscript? }
+rvalue     = { expr | string }
+
+add     = { "+" }
+sub     = { "-" }
+mul     = { "*" }
+div     = { "/" }
+modulus = { "%" }
+log_and = { "&&" }
+log_or  = { "||" }
+bit_and = { "&" }
+bit_or  = { "|" }
+xor     = { "^" }
+lt      = { "<" }
+le      = { "<=" }
+gt      = { ">" }
+ge      = { ">=" }
+eq      = { "==" }
+ne      = { "!=" }
+lshift  = { "<<" }
+rshift  = { ">>" }
+prefix  = { "-" | "!" | "&" }
+
+operator = _{
+    add
+  | sub
+  | mul
+  | div
+  | modulus
+  | log_and
+  | log_or
+  | bit_and
+  | bit_or
+  | xor
+  | lshift
+  | rshift
+  | lt
+  | le
+  | gt
+  | ge
+  | eq
+  | ne
+}
+
+expr = { prefix? ~ val ~ suffix* ~ (operator ~ prefix? ~ val ~ suffix*)* }
+val  = {
+    // These are what get evaluated and left on the stack:
+    number
+  | // Literal numbers
+  ("(" ~ expr ~ ")")
+  | // Nested parenthesized exprs
+  // Bare literal ids, fn calls, array references
+  // (call, or pointer arithmetic, since ids all reference addresses)
+  // (multiple calls / subscripts aren't allowed; use CALL or collapse to one
+  // subscript)
+  name
+}
+
+suffix    = { subscript | arglist | member }
+subscript = { "[" ~ expr ~ "]" }
+arglist   = { "(" ~ (rvalue ~ ("," ~ rvalue)*)? ~ ")" }
+member    = { "." ~ name }
+
+statement = { asm | ((return_stmt | assignment | expr | var_decl) ~ ";") | conditional | while_loop | repeat_loop }
+
+asm      = { "asm" ~ asm_args? ~ "{" ~ asm_body ~ "}" }
+asm_args = { "(" ~ expr ~ ("," ~ expr)* ~ ")" }
+asm_body = { (!"}" ~ ANY)* }
+
+block = { "{" ~ statement* ~ "}" }
+
+function = { "fn" ~ name ~ argnames ~ block }
+argnames = { "(" ~ (argname ~ ("," ~ argname)*)? ~ ")" }
+argname  = { name ~ typename? }
+
+declaration = { function | global | struct_decl | const_decl }
+program     = { (COMMENT | WHITESPACE)? ~ declaration* ~ EOI }
+
+return_stmt = { "return" ~ expr? }
+conditional = { "if" ~ "(" ~ expr ~ ")" ~ block ~ ("else" ~ block)? }
+while_loop  = { "while" ~ "(" ~ expr ~ ")" ~ block }
+repeat_loop = { "repeat" ~ "(" ~ expr ~ ")" ~ name? ~ block }
+var_decl    = { "var" ~ name ~ varinfo ~ ("=" ~ expr)? }
+global      = { "global" ~ name ~ varinfo ~ ";" }
+typename    = { ":" ~ name }
+size        = { "[" ~ expr ~ "]" }
+const_decl  = { "const" ~ name ~ "=" ~ (expr | string) ~ ";" }
+
+struct_decl = { "struct" ~ name ~ "{" ~ members ~ "}" }
+member_decl = { name ~ varinfo }
+members     = { (member_decl ~ ("," ~ member_decl)*)? }
+varinfo     = { typename? ~ size? }
