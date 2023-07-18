@@ -15,12 +15,14 @@ impl Display for CompileError {
 
 /// A variable, of various different types:
 /// - Literals have static values and can just be pushed to the stack
-/// - Labels contain the label pointing to the value
+/// - IndirectLabels contain the label pointing to the value (think `foo: .db 0`)
+/// - Direct labels are the value themselves (think `call foo`)
 /// - Locals contain an index into the local frame
 #[derive(Clone, PartialEq, Debug)]
 pub enum Variable {
     Literal(i32),
-    Label(String),
+    IndirectLabel(String),
+    DirectLabel(String),
     Local(usize),
 }
 
@@ -41,6 +43,28 @@ pub enum Variable {
 /// you make a call to another function, you need to increment frame by the current frame size,
 /// and then after the other function has returned, decrement it back so that frame again points
 /// at your stack frame. Locals can be found by adding some offset from the frame pointer.
+///
+/// todo: the allocator problem has (probably) been solved! Make an alloca() that increases the
+/// current frame pointer by some size. To dynamically allocate memory, just put it in the stack
+/// frame of the current fn. All fns return one word and all params are one word long (structs
+/// get passed around by reference)
+///
+/// todo: more of a global todo. Add a register that stores an offset that's added implicitly to
+/// all absolute addresses. This makes it a lot simpler to make relocatable code
+///
+/// alternate todo: add a callr instruction. This moves the basic unit of linking up from "fn" to
+/// "library". Near calls are callr, far calls are call. Globals, reserve a word in the zero page
+/// for a global frame pointer, save / restore that around a far call (using the rstack).
+///
+/// Weird todo: add an abs (and maybe rel) instruction that converts a relative address on the
+/// stack to an absolute one by adding the instruction pointer (of the abs / rel). Make room for it
+/// by replacing sdp / setsdp / setint with just reg / setreg, which will push / pop register
+/// values to the stack, given a register index (0 for data ptr, 1 for rstack, 2 for int enabled,
+/// whatever). For a second removable opcode, how often is peekr actually used?
+///
+/// Another instruction todo: remove the copy instruction (currently a dumb copy-region command)
+/// and replace it with the design from last year with the mode argument... but as a DMA "device"
+/// with an interface in the zero page.
 #[derive(Clone, PartialEq, Debug, Default)]
 pub struct Signature {
     pub label: Label,
@@ -190,12 +214,26 @@ impl Compilable for Function {
             sig.add_local(&arg.name)?
         }
 
+        // todo we need to store arity somehow in the state, so we can check arglists even
+        // with recursive calls. This probably becomes splitting "signature" from "function context"
+        // and setting signature immutably right now, passing context down ("block?") and setting it
+        // at the end
+
+        // Add it to the global namespace so we can make recursive calls
+        state.add_global(&self.name, |_| Variable::DirectLabel(sig.label.clone()))?;
+
         // Compile each statement:
         for stmt in self.body.0 {
             match stmt {
                 Statement::Return(_) => {}
                 Statement::Assignment(assign) => assign.process(state, Some(&mut sig))?,
-                Statement::Call(_) => todo!(),
+                Statement::Call(call) => {
+                    call.process(state, Some(&mut sig))?;
+                    // Every call leaves a single-word return value on the stack. In an rvalue this
+                    // is useful but in a statement it's garbage (because nothing else is about to
+                    // pick it up) so, drop it:
+                    sig.emit("pop")
+                }
                 Statement::VarDecl(vardecl) => vardecl.process(state, Some(&mut sig))?,
                 Statement::Conditional(_) | Statement::WhileLoop(_) | Statement::RepeatLoop(_) => {
                     todo!()
@@ -203,9 +241,9 @@ impl Compilable for Function {
             }
         }
 
-        state.add_global(&self.name, |_| Variable::Label(sig.label.clone()))?;
-        // This can't fail because if it were a dupe name, the one before it would fail
+        // This can't fail because if it were a dupe name, adding the global would have failed
         state.functions.insert(self.name.clone(), sig);
+
         Ok(())
     }
 }
@@ -247,6 +285,16 @@ impl Compilable for Assignment {
 
 ///////////////////////////////////////////////////////////
 
+impl Compilable for Call {
+    fn process(self, state: &mut State, sig: Option<&mut Signature>) -> Result<(), CompileError> {
+        // todo arity check
+
+        todo!()
+    }
+}
+
+///////////////////////////////////////////////////////////
+
 impl Compilable for VarDecl {
     fn process(self, state: &mut State, sig: Option<&mut Signature>) -> Result<(), CompileError> {
         let mut sig = sig.expect("Var declaration outside function");
@@ -282,10 +330,14 @@ impl Compilable for Lvalue {
             Lvalue::Name(name) => {
                 if let Some(var) = lookup(&name, global_scope, &sig.local_scope) {
                     match var {
-                        Variable::Literal(_) => {
+                        Variable::Literal(_) | Variable::DirectLabel(_) => {
+                            // Direct labels are (probably) functions, the important part is the
+                            // label itself, which we can't alter, so, error:
                             Err(CompileError(0, 0, format!("Invalid lvalue {}", name)))
                         }
-                        Variable::Label(label) => {
+                        Variable::IndirectLabel(label) => {
+                            // Indirect labels are variables, the label is where the data is stored,
+                            // so we push that label so we can store stuff there
                             let label = label.clone();
                             sig.emit_arg("push", label);
                             Ok(())
@@ -338,9 +390,16 @@ impl Compilable for Node {
                     sig.emit_arg("push", *val);
                     Ok(())
                 }
-                Some(Variable::Label(label)) => {
+                Some(Variable::IndirectLabel(label)) => {
                     // Names pointing at labels are loaded (rvalue; for lvalues they aren't)
+                    // Indirect labels are the address of where the value is stored (a var, .db)
                     sig.emit_arg("loadw", label.clone());
+                    Ok(())
+                }
+                Some(Variable::DirectLabel(label)) => {
+                    // Direct labels are like functions, the label itself is the value, so just
+                    // push it:
+                    sig.emit_arg("push", label.clone());
                     Ok(())
                 }
                 Some(Variable::Local(offset)) => {
@@ -427,7 +486,7 @@ impl Compilable for Global {
         if self.typename.is_some() || self.size.is_some() {
             todo!("Structs and arrays are not yet supported")
         }
-        state.add_global(&self.name, |s| Variable::Label(s.gensym()))
+        state.add_global(&self.name, |s| Variable::IndirectLabel(s.gensym()))
     }
 }
 
@@ -437,7 +496,7 @@ impl Compilable for Const {
     fn process(self, state: &mut State, _: Option<&mut Signature>) -> Result<(), CompileError> {
         let var = if self.string.is_some() {
             // If it's a string, add it to the string table
-            Variable::Label(state.add_string(&self.string.unwrap()))
+            Variable::DirectLabel(state.add_string(&self.string.unwrap()))
         } else if let Some(expr) = self.value {
             // Otherwise eval_const it
             Variable::Literal(eval_const(expr, &state.global_scope)?)
@@ -570,7 +629,7 @@ mod test {
             .unwrap();
         assert_eq!(
             state.global_scope,
-            [("a".into(), Variable::Label("_gensym_1".into()))].into()
+            [("a".into(), Variable::IndirectLabel("_gensym_1".into()))].into()
         )
     }
 
