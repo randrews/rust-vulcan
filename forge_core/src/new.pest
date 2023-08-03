@@ -64,19 +64,8 @@ operator = _{
   | ne
 }
 
-expr = { prefix? ~ val ~ suffix* ~ (operator ~ prefix? ~ val ~ suffix*)* }
-val  = {
-    // These are what get evaluated and left on the stack:
-    number
-  | // Literal numbers
-  ("(" ~ expr ~ ")")
-  | // Nested parenthesized exprs
-  // Bare literal ids, fn calls, array references
-  // (call, or pointer arithmetic, since ids all reference addresses)
-  // (multiple calls / subscripts aren't allowed; use CALL or collapse to one
-  // subscript)
-  name
-}
+expr = { val ~ (operator ~ val)* }
+val = { prefix* ~ (number | name | "(" ~ expr ~ ")") ~ suffix* }
 
 suffix    = { subscript | arglist | member }
 subscript = { "[" ~ expr ~ "]" }
