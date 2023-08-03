@@ -64,15 +64,15 @@ operator = _{
   | ne
 }
 
-expr = { val ~ (operator ~ val)* }
-val = { prefix* ~ (number | name | "(" ~ expr ~ ")") ~ suffix* }
+expr = { prefix* ~ val ~ suffix* ~ (operator ~ prefix* ~ val ~ suffix*)* }
+val  = { number | name | "(" ~ expr ~ ")" }
 
 suffix    = { subscript | arglist | member }
 subscript = { "[" ~ expr ~ "]" }
 arglist   = { "(" ~ (rvalue ~ ("," ~ rvalue)*)? ~ ")" }
 member    = { "." ~ name }
 
-statement = { asm | ((return_stmt | assignment | expr | var_decl) ~ ";") | conditional | while_loop | repeat_loop }
+statement = { asm | ((return_stmt | var_decl | assignment | expr) ~ ";") | conditional | while_loop | repeat_loop }
 
 asm      = { "asm" ~ asm_args? ~ "{" ~ asm_body ~ "}" }
 asm_args = { "(" ~ expr ~ ("," ~ expr)* ~ ")" }

@@ -80,7 +80,7 @@ pub struct Assignment {
 
 #[derive(PartialEq, Clone, Debug)]
 pub enum Lvalue {
-    ArrayRef(ArrayRef),
+    ArrayRef(String, Expr),
     Name(String),
 }
 
@@ -150,62 +150,78 @@ pub enum Prefix {
 
 #[derive(Debug, PartialEq, Clone)]
 pub enum Suffix {
-    Subscript(Expr),
+    Subscript(BoxExpr),
     Arglist(Vec<Rvalue>),
     Member(String),
 }
 
-#[derive(PartialEq, Clone, Debug)]
-pub struct Expr {
-    pub lhs: Val,
-    pub op: Option<Operator>,
-    pub rhs: Option<BoxExpr>,
+#[derive(Debug, PartialEq, Clone)]
+pub enum Expr {
+    Val(Val),
+    Prefix(Prefix, BoxExpr),
+    Suffix(BoxExpr, Suffix),
+    Infix(BoxExpr, Operator, BoxExpr)
 }
+
+// #[derive(PartialEq, Clone, Debug)]
+// pub struct Expr {
+//     pub lhs: Val,
+//     pub prefix: Vec<Prefix>,
+//     pub suffix: Vec<Suffix>,
+//     pub op: Option<Operator>,
+//     pub rhs: Option<BoxExpr>,
+// }
 
 #[derive(PartialEq, Clone, Debug)]
 pub enum Val {
-    Number(i32, Vec<Prefix>, Vec<Suffix>),
-    Name(String, Vec<Prefix>, Vec<Suffix>),
-    Expr(BoxExpr, Vec<Prefix>, Vec<Suffix>),
+    Number(i32),
+    Name(String),
+    Expr(BoxExpr),
 }
 
-impl Val {
-    pub fn is_simple(&self) -> bool {
-        if let Self::Expr(expr, pre, suf) = &self {
-            pre.is_empty() && suf.is_empty() && expr.0.op.is_none()
-        } else {
-            false
-        }
-    }
-
-    pub fn inner_expr(self) -> Option<Expr> {
-        if let Self::Expr(expr, _, _) = self {
-            Some(expr.into())
-        } else { None }
-    }
-}
+// impl Val {
+//     pub fn is_simple(&self) -> bool {
+//         if let Self::Expr(expr, pre, suf) = &self {
+//             pre.is_empty() && suf.is_empty() && expr.0.op.is_none()
+//         } else {
+//             false
+//         }
+//     }
+//
+//     pub fn inner_expr(self) -> Option<Expr> {
+//         if let Self::Expr(expr, _, _) = self {
+//             Some(expr.into())
+//         } else { None }
+//     }
+// }
 
 impl From<i32> for Val {
     fn from(val: i32) -> Self {
-        Self::Number(val, vec![], vec![])
+        Self::Number(val)
     }
 }
 
 impl From<&str> for Val {
     fn from(s: &str) -> Self {
-        Self::Name(String::from(s), vec![], vec![])
+        Self::Name(String::from(s))
     }
 }
 
 impl From<Expr> for Val {
     fn from(value: Expr) -> Self {
-        Self::Expr(value.into(), vec![], vec![])
+        Self::Expr(value.into())
     }
 }
 
 impl From<BoxExpr> for Val {
     fn from(value: BoxExpr) -> Self {
-        Self::Expr(value, vec![], vec![])
+        Self::Expr(value)
+    }
+}
+
+impl From<Val> for BoxExpr {
+    fn from(value: Val) -> Self {
+        Self::from(Expr::from(value))
     }
 }
 
@@ -215,11 +231,7 @@ pub struct BoxExpr(pub Box<Expr>);
 
 impl From<Val> for Expr {
     fn from(value: Val) -> Self {
-        Self {
-            lhs: value,
-            op: None,
-            rhs: None
-        }
+        Self::Val(value)
     }
 }
 
@@ -230,29 +242,43 @@ impl From<i32> for BoxExpr {
 }
 
 impl From<Expr> for BoxExpr {
-    fn from(val: Expr) -> Self {
-        BoxExpr(Box::from(val))
+    fn from(expr: Expr) -> Self {
+        BoxExpr(Box::from(expr))
+    }
+}
+
+impl From<&str> for BoxExpr {
+    fn from(value: &str) -> Self {
+        Expr::Val(Val::Name(String::from(value))).into()
     }
 }
 
 impl From<BoxExpr> for Expr {
-    fn from(val: BoxExpr) -> Self {
-        *(val.0)
+    fn from(expr: BoxExpr) -> Self {
+        *(expr.0)
     }
 }
 
 impl From<i32> for Expr {
     fn from(value: i32) -> Self {
-        Self {
-            lhs: Val::Number(value, vec![], vec![]),
-            op: None,
-            rhs: None
-        }
+        Self::Val(Val::Number(value))
     }
 }
 
-#[derive(PartialEq, Clone, Debug)]
-pub struct ArrayRef {
-    pub name: String,
-    pub subscript: BoxExpr,
+impl From<&str> for Expr {
+    fn from(value: &str) -> Self {
+        Self::Val(Val::Name(String::from(value)))
+    }
+}
+
+impl From<i32> for Rvalue {
+    fn from(value: i32) -> Self {
+        Self::Expr(value.into())
+    }
+}
+
+impl From<&str> for Rvalue {
+    fn from(value: &str) -> Self {
+        Self::String(value.into())
+    }
 }

@@ -1,4 +1,4 @@
-use pest::pratt_parser::PrattParser;
+use pest::pratt_parser::{Op, PrattParser};
 use pest::Parser;
 
 #[derive(Parser)]
@@ -23,6 +23,7 @@ lazy_static::lazy_static! {
             .op(Op::infix(add, Left) | Op::infix(sub, Left))
             .op(Op::infix(mul, Left) | Op::infix(div, Left) | Op::infix(modulus, Left))
             .op(Op::prefix(Rule::prefix))
+            .op(Op::postfix(Rule::suffix))
     };
 }
 
@@ -324,14 +325,27 @@ impl AstNode for Assignment {
     const RULE: Rule = Rule::assignment;
     fn from_pair(pair: Pair) -> Self {
         let mut pairs = pair.into_inner();
-        let lvalue_pair = pairs.next().unwrap().first();
-        let lvalue = match lvalue_pair.as_rule() {
-            //Rule::arrayref => Lvalue::ArrayRef(ArrayRef::from_pair(lvalue_pair)),
-            Rule::name => Lvalue::Name(String::from(lvalue_pair.as_str())),
-            _ => unreachable!(),
-        };
+        let lvalue_pair = pairs.next().unwrap();
+        let lvalue = Lvalue::from_pair(lvalue_pair);
+        // let lvalue = match lvalue_pair.as_rule() {
+        //     Rule::subscript => Lvalue::ArrayRef(Subscript::from_pair(lvalue_pair)),
+        //     Rule::name => Lvalue::Name(String::from(lvalue_pair.as_str())),
+        //     _ => unreachable!(),
+        // };
         let rvalue = Rvalue::from_pair(pairs.next().unwrap());
         Self { lvalue, rvalue }
+    }
+}
+
+///////////////////////////////////////////////////////////////////////////////////////////
+
+impl AstNode for Lvalue {
+    const RULE: Rule = Rule::lvalue;
+    fn from_pair(pair: Pair) -> Self {
+        let mut pairs = pair.into_inner();
+        let name = pairs.next().unwrap().as_str();
+        pairs.next().map_or(Lvalue::Name(String::from(name)),
+                            |subscript| Lvalue::ArrayRef(String::from(name), Expr::from_pair(subscript.first())))
     }
 }
 
@@ -428,20 +442,35 @@ impl AstNode for RepeatLoop {
 impl AstNode for Expr {
     const RULE: Rule = Rule::expr;
     fn from_pair(pair: Pair) -> Self {
+        // The way this works is, the rule has to be of the form:
+        // expr = { prefix* ~ val ~ suffix* ~ (operator ~ prefix* ~ val ~ suffix*)* }
+        // Each of these map methods turns a thing into an expr. Which means expr HAS
+        // to be an enum with the different possible forms these things can take:
+        // - if it's a val, it goes into map_primary and returns an Expr::Val
+        // - If it's a prefix or suffix, it goes into map_prefix or map_postfix, and
+        //   returns an Expr::Prefix or Expr::Suffix
+        // - Operators go into map_infix along with two exprs for the left and right
+        //   sides
+        // The output of all this is an Expr, containing a tree of other Exprs of
+        // various forms.
         PRATT_PARSER
             .map_primary(|val| {
-                    Expr {
-                        lhs: Val::from_pair(val),
-                        op: None,
-                        rhs: None
-                    }
+                let val = Val::from_pair(val);
+                // If the val is a parenthesized expr, just unwrap it
+                if let Val::Expr(expr) = val {
+                    *expr.0
+                } else {
+                    Expr::Val(val)
+                }
             })
             .map_infix(|lhs, op, rhs|
-                Expr {
-                    lhs: Val::from(lhs),
-                    op: Some(Operator::from_pair(op)),
-                    rhs: Some(rhs.into()),
-                })
+                Expr::Infix(lhs.into(), Operator::from_pair(op), rhs.into())
+            )
+            .map_prefix(|prefix, expr|
+                Expr::Prefix(Prefix::from_pair(prefix), expr.into())
+            )
+            .map_postfix(|expr, suffix|
+                Expr::Suffix(expr.into(), Suffix::from_pair(suffix)))
             .parse(pair.into_inner())
     }
 }
@@ -503,7 +532,7 @@ impl AstNode for Suffix {
     fn from_pair(pair: Pair) -> Self {
         let first = pair.first();
         match first.as_rule() {
-            Rule::subscript => Subscript(Expr::from_pair(first.first())),
+            Rule::subscript => Subscript(Expr::from_pair(first.first()).into()),
             Rule::member => Self::Member(first.first_as_string()),
             Rule::arglist => Arglist(first.into_inner().map(Rvalue::from_pair).collect()),
             _ => unreachable!()
@@ -533,23 +562,11 @@ impl AstNode for Val {
     const RULE: Rule = Rule::val;
 
     fn from_pair(pair: Pair) -> Self {
-        let mut suffix = vec![];
-        let mut prefix = vec![];
-        let mut val = None;
-        for child in pair.into_inner() {
-            match child.as_rule() {
-                Rule::prefix => prefix.push(Prefix::from_pair(child)),
-                Rule::suffix => suffix.push(Suffix::from_pair(child)),
-                Rule::number | Rule::name | Rule::expr => val = Some(child),
-                _ => unreachable!()
-            }
-        }
-
-        let val = val.unwrap();
+        let val = pair.first();
         match val.as_rule() {
-            Rule::number => Self::Number(val.into_number(), prefix, suffix),
-            Rule::name => Self::Name(String::from(val.as_str()), prefix, suffix),
-            Rule::expr => Self::Expr(Expr::from_pair(val).into(), prefix, suffix),
+            Rule::number => Self::Number(val.into_number()),
+            Rule::name => Self::Name(String::from(val.as_str())),
+            Rule::expr => Self::Expr(Expr::from_pair(val).into()),
             _ => unreachable!()
         }
     }
@@ -565,23 +582,7 @@ mod test {
     fn parse_vals() {
         // Basic vals with no extras:
         assert_eq!(Val::from_str("10"), Ok(10.into()));
-        assert_eq!(Val::from_str("blah"), Ok(Val::Name("blah".into(), vec![], vec![])));
-
-        // Simple prefix
-        assert_eq!(Val::from_str("-5"),
-                   Ok(Val::Number(5, vec![Prefix::Neg], vec![])));
-
-        // Multiple prefixes
-        assert_eq!(Val::from_str("!&foo"),
-                   Ok(Val::Name("foo".into(), vec![Prefix::Not, Prefix::Address], vec![])));
-
-        // Simple suffix
-        assert_eq!(Val::from_str("foo[10]"),
-                   Ok(Val::Name("foo".into(), vec![], vec![Suffix::Subscript(10.into())])));
-
-        // Multi-suffix
-        assert_eq!(Val::from_str("foo[10].bar"),
-                   Ok(Val::Name("foo".into(), vec![], vec![Suffix::Subscript(10.into()), Suffix::Member("bar".into())])));
+        assert_eq!(Val::from_str("blah"), Ok(Val::Name("blah".into())));
     }
 
     #[test]
@@ -642,7 +643,7 @@ mod test {
             Const::from_str("const a = -7;"),
             Ok(Const {
                 name: "a".into(),
-                value: Some(Val::Number(7, vec![Prefix::Neg], vec![]).into()),
+                value: Some(Expr::Prefix(Prefix::Neg, 7.into()).into()),
                 string: None,
             })
         );
@@ -755,108 +756,127 @@ mod test {
             }],
             body: Block(vec![]),
         };
-
-        assert_eq!(
-            Function::from_str("fn foo<inline, org=0x400>(a) {}"),
-            Ok(func.clone())
-        );
-        assert_eq!(
-            Function::from_str("fn foo<org=0x400, inline>(a) {}"),
-            Ok(func)
-        );
     }
 
     #[test]
     fn parse_exprs() {
         use Operator::*;
+        use Prefix::*;
+        use Suffix::*;
+        use Expr::Infix;
+
         // A very, very basic expression
-        // For the rest of these we'll .into() stuff for brevity
-        //Some(assert_eq!(Expr::from_str("23"), Ok(Expr { lhs: Val::Number(23, vec![], vec![]), op: None, rhs: None })));
+        assert_eq!(
+            Expr::from_str("23"),
+            Ok(Expr::Val(Val::Number(23)))
+        );
 
         // Two vals with an operator
         assert_eq!(
             Expr::from_str("23 + 5"),
-            Ok(Expr { lhs: 23.into(), op: Some(Add), rhs: Some(5.into()) })
+            Ok(Infix(23.into(), Add, 5.into()))
         );
 
         // Multiple terms at the same precedence level
         assert_eq!(
             Expr::from_str("1 + 2 + 3"),
-            Ok(Expr { lhs: 1.into(), op: Some(Add), rhs: Some(Expr { lhs: 2.into(), op: Some(Add), rhs: Some(3.into()) }.into()) })
+            Ok(Infix(Infix(1.into(), Add, 2.into()).into(), Add, 3.into()))
         );
 
-        /*
-                // Higher precedence levels
-                assert_eq!(
-                    Node::from_str("1 + 2 * 3"),
-                    Ok(Expr(1.into(), Add, Expr(2.into(), Mul, 3.into()).into()))
-                );
+        // Simple prefix
+        assert_eq!(Expr::from_str("-5"),
+            Ok(Expr::Prefix(Neg, 5.into())));
 
-                assert_eq!(Node::from_str("2 * 3"), Ok(Expr(2.into(), Mul, 3.into())));
+        // Multiple prefixes
+        assert_eq!(
+            Expr::from_str("!&foo"),
+            Ok(Expr::Prefix(Not,
+                            Expr::Prefix(Address, "foo".into()).into())));
 
-                assert_eq!(
-                    Node::from_str("2 * 3 + 4"),
-                    Ok(Expr(Expr(2.into(), Mul, 3.into()).into(), Add, 4.into()))
-                );
+        // Simple suffix
+        assert_eq!(
+            Expr::from_str("foo[10]"),
+            Ok(Expr::Suffix("foo".into(), Subscript(10.into())))
+        );
 
-                // Various operators
-                assert_eq!(
-                    Node::from_str("1 || 2 && 3"),
-                    Ok(Expr(1.into(), Or, Expr(2.into(), And, 3.into()).into()))
-                );
+        // Multi-suffix
+        assert_eq!(
+            Expr::from_str("foo[10].bar"),
+            Ok(Expr::Suffix(
+                Expr::Suffix("foo".into(), Subscript(10.into())).into(),
+                Member("bar".into())))
+        );
 
-                assert_eq!(
-                    Node::from_str("2 && &blah"),
-                    Ok(Expr(2.into(), And, Address("blah".into()).into()))
-                );
+        // Higher precedence levels
+        assert_eq!(
+            Expr::from_str("1 + 2 * 3"),
+            Ok(Infix(1.into(), Add, Infix(2.into(), Mul, 3.into()).into()))
+        );
 
-                assert_eq!(
-                    Node::from_str("2 & &blah"),
-                    Ok(Expr(2.into(), BitAnd, Address("blah".into()).into()))
-                );
+        assert_eq!(
+            Expr::from_str("2 * 3"),
+            Ok(Infix(2.into(), Mul, 3.into()))
+        );
 
-                assert_eq!(
-                    Node::from_str("1 | 2 ^ 3"),
-                    Ok(Expr(1.into(), BitOr, Expr(2.into(), Xor, 3.into()).into()))
-                );
+        assert_eq!(
+            Expr::from_str("2 * 3 + 4"),
+            Ok(Infix(Infix(2.into(), Mul, 3.into()).into(), Add, 4.into()))
+        );
 
-                assert_eq!(
-                    Node::from_str("x == y > z"),
-                    Ok(Expr(
-                        Name("x".into()).into(),
-                        Eq,
-                        Expr(Name("y".into()).into(), Gt, Name("z".into()).into()).into()
-                    ))
-                );
+        // Various operators
+        assert_eq!(
+            Expr::from_str("1 || 2 && 3"),
+            Ok(Infix(1.into(), Or, Infix(2.into(), And, 3.into()).into()))
+        );
 
-                assert_eq!(
-                    Node::from_str("1 << 6"),
-                    Ok(Expr(1.into(), Lshift, 6.into()))
-                );
+        assert_eq!(
+            Expr::from_str("2 && &blah"),
+            Ok(Infix(2.into(), And, Expr::Prefix(Address, "blah".into()).into()))
+        );
 
-                assert_eq!(
-                    Node::from_str("!a - -3"),
-                    Ok(Expr(
-                        Prefix(crate::ast::Prefix::Not, Name("a".into()).into()).into(),
-                        Sub,
-                        Prefix(crate::ast::Prefix::Neg, 3.into()).into()
-                    ))
-                );
+        assert_eq!(
+            Expr::from_str("2 & &blah"),
+            Ok(Infix(2.into(), BitAnd, Expr::Prefix(Address, "blah".into()).into()))
+        );
 
-                assert_eq!(
-                    Node::from_str("-(4 * 5)"),
-                    Ok(Prefix(
-                        crate::ast::Prefix::Neg,
-                        Expr(4.into(), Mul, 5.into()).into()
-                    ))
-                );
+        assert_eq!(
+            Expr::from_str("1 | 2 ^ 3"),
+            Ok(Infix(1.into(), BitOr, Infix(2.into(), Xor, 3.into()).into()))
+        );
 
-                // Parens
-                assert_eq!(
-                    Node::from_str("(1 + 2) * 3"),
-                    Ok(Expr(Expr(1.into(), Add, 2.into()).into(), Mul, 3.into()))
-                );
-               */
+        assert_eq!(
+            Expr::from_str("x == y > z"),
+            Ok(Infix("x".into(), Eq, Infix("y".into(), Gt, "z".into()).into()))
+        );
+
+        assert_eq!(
+            Expr::from_str("1 << 6"),
+            Ok(Infix(1.into(), Lshift, 6.into()))
+        );
+
+        assert_eq!(
+            Expr::from_str("!a - -3"),
+            Ok(Infix(Expr::Prefix(Not, "a".into()).into(), Sub, Expr::Prefix(Neg, 3.into()).into()))
+        );
+
+        assert_eq!(
+            Expr::from_str("-(4 * 5)"),
+            Ok(Expr::Prefix(Neg,
+                            Infix(4.into(), Mul, 5.into()).into()
+            ))
+        );
+
+        // Parens
+        assert_eq!(
+            Expr::from_str("(1 + 2) * 3"),
+            Ok(
+                Infix(
+                    Infix(1.into(), Add, 2.into()).into(),
+                    Mul,
+                    3.into()
+                )
+            )
+        );
     }
 
     #[test]
@@ -894,55 +914,48 @@ mod test {
     }
 
     #[test]
-    fn parse_addresses() {
-        // assert_eq!(Node::from_str("&foo"), Ok(Node::Address("foo".into())));
-    }
+    fn parse_calls() {
+        use Val::Number;
 
-    // #[test]
-    // fn parse_calls() {
-    //     use Val::Number;
-    //
-    //     let blah = Call {
-    //         name: "blah".into(),
-    //         args: vec![],
-    //     };
-    //
-    //     // Can Node parse a call?
-    //     assert_eq!(Node::from_str("blah()"), Ok(Node::Call(blah.clone())));
-    //
-    //     // Can Statement parse a call?
-    //     assert_eq!(Statement::from_str("blah();"), Ok(Statement::Call(blah)));
-    //
-    //     // Calls with args
-    //     // assert_eq!(
-    //     //     Call::from_str("blah(1, 2)"),
-    //     //     Ok(Call {
-    //     //         name: "blah".into(),
-    //     //         args: vec![Rvalue::Expr(Number(1)), Rvalue::Expr(Number(2))]
-    //     //     })
-    //     // );
-    //
-    //     // Calls with strings
-    //     // assert_eq!(
-    //     //     Call::from_str("blah(\"foo\", 2)"),
-    //     //     Ok(Call {
-    //     //         name: "blah".into(),
-    //     //         args: vec![Rvalue::String("foo".into()), Rvalue::Expr(Number(2))]
-    //     //     })
-    //     // );
-    // }
+        let blah = Expr::Suffix(
+            "blah".into(),
+            Arglist(vec![])
+        );
+
+        // Can Node parse a call?
+        assert_eq!(Expr::from_str("blah()"), Ok(blah.clone()));
+
+        // Can Statement parse a call?
+        assert_eq!(Statement::from_str("blah();"), Ok(Statement::Expr(blah)));
+
+        // Calls with args
+        assert_eq!(
+            Expr::from_str("blah(1, 2)"),
+            Ok(Expr::Suffix(
+                "blah".into(),
+                Arglist(vec![1.into(), 2.into()])))
+        );
+
+        //Calls with strings
+        assert_eq!(
+            Expr::from_str("blah(\"foo\", 2)"),
+            Ok(Expr::Suffix(
+                "blah".into(),
+                Arglist(vec!["foo".into(), 2.into()])))
+        );
+     }
 
     #[test]
     fn parse_return() {
-        // assert_eq!(
-        //     Statement::from_str("return;"),
-        //     Ok(Statement::Return(Return(None)))
-        // );
-        //
-        // assert_eq!(
-        //     Statement::from_str("return 17;"),
-        //     Ok(Statement::Return(Return(Some(Node::Number(17)))))
-        // );
+        assert_eq!(
+            Statement::from_str("return;"),
+            Ok(Statement::Return(Return(None)))
+        );
+
+        assert_eq!(
+            Statement::from_str("return 17;"),
+            Ok(Statement::Return(Return(Some(17.into()))))
+        );
     }
 
     #[test]
@@ -958,10 +971,7 @@ mod test {
         assert_eq!(
             Assignment::from_str("foo[45] = 7"),
             Ok(Assignment {
-                lvalue: Lvalue::ArrayRef(ArrayRef {
-                    name: "foo".into(),
-                    subscript: 45.into(),
-                }),
+                lvalue: Lvalue::ArrayRef("foo".into(), 45.into()),
                 rvalue: Rvalue::Expr(7.into()),
             })
         );

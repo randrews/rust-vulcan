@@ -311,7 +311,7 @@ impl Compilable for Lvalue {
         let global_scope = &state.global_scope;
         let mut sig = sig.expect("lvalue outside a function");
         match self {
-            Lvalue::ArrayRef(_) => todo!("Arrays are not implemented yet"),
+            Lvalue::ArrayRef(_, _) => todo!("Arrays are not implemented yet"),
             Lvalue::Name(name) => {
                 if let Some(var) = lookup(&name, global_scope, &sig.local_scope) {
                     match var {
