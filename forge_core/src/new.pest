@@ -20,7 +20,7 @@ string_inner = ${ !("\"" | "\\") ~ ANY | escape }
 string       = ${ "\"" ~ string_inner* ~ "\"" }
 
 assignment = { lvalue ~ "=" ~ rvalue }
-lvalue     = { name ~ subscript? }
+lvalue     = { name ~ (modifier)* }
 rvalue     = { expr | string }
 
 add     = { "+" }
@@ -64,10 +64,11 @@ operator = _{
   | ne
 }
 
-expr = { prefix* ~ val ~ suffix* ~ (operator ~ prefix* ~ val ~ suffix*)* }
-val  = { number | name | "(" ~ expr ~ ")" }
+expr = { prefix* ~ term ~ suffix* ~ (operator ~ prefix* ~ term ~ suffix*)* }
+term  = _{ number | name | "(" ~ expr ~ ")" }
 
-suffix    = { subscript | arglist | member }
+suffix    = { modifier | arglist }
+modifier  = _{ subscript | member }
 subscript = { "[" ~ expr ~ "]" }
 arglist   = { "(" ~ (rvalue ~ ("," ~ rvalue)*)? ~ ")" }
 member    = { "." ~ name }
@@ -91,7 +92,7 @@ return_stmt = { "return" ~ expr? }
 conditional = { "if" ~ "(" ~ expr ~ ")" ~ block ~ ("else" ~ block)? }
 while_loop  = { "while" ~ "(" ~ expr ~ ")" ~ block }
 repeat_loop = { "repeat" ~ "(" ~ expr ~ ")" ~ name? ~ block }
-var_decl    = { "var" ~ name ~ varinfo ~ ("=" ~ expr)? }
+var_decl    = { "var" ~ name ~ varinfo ~ ("=" ~ rvalue)? }
 global      = { "global" ~ name ~ varinfo ~ ";" }
 typename    = { ":" ~ name }
 size        = { "[" ~ expr ~ "]" }

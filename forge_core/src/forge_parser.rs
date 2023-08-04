@@ -31,7 +31,6 @@ use crate::ast::*;
 use pest::error::{Error, LineColLocation};
 use std::iter::Peekable;
 use std::str::FromStr;
-use crate::ast::Suffix::{Arglist, Subscript};
 
 pub(crate) type Pair<'a> = pest::iterators::Pair<'a, Rule>;
 pub(crate) type Pairs<'i, R = Rule> = pest::iterators::Pairs<'i, R>;
@@ -325,13 +324,7 @@ impl AstNode for Assignment {
     const RULE: Rule = Rule::assignment;
     fn from_pair(pair: Pair) -> Self {
         let mut pairs = pair.into_inner();
-        let lvalue_pair = pairs.next().unwrap();
-        let lvalue = Lvalue::from_pair(lvalue_pair);
-        // let lvalue = match lvalue_pair.as_rule() {
-        //     Rule::subscript => Lvalue::ArrayRef(Subscript::from_pair(lvalue_pair)),
-        //     Rule::name => Lvalue::Name(String::from(lvalue_pair.as_str())),
-        //     _ => unreachable!(),
-        // };
+        let lvalue = Lvalue::from_pair(pairs.next().unwrap());
         let rvalue = Rvalue::from_pair(pairs.next().unwrap());
         Self { lvalue, rvalue }
     }
@@ -343,9 +336,13 @@ impl AstNode for Lvalue {
     const RULE: Rule = Rule::lvalue;
     fn from_pair(pair: Pair) -> Self {
         let mut pairs = pair.into_inner();
-        let name = pairs.next().unwrap().as_str();
-        pairs.next().map_or(Lvalue::Name(String::from(name)),
-                            |subscript| Lvalue::ArrayRef(String::from(name), Expr::from_pair(subscript.first())))
+        let name = String::from(pairs.next().unwrap().as_str());
+        let subscripts: Vec<_> = pairs.map(|p| match p.as_rule() {
+            Rule::subscript => Suffix::Subscript(Expr::from_pair(p.first()).into()),
+            Rule::member => Suffix::Member(String::from(p.as_str())),
+            _ => unreachable!()
+        }).collect();
+        Self { name, subscripts }
     }
 }
 
@@ -372,7 +369,7 @@ impl AstNode for VarDecl {
         let mut inner = pair.into_inner();
         let name = String::from(inner.next().unwrap().as_str());
         let Varinfo { typename, size } = Varinfo::from_pair(inner.next().unwrap());
-        let initial = inner.next().map(Expr::from_pair);
+        let initial = inner.next().map(Rvalue::from_pair);
         Self {
             name,
             typename,
@@ -446,7 +443,7 @@ impl AstNode for Expr {
         // expr = { prefix* ~ val ~ suffix* ~ (operator ~ prefix* ~ val ~ suffix*)* }
         // Each of these map methods turns a thing into an expr. Which means expr HAS
         // to be an enum with the different possible forms these things can take:
-        // - if it's a val, it goes into map_primary and returns an Expr::Val
+        // - if it's a term, it goes into map_primary and returns an Expr::Number or Name
         // - If it's a prefix or suffix, it goes into map_prefix or map_postfix, and
         //   returns an Expr::Prefix or Expr::Suffix
         // - Operators go into map_infix along with two exprs for the left and right
@@ -454,13 +451,12 @@ impl AstNode for Expr {
         // The output of all this is an Expr, containing a tree of other Exprs of
         // various forms.
         PRATT_PARSER
-            .map_primary(|val| {
-                let val = Val::from_pair(val);
-                // If the val is a parenthesized expr, just unwrap it
-                if let Val::Expr(expr) = val {
-                    *expr.0
-                } else {
-                    Expr::Val(val)
+            .map_primary(|term| {
+                match term.as_rule() {
+                    Rule::number => Expr::Number(term.into_number()),
+                    Rule::name => Expr::Name(String::from(term.as_str())),
+                    Rule::expr => Expr::from_pair(term).into(),
+                    _ => unreachable!()
                 }
             })
             .map_infix(|lhs, op, rhs|
@@ -485,7 +481,6 @@ impl Expr {
 
 impl AstNode for Operator {
     const RULE: Rule = Rule::operator;
-    // also term_op
     fn from_pair(pair: Pair) -> Self {
         match pair.as_str() {
             "+" => Self::Add,
@@ -532,10 +527,10 @@ impl AstNode for Suffix {
     fn from_pair(pair: Pair) -> Self {
         let first = pair.first();
         match first.as_rule() {
-            Rule::subscript => Subscript(Expr::from_pair(first.first()).into()),
+            Rule::subscript => Self::Subscript(Expr::from_pair(first.first()).into()),
             Rule::member => Self::Member(first.first_as_string()),
-            Rule::arglist => Arglist(first.into_inner().map(Rvalue::from_pair).collect()),
-            _ => unreachable!()
+            Rule::arglist => Self::Arglist(first.into_inner().map(Rvalue::from_pair).collect()),
+            rule => unreachable!("Expected a subscript, member, or arglist, got a {:?}", rule)
         }
     }
 }
@@ -558,32 +553,9 @@ impl AstNode for Program {
 
 ///////////////////////////////////////////////////////////////////////////////////////////
 
-impl AstNode for Val {
-    const RULE: Rule = Rule::val;
-
-    fn from_pair(pair: Pair) -> Self {
-        let val = pair.first();
-        match val.as_rule() {
-            Rule::number => Self::Number(val.into_number()),
-            Rule::name => Self::Name(String::from(val.as_str())),
-            Rule::expr => Self::Expr(Expr::from_pair(val).into()),
-            _ => unreachable!()
-        }
-    }
-}
-
-///////////////////////////////////////////////////////////////////////////////////////////
-
 #[cfg(test)]
 mod test {
     use super::*;
-
-    #[test]
-    fn parse_vals() {
-        // Basic vals with no extras:
-        assert_eq!(Val::from_str("10"), Ok(10.into()));
-        assert_eq!(Val::from_str("blah"), Ok(Val::Name("blah".into())));
-    }
 
     #[test]
     fn parse_globals() {
@@ -768,7 +740,7 @@ mod test {
         // A very, very basic expression
         assert_eq!(
             Expr::from_str("23"),
-            Ok(Expr::Val(Val::Number(23)))
+            Ok(Expr::Number(23))
         );
 
         // Two vals with an operator
@@ -880,46 +852,10 @@ mod test {
     }
 
     #[test]
-    fn parse_arrayrefs() {
-        // use crate::ast::ArrayRef as AR;
-        // use Val::*;
-        // use Operator::*;
-        //
-        // // Normal numbers
-        // assert_eq!(
-        //     AR::from_str("foo[7]"),
-        //     Ok(AR {
-        //         name: "foo".into(),
-        //         subscript: Number(7).into()
-        //     })
-        // );
-        //
-        // // Full exprs (this is the last one of these; the full expr test above covers it
-        // assert_eq!(
-        //     AR::from_str("foo[7+x]"),
-        //     Ok(AR {
-        //         name: "foo".into(),
-        //         subscript: Node::from_str("7+x").unwrap().into()
-        //     })
-        // );
-
-        // Exprs that are actually arrayrefs
-        // assert_eq!(
-        //     Node::from_str("foo[7]"),
-        //     Ok(ArrayRef(AR {
-        //         name: "foo".into(),
-        //         subscript: Number(7).into()
-        //     }))
-        // );
-    }
-
-    #[test]
     fn parse_calls() {
-        use Val::Number;
-
         let blah = Expr::Suffix(
             "blah".into(),
-            Arglist(vec![])
+            Suffix::Arglist(vec![])
         );
 
         // Can Node parse a call?
@@ -933,7 +869,7 @@ mod test {
             Expr::from_str("blah(1, 2)"),
             Ok(Expr::Suffix(
                 "blah".into(),
-                Arglist(vec![1.into(), 2.into()])))
+                Suffix::Arglist(vec![1.into(), 2.into()])))
         );
 
         //Calls with strings
@@ -941,7 +877,7 @@ mod test {
             Expr::from_str("blah(\"foo\", 2)"),
             Ok(Expr::Suffix(
                 "blah".into(),
-                Arglist(vec!["foo".into(), 2.into()])))
+                Suffix::Arglist(vec!["foo".into(), 2.into()])))
         );
      }
 
@@ -963,7 +899,7 @@ mod test {
         assert_eq!(
             Statement::from_str("foo = 7;"),
             Ok(Statement::Assignment(Assignment {
-                lvalue: Lvalue::Name("foo".into()),
+                lvalue: "foo".into(),
                 rvalue: Rvalue::Expr(7.into()),
             }))
         );
@@ -971,7 +907,7 @@ mod test {
         assert_eq!(
             Assignment::from_str("foo[45] = 7"),
             Ok(Assignment {
-                lvalue: Lvalue::ArrayRef("foo".into(), 45.into()),
+                lvalue: Lvalue { name: String::from("foo"), subscripts: vec![Suffix::Subscript(45.into())] },
                 rvalue: Rvalue::Expr(7.into()),
             })
         );
@@ -1000,22 +936,16 @@ mod test {
         );
     }
 
-    // #[test]
-    // fn parse_block() {
-    //     assert_eq!(
-    //         Block::from_str("{ foo(); bar(); }"),
-    //         Ok(Block(vec![
-    //             Statement::Call(Call {
-    //                 name: "foo".into(),
-    //                 args: vec![]
-    //             }),
-    //             Statement::Call(Call {
-    //                 name: "bar".into(),
-    //                 args: vec![]
-    //             }),
-    //         ]))
-    //     );
-    // }
+    #[test]
+    fn parse_block() {
+        assert_eq!(
+            Block::from_str("{ foo(); bar(); }"),
+            Ok(Block(vec![
+                Statement::Expr(Expr::Suffix("foo".into(), Suffix::Arglist(vec![]))),
+                Statement::Expr(Expr::Suffix("bar".into(), Suffix::Arglist(vec![]))),
+            ]))
+        );
+    }
 
     #[test]
     fn parse_conditional() {
@@ -1051,33 +981,33 @@ mod test {
 
     #[test]
     fn parse_repeat_loops() {
-        // assert_eq!(
-        //     Statement::from_str("repeat(10) x { foo(x); }"),
-        //     Ok(Statement::RepeatLoop(RepeatLoop {
-        //         count: Node::Number(10),
-        //         name: Some("x".into()),
-        //         body: Block::from_str("{ foo(x); }").unwrap(),
-        //     }))
-        // );
-        //
-        // assert_eq!(
-        //     Statement::from_str("repeat(10) { foo(); }"),
-        //     Ok(Statement::RepeatLoop(RepeatLoop {
-        //         count: Node::Number(10),
-        //         name: None,
-        //         body: Block::from_str("{ foo(); }").unwrap(),
-        //     }))
-        // );
+        assert_eq!(
+            Statement::from_str("repeat(10) x { foo(x); }"),
+            Ok(Statement::RepeatLoop(RepeatLoop {
+                count: 10.into(),
+                name: Some("x".into()),
+                body: Block::from_str("{ foo(x); }").unwrap(),
+            }))
+        );
+
+        assert_eq!(
+            Statement::from_str("repeat(10) { foo(); }"),
+            Ok(Statement::RepeatLoop(RepeatLoop {
+                count: 10.into(),
+                name: None,
+                body: Block::from_str("{ foo(); }").unwrap(),
+            }))
+        );
     }
 
     #[test]
     fn parse_program() {
-        // assert_eq!(
-        //     Program::from_str("global foo; struct Point { x, y }"),
-        //     Ok(Program(vec![
-        //         Declaration::from_str("global foo;").unwrap(),
-        //         Declaration::from_str("struct Point { x, y }").unwrap(),
-        //     ]))
-        // )
+        assert_eq!(
+            Program::from_str("global foo; struct Point { x, y }"),
+            Ok(Program(vec![
+                Declaration::from_str("global foo;").unwrap(),
+                Declaration::from_str("struct Point { x, y }").unwrap(),
+            ]))
+        )
     }
 }

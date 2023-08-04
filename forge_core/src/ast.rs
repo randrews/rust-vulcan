@@ -79,9 +79,21 @@ pub struct Assignment {
 }
 
 #[derive(PartialEq, Clone, Debug)]
-pub enum Lvalue {
-    ArrayRef(String, Expr),
-    Name(String),
+pub struct Lvalue {
+    pub name: String,
+    pub subscripts: Vec<Suffix>,
+}
+
+impl From<&str> for Lvalue {
+    fn from(name: &str) -> Self {
+        Self { name: String::from(name), subscripts: vec![] }
+    }
+}
+
+impl From<String> for Lvalue {
+    fn from(name: String) -> Self {
+        Self { name, subscripts: vec![] }
+    }
 }
 
 #[derive(PartialEq, Clone, Debug)]
@@ -95,7 +107,7 @@ pub struct VarDecl {
     pub name: String,
     pub typename: Option<String>,
     pub size: Option<Expr>,
-    pub initial: Option<Expr>,
+    pub initial: Option<Rvalue>,
 }
 
 #[derive(PartialEq, Clone, Debug)]
@@ -157,87 +169,21 @@ pub enum Suffix {
 
 #[derive(Debug, PartialEq, Clone)]
 pub enum Expr {
-    Val(Val),
-    Prefix(Prefix, BoxExpr),
-    Suffix(BoxExpr, Suffix),
-    Infix(BoxExpr, Operator, BoxExpr)
-}
-
-// #[derive(PartialEq, Clone, Debug)]
-// pub struct Expr {
-//     pub lhs: Val,
-//     pub prefix: Vec<Prefix>,
-//     pub suffix: Vec<Suffix>,
-//     pub op: Option<Operator>,
-//     pub rhs: Option<BoxExpr>,
-// }
-
-#[derive(PartialEq, Clone, Debug)]
-pub enum Val {
     Number(i32),
     Name(String),
     Expr(BoxExpr),
-}
-
-// impl Val {
-//     pub fn is_simple(&self) -> bool {
-//         if let Self::Expr(expr, pre, suf) = &self {
-//             pre.is_empty() && suf.is_empty() && expr.0.op.is_none()
-//         } else {
-//             false
-//         }
-//     }
-//
-//     pub fn inner_expr(self) -> Option<Expr> {
-//         if let Self::Expr(expr, _, _) = self {
-//             Some(expr.into())
-//         } else { None }
-//     }
-// }
-
-impl From<i32> for Val {
-    fn from(val: i32) -> Self {
-        Self::Number(val)
-    }
-}
-
-impl From<&str> for Val {
-    fn from(s: &str) -> Self {
-        Self::Name(String::from(s))
-    }
-}
-
-impl From<Expr> for Val {
-    fn from(value: Expr) -> Self {
-        Self::Expr(value.into())
-    }
-}
-
-impl From<BoxExpr> for Val {
-    fn from(value: BoxExpr) -> Self {
-        Self::Expr(value)
-    }
-}
-
-impl From<Val> for BoxExpr {
-    fn from(value: Val) -> Self {
-        Self::from(Expr::from(value))
-    }
+    Prefix(Prefix, BoxExpr),
+    Suffix(BoxExpr, Suffix),
+    Infix(BoxExpr, Operator, BoxExpr)
 }
 
 #[repr(transparent)]
 #[derive(PartialEq, Clone, Debug)]
 pub struct BoxExpr(pub Box<Expr>);
 
-impl From<Val> for Expr {
-    fn from(value: Val) -> Self {
-        Self::Val(value)
-    }
-}
-
 impl From<i32> for BoxExpr {
     fn from(val: i32) -> Self {
-        BoxExpr(Box::from(Expr::from(Val::from(val))))
+        BoxExpr(Box::from(Expr::Number(val)))
     }
 }
 
@@ -249,7 +195,7 @@ impl From<Expr> for BoxExpr {
 
 impl From<&str> for BoxExpr {
     fn from(value: &str) -> Self {
-        Expr::Val(Val::Name(String::from(value))).into()
+        Expr::Name(String::from(value)).into()
     }
 }
 
@@ -261,13 +207,13 @@ impl From<BoxExpr> for Expr {
 
 impl From<i32> for Expr {
     fn from(value: i32) -> Self {
-        Self::Val(Val::Number(value))
+        Self::Number(value)
     }
 }
 
 impl From<&str> for Expr {
     fn from(value: &str) -> Self {
-        Self::Val(Val::Name(String::from(value)))
+        Self::Name(String::from(value))
     }
 }
 
