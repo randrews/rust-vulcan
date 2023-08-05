@@ -137,7 +137,7 @@ pub struct RepeatLoop {
 }
 
 /// One of the five arithmetical operators
-#[derive(Debug, PartialEq, Copy, Clone)]
+#[derive(Debug, Eq, PartialEq, Copy, Clone)]
 pub enum Operator {
     Add,
     Sub,
@@ -162,7 +162,6 @@ pub enum Operator {
 #[derive(Debug, PartialEq, Clone)]
 pub enum Suffix {
     Subscript(BoxExpr),
-    Arglist(Vec<Rvalue>),
     Member(String),
 }
 
@@ -170,11 +169,12 @@ pub enum Suffix {
 pub enum Expr {
     Number(i32),
     Name(String),
-    Expr(BoxExpr),
     Not(BoxExpr),
     Neg(BoxExpr),
     Address(Lvalue),
-    Suffix(BoxExpr, Suffix),
+    Call(BoxExpr, Vec<Rvalue>),
+    Subscript(BoxExpr, BoxExpr),
+    Member(BoxExpr, String),
     Infix(BoxExpr, Operator, BoxExpr),
 }
 

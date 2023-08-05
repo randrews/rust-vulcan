@@ -23,7 +23,9 @@ lazy_static::lazy_static! {
             .op(Op::infix(add, Left) | Op::infix(sub, Left))
             .op(Op::infix(mul, Left) | Op::infix(div, Left) | Op::infix(modulus, Left))
             .op(Op::prefix(Rule::prefix))
-            .op(Op::postfix(Rule::suffix))
+            .op(Op::postfix(Rule::arglist))
+            .op(Op::postfix(Rule::subscript))
+            .op(Op::postfix(Rule::member))
     };
 }
 
@@ -462,7 +464,17 @@ impl AstNode for Expr {
                 "!" => Expr::Not(expr.into()),
                 _ => unreachable!(),
             })
-            .map_postfix(|expr, suffix| Expr::Suffix(expr.into(), Suffix::from_pair(suffix)))
+            .map_postfix(|expr, suffix| match suffix.as_rule() {
+                Rule::arglist => Expr::Call(
+                    expr.into(),
+                    suffix.into_inner().map(Rvalue::from_pair).collect(),
+                ),
+                Rule::subscript => {
+                    Expr::Subscript(expr.into(), Expr::from_pair(suffix.first()).into())
+                }
+                Rule::member => Expr::Member(expr.into(), suffix.first_as_string()),
+                _ => unreachable!(),
+            })
             .parse(pair.into_inner())
     }
 }
@@ -512,8 +524,8 @@ impl AstNode for Suffix {
         match first.as_rule() {
             Rule::subscript => Self::Subscript(Expr::from_pair(first.first()).into()),
             Rule::member => Self::Member(first.first_as_string()),
-            Rule::arglist => Self::Arglist(first.into_inner().map(Rvalue::from_pair).collect()),
-            rule => unreachable!("Expected a subscript, member, or arglist, got a {:?}", rule),
+            //Rule::arglist => Self::Arglist(first.into_inner().map(Rvalue::from_pair).collect()),
+            rule => unreachable!("Expected a subscript or member, got a {:?}", rule),
         }
     }
 }
@@ -746,15 +758,15 @@ mod test {
         // Simple suffix
         assert_eq!(
             Expr::from_str("foo[10]"),
-            Ok(Expr::Suffix("foo".into(), Subscript(10.into())))
+            Ok(Expr::Subscript("foo".into(), 10.into()))
         );
 
         // Multi-suffix
         assert_eq!(
             Expr::from_str("foo[10].bar"),
-            Ok(Expr::Suffix(
-                Expr::Suffix("foo".into(), Subscript(10.into())).into(),
-                Member("bar".into())
+            Ok(Expr::Member(
+                Expr::Subscript("foo".into(), 10.into()).into(),
+                "bar".into()
             ))
         );
 
@@ -848,21 +860,18 @@ mod test {
             ))
         );
 
-        // This is godawful but legal _as long as it parses like this._ The arglist suffix on the end
-        // goes on the "&foo" expression as a whole, so, it "calls" the address of foo. Essentially:
+        // This is godawful but legal _as long as it parses like this._ The arglist on the end goes
+        // on the "&foo" expression as a whole, so, it "calls" the address of foo. Essentially:
         // "push foo; call" rather than "loadw foo; call"
         assert_eq!(
             Expr::from_str("&foo()"),
-            Ok(Expr::Suffix(
-                Expr::Address("foo".into()).into(),
-                Suffix::Arglist(vec![])
-            ))
+            Ok(Expr::Call(Expr::Address("foo".into()).into(), vec![]))
         )
     }
 
     #[test]
     fn parse_calls() {
-        let blah = Expr::Suffix("blah".into(), Suffix::Arglist(vec![]));
+        let blah = Expr::Call("blah".into(), vec![]);
 
         // Can Node parse a call?
         assert_eq!(Expr::from_str("blah()"), Ok(blah.clone()));
@@ -873,19 +882,13 @@ mod test {
         // Calls with args
         assert_eq!(
             Expr::from_str("blah(1, 2)"),
-            Ok(Expr::Suffix(
-                "blah".into(),
-                Suffix::Arglist(vec![1.into(), 2.into()])
-            ))
+            Ok(Expr::Call("blah".into(), vec![1.into(), 2.into()]))
         );
 
         //Calls with strings
         assert_eq!(
             Expr::from_str("blah(\"foo\", 2)"),
-            Ok(Expr::Suffix(
-                "blah".into(),
-                Suffix::Arglist(vec!["foo".into(), 2.into()])
-            ))
+            Ok(Expr::Call("blah".into(), vec!["foo".into(), 2.into()]))
         );
     }
 
@@ -952,8 +955,8 @@ mod test {
         assert_eq!(
             Block::from_str("{ foo(); bar(); }"),
             Ok(Block(vec![
-                Statement::Expr(Expr::Suffix("foo".into(), Suffix::Arglist(vec![]))),
-                Statement::Expr(Expr::Suffix("bar".into(), Suffix::Arglist(vec![]))),
+                Statement::Expr(Expr::Call("foo".into(), vec![])),
+                Statement::Expr(Expr::Call("bar".into(), vec![])),
             ]))
         );
     }

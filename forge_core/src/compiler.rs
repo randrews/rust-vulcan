@@ -406,11 +406,6 @@ impl Compilable for Expr {
                     None => Err(CompileError(0, 0, format!("Unknown name {}", name))),
                 }
             }
-            Expr::Expr(e) => {
-                // Just an expr containing an expr, recurse
-                (*e.0).process(state, Some(sig))?;
-                Ok(())
-            }
             Expr::Neg(e) => {
                 (*e.0).process(state, Some(sig))?;
                 // To arithmetically negate something, invert and increment (2s complement)
@@ -425,9 +420,9 @@ impl Compilable for Expr {
             }
             // Handling addresses is very easy because processing an lvalue leaves the address on the stack
             Expr::Address(lvalue) => lvalue.process(state, Some(sig)),
-            Expr::Suffix(_, _) => {
-                todo!()
-            }
+            Expr::Call(_, _) => todo!(),
+            Expr::Subscript(_, _) => todo!("Structs and arrays are not yen supported"),
+            Expr::Member(_, _) => todo!("Structs and arrays are not yen supported"),
             Expr::Infix(lhs, op, rhs) => {
                 // Recurse on expressions, handling operators
                 (*lhs.0).process(state, Some(&mut sig))?;
@@ -531,7 +526,6 @@ pub fn eval_const(expr: Expr, scope: &Scope) -> Result<i32, CompileError> {
                 Err(CompileError(0, 0, format!("Unknown const {}", n)))
             }
         }
-        Expr::Expr(e) => eval_const(*e.0, scope),
         Expr::Neg(e) => {
             let val = eval_const(*e.0, scope)?;
             Ok(-val)
@@ -545,7 +539,7 @@ pub fn eval_const(expr: Expr, scope: &Scope) -> Result<i32, CompileError> {
             0,
             String::from("Addresses are not known at compile time"),
         )),
-        Expr::Suffix(_, _) => Err(CompileError(
+        Expr::Call(_, _) | Expr::Subscript(_, _) | Expr::Member(_, _) => Err(CompileError(
             0,
             0,
             String::from("Constants must be statically defined"),

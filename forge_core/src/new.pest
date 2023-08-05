@@ -67,7 +67,7 @@ operator = _{
 expr = { prefix* ~ term ~ suffix* ~ (operator ~ prefix* ~ term ~ suffix*)* }
 term = _{ number | name | "(" ~ expr ~ ")" | "&" ~ lvalue }
 
-suffix    = { modifier | arglist }
+suffix    = _{ modifier | arglist }
 modifier  = _{ subscript | member }
 subscript = { "[" ~ expr ~ "]" }
 arglist   = { "(" ~ (rvalue ~ ("," ~ rvalue)*)? ~ ")" }
