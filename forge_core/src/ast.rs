@@ -86,13 +86,19 @@ pub struct Lvalue {
 
 impl From<&str> for Lvalue {
     fn from(name: &str) -> Self {
-        Self { name: String::from(name), subscripts: vec![] }
+        Self {
+            name: String::from(name),
+            subscripts: vec![],
+        }
     }
 }
 
 impl From<String> for Lvalue {
     fn from(name: String) -> Self {
-        Self { name, subscripts: vec![] }
+        Self {
+            name,
+            subscripts: vec![],
+        }
     }
 }
 
@@ -153,13 +159,6 @@ pub enum Operator {
     Rshift,
 }
 
-#[derive(Debug, PartialEq, Copy, Clone)]
-pub enum Prefix {
-    Neg,
-    Not,
-    Address
-}
-
 #[derive(Debug, PartialEq, Clone)]
 pub enum Suffix {
     Subscript(BoxExpr),
@@ -172,9 +171,11 @@ pub enum Expr {
     Number(i32),
     Name(String),
     Expr(BoxExpr),
-    Prefix(Prefix, BoxExpr),
+    Not(BoxExpr),
+    Neg(BoxExpr),
+    Address(Lvalue),
     Suffix(BoxExpr, Suffix),
-    Infix(BoxExpr, Operator, BoxExpr)
+    Infix(BoxExpr, Operator, BoxExpr),
 }
 
 #[repr(transparent)]

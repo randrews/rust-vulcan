@@ -317,7 +317,9 @@ impl Compilable for Lvalue {
         let global_scope = &state.global_scope;
         let mut sig = sig.expect("lvalue outside a function");
 
-        if !self.subscripts.is_empty() { todo!("Arrays and structs aren't implemented yet") }
+        if !self.subscripts.is_empty() {
+            todo!("Arrays and structs aren't implemented yet")
+        }
 
         if let Some(var) = lookup(&self.name, global_scope, &sig.local_scope) {
             match var {
@@ -409,20 +411,23 @@ impl Compilable for Expr {
                 (*e.0).process(state, Some(sig))?;
                 Ok(())
             }
-            Expr::Prefix(pre, e) => {
+            Expr::Neg(e) => {
                 (*e.0).process(state, Some(sig))?;
-                match pre {
-                    Prefix::Neg => {
-                        // To arithmetically negate something, invert and increment (2s complement)
-                        sig.emit("xor -1");
-                        sig.emit("add 1");
-                    }
-                    Prefix::Not => sig.emit("not"),
-                    Prefix::Address => { todo!() }
-                }
+                // To arithmetically negate something, invert and increment (2s complement)
+                sig.emit("xor -1");
+                sig.emit("add 1");
                 Ok(())
             }
-            Expr::Suffix(_, _) => {todo!()}
+            Expr::Not(e) => {
+                (*e.0).process(state, Some(sig))?;
+                sig.emit("not");
+                Ok(())
+            }
+            // Handling addresses is very easy because processing an lvalue leaves the address on the stack
+            Expr::Address(lvalue) => lvalue.process(state, Some(sig)),
+            Expr::Suffix(_, _) => {
+                todo!()
+            }
             Expr::Infix(lhs, op, rhs) => {
                 // Recurse on expressions, handling operators
                 (*lhs.0).process(state, Some(&mut sig))?;
@@ -519,21 +524,32 @@ fn to_flag(val: bool) -> i32 {
 pub fn eval_const(expr: Expr, scope: &Scope) -> Result<i32, CompileError> {
     match expr {
         Expr::Number(n) => Ok(n), // That was easy
-        Expr::Name(n) => if let Some(Variable::Literal(val)) = scope.get(&n) {
+        Expr::Name(n) => {
+            if let Some(Variable::Literal(val)) = scope.get(&n) {
                 Ok(*val)
             } else {
                 Err(CompileError(0, 0, format!("Unknown const {}", n)))
             }
-        Expr::Expr(e) => eval_const(*e.0, scope),
-        Expr::Prefix(pre, e) => {
-            let val = eval_const(*e.0, scope)?;
-            match pre {
-                Prefix::Neg => Ok(-val),
-                Prefix::Not => Ok(if val != 0 { 0 } else { 1 }),
-                Prefix::Address => Err(CompileError(0, 0, String::from("Addresses are not know at compile time")))
-            }
         }
-        Expr::Suffix(_, _) => Err(CompileError(0, 0, String::from("Constants must be statically defined"))),
+        Expr::Expr(e) => eval_const(*e.0, scope),
+        Expr::Neg(e) => {
+            let val = eval_const(*e.0, scope)?;
+            Ok(-val)
+        }
+        Expr::Not(e) => {
+            let val = eval_const(*e.0, scope)?;
+            Ok(if val != 0 { 0 } else { 1 })
+        }
+        Expr::Address(_) => Err(CompileError(
+            0,
+            0,
+            String::from("Addresses are not known at compile time"),
+        )),
+        Expr::Suffix(_, _) => Err(CompileError(
+            0,
+            0,
+            String::from("Constants must be statically defined"),
+        )),
         Expr::Infix(lhs, op, rhs) => {
             let lhs = eval_const(*lhs.0, scope)?;
             let rhs = eval_const(*rhs.0, scope)?;
@@ -705,7 +721,32 @@ mod test {
                 "push _gensym_4",
                 "loadw frame",
                 "add 3", // the address of y (frame + 3) and put gensym_4 in it
-                "storew"].join("\n")
+                "storew"
+            ]
+            .join("\n")
+        )
+    }
+
+    #[test]
+    fn test_addresses() {
+        let mut state = State::default();
+        parse("fn blah() { var x = 3; var y = &x; }")
+            .unwrap()
+            .process(&mut state, None)
+            .expect("Failed to compile");
+        let body = body_as_string(state.functions.get("blah").unwrap());
+        assert_eq!(
+            body,
+            vec![
+                "push 3",
+                "loadw frame",
+                "storew",      // the assignment for x
+                "loadw frame", // The addr of x
+                "loadw frame",
+                "add 3", // the address of y (frame + 3) and put the addr of x (frame) in it
+                "storew"
+            ]
+            .join("\n")
         )
     }
 }

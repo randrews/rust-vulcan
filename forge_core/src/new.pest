@@ -41,7 +41,7 @@ eq      = { "==" }
 ne      = { "!=" }
 lshift  = { "<<" }
 rshift  = { ">>" }
-prefix  = { "-" | "!" | "&" }
+prefix  = { "-" | "!" }
 
 operator = _{
     add
@@ -65,7 +65,7 @@ operator = _{
 }
 
 expr = { prefix* ~ term ~ suffix* ~ (operator ~ prefix* ~ term ~ suffix*)* }
-term  = _{ number | name | "(" ~ expr ~ ")" }
+term = _{ number | name | "(" ~ expr ~ ")" | "&" ~ lvalue }
 
 suffix    = { modifier | arglist }
 modifier  = _{ subscript | member }

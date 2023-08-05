@@ -270,11 +270,7 @@ impl AstNode for Function {
 
         let body = Block::from_pair(inner.next().unwrap());
 
-        Self {
-            name,
-            args,
-            body,
-        }
+        Self { name, args, body }
     }
 }
 
@@ -337,11 +333,13 @@ impl AstNode for Lvalue {
     fn from_pair(pair: Pair) -> Self {
         let mut pairs = pair.into_inner();
         let name = String::from(pairs.next().unwrap().as_str());
-        let subscripts: Vec<_> = pairs.map(|p| match p.as_rule() {
-            Rule::subscript => Suffix::Subscript(Expr::from_pair(p.first()).into()),
-            Rule::member => Suffix::Member(String::from(p.as_str())),
-            _ => unreachable!()
-        }).collect();
+        let subscripts: Vec<_> = pairs
+            .map(|p| match p.as_rule() {
+                Rule::subscript => Suffix::Subscript(Expr::from_pair(p.first()).into()),
+                Rule::member => Suffix::Member(p.first_as_string()),
+                _ => unreachable!(),
+            })
+            .collect();
         Self { name, subscripts }
     }
 }
@@ -451,22 +449,20 @@ impl AstNode for Expr {
         // The output of all this is an Expr, containing a tree of other Exprs of
         // various forms.
         PRATT_PARSER
-            .map_primary(|term| {
-                match term.as_rule() {
-                    Rule::number => Expr::Number(term.into_number()),
-                    Rule::name => Expr::Name(String::from(term.as_str())),
-                    Rule::expr => Expr::from_pair(term).into(),
-                    _ => unreachable!()
-                }
+            .map_primary(|term| match term.as_rule() {
+                Rule::number => Expr::Number(term.into_number()),
+                Rule::name => Expr::Name(String::from(term.as_str())),
+                Rule::expr => Expr::from_pair(term),
+                Rule::lvalue => Expr::Address(Lvalue::from_pair(term)),
+                _ => unreachable!(),
             })
-            .map_infix(|lhs, op, rhs|
-                Expr::Infix(lhs.into(), Operator::from_pair(op), rhs.into())
-            )
-            .map_prefix(|prefix, expr|
-                Expr::Prefix(Prefix::from_pair(prefix), expr.into())
-            )
-            .map_postfix(|expr, suffix|
-                Expr::Suffix(expr.into(), Suffix::from_pair(suffix)))
+            .map_infix(|lhs, op, rhs| Expr::Infix(lhs.into(), Operator::from_pair(op), rhs.into()))
+            .map_prefix(|prefix, expr| match prefix.as_str() {
+                "-" => Expr::Neg(expr.into()),
+                "!" => Expr::Not(expr.into()),
+                _ => unreachable!(),
+            })
+            .map_postfix(|expr, suffix| Expr::Suffix(expr.into(), Suffix::from_pair(suffix)))
             .parse(pair.into_inner())
     }
 }
@@ -506,19 +502,6 @@ impl AstNode for Operator {
     }
 }
 
-impl AstNode for Prefix {
-    const RULE: Rule = Rule::prefix;
-
-    fn from_pair(pair: Pair) -> Self {
-        match pair.as_str() {
-            "!" => Self::Not,
-            "-" => Self::Neg,
-            "&" => Self::Address,
-            _ => unreachable!(),
-        }
-    }
-}
-
 ///////////////////////////////////////////////////////////////////////////////////////////
 
 impl AstNode for Suffix {
@@ -530,7 +513,7 @@ impl AstNode for Suffix {
             Rule::subscript => Self::Subscript(Expr::from_pair(first.first()).into()),
             Rule::member => Self::Member(first.first_as_string()),
             Rule::arglist => Self::Arglist(first.into_inner().map(Rvalue::from_pair).collect()),
-            rule => unreachable!("Expected a subscript, member, or arglist, got a {:?}", rule)
+            rule => unreachable!("Expected a subscript, member, or arglist, got a {:?}", rule),
         }
     }
 }
@@ -615,7 +598,7 @@ mod test {
             Const::from_str("const a = -7;"),
             Ok(Const {
                 name: "a".into(),
-                value: Some(Expr::Prefix(Prefix::Neg, 7.into()).into()),
+                value: Some(Expr::Neg(7.into()).into()),
                 string: None,
             })
         );
@@ -658,7 +641,7 @@ mod test {
                     name: "bar".into(),
                     typename: None,
                     size: Some(100.into()),
-                }, ],
+                },],
             })
         );
 
@@ -670,7 +653,7 @@ mod test {
                     name: "bar".into(),
                     typename: Some("Thing".into()),
                     size: Some(100.into()),
-                }, ],
+                },],
             })
         );
     }
@@ -732,16 +715,12 @@ mod test {
 
     #[test]
     fn parse_exprs() {
-        use Operator::*;
-        use Prefix::*;
-        use Suffix::*;
         use Expr::Infix;
+        use Operator::*;
+        use Suffix::*;
 
         // A very, very basic expression
-        assert_eq!(
-            Expr::from_str("23"),
-            Ok(Expr::Number(23))
-        );
+        assert_eq!(Expr::from_str("23"), Ok(Expr::Number(23)));
 
         // Two vals with an operator
         assert_eq!(
@@ -756,14 +735,13 @@ mod test {
         );
 
         // Simple prefix
-        assert_eq!(Expr::from_str("-5"),
-            Ok(Expr::Prefix(Neg, 5.into())));
+        assert_eq!(Expr::from_str("-5"), Ok(Expr::Neg(5.into())));
 
         // Multiple prefixes
         assert_eq!(
-            Expr::from_str("!&foo"),
-            Ok(Expr::Prefix(Not,
-                            Expr::Prefix(Address, "foo".into()).into())));
+            Expr::from_str("!-foo"),
+            Ok(Expr::Not(Expr::Neg("foo".into()).into()))
+        );
 
         // Simple suffix
         assert_eq!(
@@ -776,7 +754,8 @@ mod test {
             Expr::from_str("foo[10].bar"),
             Ok(Expr::Suffix(
                 Expr::Suffix("foo".into(), Subscript(10.into())).into(),
-                Member("bar".into())))
+                Member("bar".into())
+            ))
         );
 
         // Higher precedence levels
@@ -785,10 +764,7 @@ mod test {
             Ok(Infix(1.into(), Add, Infix(2.into(), Mul, 3.into()).into()))
         );
 
-        assert_eq!(
-            Expr::from_str("2 * 3"),
-            Ok(Infix(2.into(), Mul, 3.into()))
-        );
+        assert_eq!(Expr::from_str("2 * 3"), Ok(Infix(2.into(), Mul, 3.into())));
 
         assert_eq!(
             Expr::from_str("2 * 3 + 4"),
@@ -803,22 +779,30 @@ mod test {
 
         assert_eq!(
             Expr::from_str("2 && &blah"),
-            Ok(Infix(2.into(), And, Expr::Prefix(Address, "blah".into()).into()))
+            Ok(Infix(2.into(), And, Expr::Address("blah".into()).into()))
         );
 
         assert_eq!(
             Expr::from_str("2 & &blah"),
-            Ok(Infix(2.into(), BitAnd, Expr::Prefix(Address, "blah".into()).into()))
+            Ok(Infix(2.into(), BitAnd, Expr::Address("blah".into()).into()))
         );
 
         assert_eq!(
             Expr::from_str("1 | 2 ^ 3"),
-            Ok(Infix(1.into(), BitOr, Infix(2.into(), Xor, 3.into()).into()))
+            Ok(Infix(
+                1.into(),
+                BitOr,
+                Infix(2.into(), Xor, 3.into()).into()
+            ))
         );
 
         assert_eq!(
             Expr::from_str("x == y > z"),
-            Ok(Infix("x".into(), Eq, Infix("y".into(), Gt, "z".into()).into()))
+            Ok(Infix(
+                "x".into(),
+                Eq,
+                Infix("y".into(), Gt, "z".into()).into()
+            ))
         );
 
         assert_eq!(
@@ -828,35 +812,57 @@ mod test {
 
         assert_eq!(
             Expr::from_str("!a - -3"),
-            Ok(Infix(Expr::Prefix(Not, "a".into()).into(), Sub, Expr::Prefix(Neg, 3.into()).into()))
+            Ok(Infix(
+                Expr::Not("a".into()).into(),
+                Sub,
+                Expr::Neg(3.into()).into()
+            ))
         );
 
         assert_eq!(
             Expr::from_str("-(4 * 5)"),
-            Ok(Expr::Prefix(Neg,
-                            Infix(4.into(), Mul, 5.into()).into()
-            ))
+            Ok(Expr::Neg(Infix(4.into(), Mul, 5.into()).into()))
         );
 
         // Parens
         assert_eq!(
             Expr::from_str("(1 + 2) * 3"),
-            Ok(
-                Infix(
-                    Infix(1.into(), Add, 2.into()).into(),
-                    Mul,
-                    3.into()
-                )
-            )
+            Ok(Infix(Infix(1.into(), Add, 2.into()).into(), Mul, 3.into()))
         );
+
+        // Addresses
+        assert_eq!(
+            Expr::from_str("&foo.bar"),
+            Ok(Expr::Address(Lvalue {
+                name: "foo".into(),
+                subscripts: vec![Suffix::Member("bar".into())]
+            }))
+        );
+
+        assert_eq!(
+            Expr::from_str("&foo + 7"),
+            Ok(Expr::Infix(
+                Expr::Address("foo".into()).into(),
+                Add,
+                7.into()
+            ))
+        );
+
+        // This is godawful but legal _as long as it parses like this._ The arglist suffix on the end
+        // goes on the "&foo" expression as a whole, so, it "calls" the address of foo. Essentially:
+        // "push foo; call" rather than "loadw foo; call"
+        assert_eq!(
+            Expr::from_str("&foo()"),
+            Ok(Expr::Suffix(
+                Expr::Address("foo".into()).into(),
+                Suffix::Arglist(vec![])
+            ))
+        )
     }
 
     #[test]
     fn parse_calls() {
-        let blah = Expr::Suffix(
-            "blah".into(),
-            Suffix::Arglist(vec![])
-        );
+        let blah = Expr::Suffix("blah".into(), Suffix::Arglist(vec![]));
 
         // Can Node parse a call?
         assert_eq!(Expr::from_str("blah()"), Ok(blah.clone()));
@@ -869,7 +875,8 @@ mod test {
             Expr::from_str("blah(1, 2)"),
             Ok(Expr::Suffix(
                 "blah".into(),
-                Suffix::Arglist(vec![1.into(), 2.into()])))
+                Suffix::Arglist(vec![1.into(), 2.into()])
+            ))
         );
 
         //Calls with strings
@@ -877,9 +884,10 @@ mod test {
             Expr::from_str("blah(\"foo\", 2)"),
             Ok(Expr::Suffix(
                 "blah".into(),
-                Suffix::Arglist(vec!["foo".into(), 2.into()])))
+                Suffix::Arglist(vec!["foo".into(), 2.into()])
+            ))
         );
-     }
+    }
 
     #[test]
     fn parse_return() {
@@ -907,7 +915,10 @@ mod test {
         assert_eq!(
             Assignment::from_str("foo[45] = 7"),
             Ok(Assignment {
-                lvalue: Lvalue { name: String::from("foo"), subscripts: vec![Suffix::Subscript(45.into())] },
+                lvalue: Lvalue {
+                    name: String::from("foo"),
+                    subscripts: vec![Suffix::Subscript(45.into())]
+                },
                 rvalue: Rvalue::Expr(7.into()),
             })
         );
