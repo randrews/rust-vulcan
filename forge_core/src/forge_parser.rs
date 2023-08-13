@@ -462,6 +462,7 @@ impl AstNode for Expr {
             .map_prefix(|prefix, expr| match prefix.as_str() {
                 "-" => Expr::Neg(expr.into()),
                 "!" => Expr::Not(expr.into()),
+                "*" => Expr::Deref(expr.into()),
                 _ => unreachable!(),
             })
             .map_postfix(|expr, suffix| match suffix.as_rule() {
@@ -866,7 +867,18 @@ mod test {
         assert_eq!(
             Expr::from_str("&foo()"),
             Ok(Expr::Call(Expr::Address("foo".into()).into(), vec![]))
-        )
+        );
+
+        // Dereferencing
+        assert_eq!(
+            Expr::from_str("*foo"),
+            Ok(Expr::Deref("foo".into()))
+        );
+
+        assert_eq!(
+            Expr::from_str("*foo[3]"), // The subscript happens before the dereference
+            Ok(Expr::Deref(Expr::Subscript("foo".into(), 3.into()).into()))
+        );
     }
 
     #[test]

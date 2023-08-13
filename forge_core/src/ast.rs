@@ -171,6 +171,7 @@ pub enum Expr {
     Name(String),
     Not(BoxExpr),
     Neg(BoxExpr),
+    Deref(BoxExpr),
     Address(Lvalue),
     Call(BoxExpr, Vec<Rvalue>),
     Subscript(BoxExpr, BoxExpr),

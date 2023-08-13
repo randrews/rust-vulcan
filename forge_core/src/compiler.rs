@@ -66,14 +66,14 @@ pub enum Variable {
 /// and replace it with the design from last year with the mode argument... but as a DMA "device"
 /// with an interface in the zero page.
 #[derive(Clone, PartialEq, Debug, Default)]
-pub struct Signature {
+pub struct CompiledFn {
     pub label: Label,
     pub frame_size: usize,
     pub local_scope: Scope,
     pub body: Vec<String>,
 }
 
-impl Signature {
+impl CompiledFn {
     /// Add a name to the local scope, which:
     /// - Increases the size of the stack frame by that much
     /// - Records the offset into the local stack frame where that variable is stored
@@ -115,7 +115,7 @@ struct State {
     /// The globally-defined names
     pub global_scope: Scope,
     /// The functions
-    pub functions: BTreeMap<String, Signature>,
+    pub functions: BTreeMap<String, CompiledFn>,
     /// The string table
     pub strings: Vec<(Label, String)>,
 }
@@ -161,14 +161,14 @@ trait Compilable {
     fn process(
         self,
         state: &mut State,
-        function: Option<&mut Signature>,
+        function: Option<&mut CompiledFn>,
     ) -> Result<(), CompileError>;
 }
 
 ///////////////////////////////////////////////////////////
 
 impl Compilable for Program {
-    fn process(self, state: &mut State, _: Option<&mut Signature>) -> Result<(), CompileError> {
+    fn process(self, state: &mut State, _: Option<&mut CompiledFn>) -> Result<(), CompileError> {
         for decl in self.0 {
             decl.process(state, None)?
         }
@@ -179,7 +179,7 @@ impl Compilable for Program {
 ///////////////////////////////////////////////////////////
 
 impl Compilable for Declaration {
-    fn process(self, state: &mut State, _: Option<&mut Signature>) -> Result<(), CompileError> {
+    fn process(self, state: &mut State, _: Option<&mut CompiledFn>) -> Result<(), CompileError> {
         match self {
             Declaration::Function(f) => f.process(state, None),
             Declaration::Global(g) => g.process(state, None),
@@ -192,9 +192,9 @@ impl Compilable for Declaration {
 ///////////////////////////////////////////////////////////
 
 impl Compilable for Function {
-    fn process(self, state: &mut State, _: Option<&mut Signature>) -> Result<(), CompileError> {
+    fn process(self, state: &mut State, _: Option<&mut CompiledFn>) -> Result<(), CompileError> {
         // The signature for this function, which will eventually get added to the state
-        let mut sig = Signature {
+        let mut sig = CompiledFn {
             label: state.gensym(),
             ..Default::default()
         };
@@ -255,7 +255,7 @@ fn lookup<'a>(name: &str, global_scope: &'a Scope, local_scope: &'a Scope) -> Op
 ///////////////////////////////////////////////////////////
 
 impl Compilable for Assignment {
-    fn process(self, state: &mut State, sig: Option<&mut Signature>) -> Result<(), CompileError> {
+    fn process(self, state: &mut State, sig: Option<&mut CompiledFn>) -> Result<(), CompileError> {
         let Assignment { lvalue, rvalue } = self;
         let sig = sig.expect("Assignment outside function");
         // First the value, then the address we'll storew it to
@@ -269,7 +269,7 @@ impl Compilable for Assignment {
 ///////////////////////////////////////////////////////////
 
 impl Compilable for VarDecl {
-    fn process(self, state: &mut State, sig: Option<&mut Signature>) -> Result<(), CompileError> {
+    fn process(self, state: &mut State, sig: Option<&mut CompiledFn>) -> Result<(), CompileError> {
         let mut sig = sig.expect("Var declaration outside function");
         if self.typename.is_some() || self.size.is_some() {
             todo!("Structs and arrays are not yet supported")
@@ -294,7 +294,7 @@ impl Compilable for VarDecl {
 ///////////////////////////////////////////////////////////
 
 impl Compilable for Rvalue {
-    fn process(self, state: &mut State, sig: Option<&mut Signature>) -> Result<(), CompileError> {
+    fn process(self, state: &mut State, sig: Option<&mut CompiledFn>) -> Result<(), CompileError> {
         let sig = sig.expect("Assignment outside function");
         // For a normal expr, eval and leave on the stack; for a string literal, add it to
         // the str table and push the label's address
@@ -313,7 +313,7 @@ impl Compilable for Rvalue {
 
 /// Evaluate an lvalue and leave its address on the stack (ready to be consumed by storew)
 impl Compilable for Lvalue {
-    fn process(self, state: &mut State, sig: Option<&mut Signature>) -> Result<(), CompileError> {
+    fn process(self, state: &mut State, sig: Option<&mut CompiledFn>) -> Result<(), CompileError> {
         let global_scope = &state.global_scope;
         let mut sig = sig.expect("lvalue outside a function");
 
@@ -355,7 +355,7 @@ impl Compilable for Lvalue {
 /// Evaluate an expression in the context of a local scope. The runtime brother to eval_const.
 /// This recursively evaluates a Node and leaves its value on the stack.
 impl Compilable for Expr {
-    fn process(self, state: &mut State, sig: Option<&mut Signature>) -> Result<(), CompileError> {
+    fn process(self, state: &mut State, sig: Option<&mut CompiledFn>) -> Result<(), CompileError> {
         let mut sig = sig.expect("Non-const expression outside a function");
         let global_scope = &state.global_scope;
 
@@ -420,6 +420,11 @@ impl Compilable for Expr {
             }
             // Handling addresses is very easy because processing an lvalue leaves the address on the stack
             Expr::Address(lvalue) => lvalue.process(state, Some(sig)),
+            Expr::Deref(BoxExpr(e)) => {
+                (*e).process(state, Some(sig))?;
+                sig.emit("loadw");
+                Ok(())
+            }
             Expr::Call(_, _) => todo!(),
             Expr::Subscript(_, _) => todo!("Structs and arrays are not yen supported"),
             Expr::Member(_, _) => todo!("Structs and arrays are not yen supported"),
@@ -479,7 +484,7 @@ impl Compilable for Expr {
 ///////////////////////////////////////////////////////////
 
 impl Compilable for Global {
-    fn process(self, state: &mut State, _: Option<&mut Signature>) -> Result<(), CompileError> {
+    fn process(self, state: &mut State, _: Option<&mut CompiledFn>) -> Result<(), CompileError> {
         if self.typename.is_some() || self.size.is_some() {
             todo!("Structs and arrays are not yet supported")
         }
@@ -490,7 +495,7 @@ impl Compilable for Global {
 ///////////////////////////////////////////////////////////
 
 impl Compilable for Const {
-    fn process(self, state: &mut State, _: Option<&mut Signature>) -> Result<(), CompileError> {
+    fn process(self, state: &mut State, _: Option<&mut CompiledFn>) -> Result<(), CompileError> {
         let var = if self.string.is_some() {
             // If it's a string, add it to the string table
             Variable::DirectLabel(state.add_string(&self.string.unwrap()))
@@ -534,7 +539,7 @@ pub fn eval_const(expr: Expr, scope: &Scope) -> Result<i32, CompileError> {
             let val = eval_const(*e.0, scope)?;
             Ok(if val != 0 { 0 } else { 1 })
         }
-        Expr::Address(_) => Err(CompileError(
+        Expr::Address(_) | Expr::Deref(_) => Err(CompileError(
             0,
             0,
             String::from("Addresses are not known at compile time"),
@@ -637,7 +642,7 @@ mod test {
             .is_err());
     }
 
-    fn body_as_string(sig: &Signature) -> String {
+    fn body_as_string(sig: &CompiledFn) -> String {
         sig.body.join("\n")
     }
 

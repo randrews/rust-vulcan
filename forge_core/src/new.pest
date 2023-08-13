@@ -41,7 +41,7 @@ eq      = { "==" }
 ne      = { "!=" }
 lshift  = { "<<" }
 rshift  = { ">>" }
-prefix  = { "-" | "!" }
+prefix  = { "*" | "-" | "!" }
 
 operator = _{
     add
