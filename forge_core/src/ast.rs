@@ -75,7 +75,7 @@ pub struct Return(pub Option<Expr>);
 #[derive(PartialEq, Clone, Debug)]
 pub struct Assignment {
     pub lvalue: Lvalue,
-    pub rvalue: Rvalue,
+    pub rvalue: Expr,
 }
 
 // An lvalue is just a tag on an expr. Any expr parses just fine as an lvalue... not all exprs
@@ -104,17 +104,11 @@ impl From<Expr> for Lvalue {
 }
 
 #[derive(PartialEq, Clone, Debug)]
-pub enum Rvalue {
-    Expr(Expr),
-    String(String),
-}
-
-#[derive(PartialEq, Clone, Debug)]
 pub struct VarDecl {
     pub name: String,
     pub typename: Option<String>,
     pub size: Option<Expr>,
-    pub initial: Option<Rvalue>,
+    pub initial: Option<Expr>,
 }
 
 #[derive(PartialEq, Clone, Debug)]
@@ -174,10 +168,11 @@ pub enum Expr {
     Neg(BoxExpr),
     Deref(BoxExpr),
     Address(Lvalue),
-    Call(BoxExpr, Vec<Rvalue>),
+    Call(BoxExpr, Vec<Expr>),
     Subscript(BoxExpr, BoxExpr),
     Member(BoxExpr, String),
     Infix(BoxExpr, Operator, BoxExpr),
+    String(String),
 }
 
 #[repr(transparent)]
@@ -223,17 +218,5 @@ impl From<i32> for Expr {
 impl From<&str> for Expr {
     fn from(value: &str) -> Self {
         Self::Name(String::from(value))
-    }
-}
-
-impl From<i32> for Rvalue {
-    fn from(value: i32) -> Self {
-        Self::Expr(value.into())
-    }
-}
-
-impl From<&str> for Rvalue {
-    fn from(value: &str) -> Self {
-        Self::String(value.into())
     }
 }

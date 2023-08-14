@@ -323,46 +323,8 @@ impl AstNode for Assignment {
     fn from_pair(pair: Pair) -> Self {
         let mut pairs = pair.into_inner();
         let lvalue = Expr::from_pair(pairs.next().unwrap()).into();
-        let rvalue = Rvalue::from_pair(pairs.next().unwrap());
+        let rvalue = Expr::from_pair(pairs.next().unwrap());
         Self { lvalue, rvalue }
-    }
-}
-
-///////////////////////////////////////////////////////////////////////////////////////////
-
-// impl AstNode for Lvalue {
-//     const RULE: Rule = Rule::lvalue;
-//     fn from_pair(pair: Pair) -> Self {
-//         let mut pairs = pair.into_inner();
-//         let first = pairs.next().unwrap();
-//         if first.as_rule() == Rule::expr {
-//             Self::Expr(Expr::from_pair(first).into())
-//         } else {
-//             let name = String::from(first.as_str());
-//             let subscripts: Vec<_> = pairs
-//                 .map(|p| match p.as_rule() {
-//                     Rule::subscript => Suffix::Subscript(Expr::from_pair(p.first()).into()),
-//                     Rule::member => Suffix::Member(p.first_as_string()),
-//                     _ => unreachable!(),
-//                 })
-//                 .collect();
-//             Self::Name(name, subscripts)
-//         }
-//     }
-// }
-
-///////////////////////////////////////////////////////////////////////////////////////////
-
-impl AstNode for Rvalue {
-    const RULE: Rule = Rule::rvalue;
-
-    fn from_pair(pair: Pair) -> Self {
-        let pair = pair.first();
-        match pair.as_rule() {
-            Rule::string => Self::String(pair.into_quoted_string()),
-            Rule::expr => Self::Expr(Expr::from_pair(pair)),
-            _ => unreachable!(),
-        }
     }
 }
 
@@ -374,7 +336,7 @@ impl AstNode for VarDecl {
         let mut inner = pair.into_inner();
         let name = String::from(inner.next().unwrap().as_str());
         let Varinfo { typename, size } = Varinfo::from_pair(inner.next().unwrap());
-        let initial = inner.next().map(Rvalue::from_pair);
+        let initial = inner.next().map(Expr::from_pair);
         Self {
             name,
             typename,
@@ -460,6 +422,7 @@ impl AstNode for Expr {
                 Rule::number => Expr::Number(term.into_number()),
                 Rule::name => Expr::Name(String::from(term.as_str())),
                 Rule::expr => Expr::from_pair(term),
+                Rule::string => Self::String(term.into_quoted_string()),
                 _ => unreachable!(),
             })
             .map_infix(|lhs, op, rhs| Expr::Infix(lhs.into(), Operator::from_pair(op), rhs.into()))
@@ -473,7 +436,7 @@ impl AstNode for Expr {
             .map_postfix(|expr, suffix| match suffix.as_rule() {
                 Rule::arglist => Expr::Call(
                     expr.into(),
-                    suffix.into_inner().map(Rvalue::from_pair).collect(),
+                    suffix.into_inner().map(Expr::from_pair).collect(),
                 ),
                 Rule::subscript => {
                     Expr::Subscript(expr.into(), Expr::from_pair(suffix.first()).into())
@@ -901,7 +864,7 @@ mod test {
         //Calls with strings
         assert_eq!(
             Expr::from_str("blah(\"foo\", 2)"),
-            Ok(Expr::Call("blah".into(), vec!["foo".into(), 2.into()]))
+            Ok(Expr::Call("blah".into(), vec![Expr::String("foo".into()), 2.into()]))
         );
     }
 
@@ -924,7 +887,7 @@ mod test {
             Statement::from_str("foo = 7;"),
             Ok(Statement::Assignment(Assignment {
                 lvalue: "foo".into(),
-                rvalue: Rvalue::Expr(7.into()),
+                rvalue: 7.into(),
             }))
         );
 
@@ -932,7 +895,7 @@ mod test {
             Assignment::from_str("foo[45] = 7"),
             Ok(Assignment {
                 lvalue: Expr::Subscript("foo".into(), 45.into()).into(),
-                rvalue: Rvalue::Expr(7.into()),
+                rvalue: 7.into(),
             })
         );
 
@@ -940,7 +903,7 @@ mod test {
             Assignment::from_str("*foo = 12"),
             Ok(Assignment {
                 lvalue: Expr::Deref("foo".into()).into(),
-                rvalue: Rvalue::Expr(12.into())
+                rvalue: 12.into()
             })
         );
     }

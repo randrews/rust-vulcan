@@ -270,7 +270,7 @@ impl Compilable for Assignment {
 
 impl Compilable for VarDecl {
     fn process(self, state: &mut State, sig: Option<&mut CompiledFn>) -> Result<(), CompileError> {
-        let mut sig = sig.expect("Var declaration outside function");
+        let sig = sig.expect("Var declaration outside function");
         if self.typename.is_some() || self.size.is_some() {
             todo!("Structs and arrays are not yet supported")
         }
@@ -293,24 +293,6 @@ impl Compilable for VarDecl {
 
 ///////////////////////////////////////////////////////////
 
-impl Compilable for Rvalue {
-    fn process(self, state: &mut State, sig: Option<&mut CompiledFn>) -> Result<(), CompileError> {
-        let sig = sig.expect("Assignment outside function");
-        // For a normal expr, eval and leave on the stack; for a string literal, add it to
-        // the str table and push the label's address
-        match self {
-            Rvalue::Expr(e) => e.process(state, Some(sig)),
-            Rvalue::String(string) => {
-                let label = state.add_string(&string);
-                sig.emit_arg("push", label);
-                Ok(())
-            }
-        }
-    }
-}
-
-///////////////////////////////////////////////////////////
-
 /// Evaluate an lvalue and leave its address on the stack (ready to be consumed by storew)
 impl Compilable for Lvalue {
     fn process(self, state: &mut State, sig: Option<&mut CompiledFn>) -> Result<(), CompileError> {
@@ -324,7 +306,8 @@ impl Compilable for Lvalue {
             Expr::Not(_) |
             Expr::Address(_) |
             Expr::Call(_, _) |
-            Expr::Infix(_, _, _) => {
+            Expr::Infix(_, _, _) |
+            Expr::String(_) => {
                 Err(CompileError(0, 0, String::from("Not a valid lvalue")))
             }
 
@@ -444,6 +427,11 @@ impl Compilable for Expr {
                 sig.emit("loadw");
                 Ok(())
             }
+            Expr::String(string) => {
+                let label = state.add_string(&string);
+                sig.emit_arg("push", label);
+                Ok(())
+            }
             Expr::Call(_, _) => todo!(),
             Expr::Subscript(_, _) => todo!("Structs and arrays are not yen supported"),
             Expr::Member(_, _) => todo!("Structs and arrays are not yen supported"),
@@ -558,7 +546,11 @@ pub fn eval_const(expr: Expr, scope: &Scope) -> Result<i32, CompileError> {
             let val = eval_const(*e.0, scope)?;
             Ok(if val != 0 { 0 } else { 1 })
         }
-        Expr::Address(_) | Expr::Deref(_) => Err(CompileError(
+        // A note about Expr::String here: 'const foo="banana"' won't hit this point; it'll be
+        // (currently) parsed as a special case of const. The only things that will hit this are
+        // const expressions that include strings, like '"foo"[2]' or something. Those can't be
+        // (generally) calculated at compile time, so, they're an error.
+        Expr::Address(_) | Expr::Deref(_) | Expr::String(_) => Err(CompileError(
             0,
             0,
             String::from("Addresses are not known at compile time"),

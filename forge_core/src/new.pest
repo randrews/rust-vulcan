@@ -19,8 +19,7 @@ escape       = @{ "\\" ~ ("t" | "r" | "n" | "0" | "\\" | "\"") }
 string_inner = ${ !("\"" | "\\") ~ ANY | escape }
 string       = ${ "\"" ~ string_inner* ~ "\"" }
 
-assignment = { expr ~ "=" ~ rvalue }
-rvalue     = { expr | string }
+assignment = { expr ~ "=" ~ expr }
 
 add     = { "+" }
 sub     = { "-" }
@@ -64,12 +63,12 @@ operator = _{
 }
 
 expr = { prefix* ~ term ~ suffix* ~ (operator ~ prefix* ~ term ~ suffix*)* }
-term = _{ number | name | "(" ~ expr ~ ")" }
+term = _{ number | name | "(" ~ expr ~ ")" | string }
 
 suffix    = _{ modifier | arglist }
 modifier  = _{ subscript | member }
 subscript = { "[" ~ expr ~ "]" }
-arglist   = { "(" ~ (rvalue ~ ("," ~ rvalue)*)? ~ ")" }
+arglist   = { "(" ~ (expr ~ ("," ~ expr)*)? ~ ")" }
 member    = { "." ~ name }
 
 statement = { asm | ((return_stmt | var_decl | assignment | expr) ~ ";") | conditional | while_loop | repeat_loop }
@@ -91,11 +90,11 @@ return_stmt = { "return" ~ expr? }
 conditional = { "if" ~ "(" ~ expr ~ ")" ~ block ~ ("else" ~ block)? }
 while_loop  = { "while" ~ "(" ~ expr ~ ")" ~ block }
 repeat_loop = { "repeat" ~ "(" ~ expr ~ ")" ~ name? ~ block }
-var_decl    = { "var" ~ name ~ varinfo ~ ("=" ~ rvalue)? }
+var_decl    = { "var" ~ name ~ varinfo ~ ("=" ~ expr)? }
 global      = { "global" ~ name ~ varinfo ~ ";" }
 typename    = { ":" ~ name }
 size        = { "[" ~ expr ~ "]" }
-const_decl  = { "const" ~ name ~ "=" ~ (expr | string) ~ ";" }
+const_decl  = { "const" ~ name ~ "=" ~ (string | expr) ~ ";" }
 
 struct_decl = { "struct" ~ name ~ "{" ~ members ~ "}" }
 member_decl = { name ~ varinfo }
