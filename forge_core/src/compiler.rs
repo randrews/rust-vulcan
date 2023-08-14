@@ -632,6 +632,19 @@ mod test {
     }
 
     #[test]
+    fn test_string_const() {
+        let mut state = State::default();
+        parse("const foo = \"bar\";")
+            .unwrap()
+            .process(&mut state, None)
+            .unwrap();
+        assert_eq!(
+            state.global_scope,
+            [("foo".into(), Variable::DirectLabel("_gensym_1".into()))].into()
+        )
+    }
+
+    #[test]
     fn test_global_decl() {
         let mut state = State::default();
         parse("global a;")
@@ -781,6 +794,26 @@ mod test {
             ]
                 .join("\n")
         )
+    }
 
+    #[test]
+    fn test_string_exprs() {
+        let mut state = State::default();
+        parse("const foo = \"foo\"; fn blah() { var x = \"bar\" + 3; }")
+            .unwrap()
+            .process(&mut state, None)
+            .expect("Failed to compile");
+        let body = body_as_string(state.functions.get("blah").unwrap());
+        assert_eq!(
+            body,
+            vec![
+                "push _gensym_3", // 1 is the label in the string table for "foo", 2 for "blah,"
+                "push 3", // so 3 is the string "bar"
+                "add", // Add 3 to that address
+                "loadw frame", // Store it in the first var
+                "storew"
+            ]
+                .join("\n")
+        )
     }
 }
