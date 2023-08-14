@@ -19,8 +19,7 @@ escape       = @{ "\\" ~ ("t" | "r" | "n" | "0" | "\\" | "\"") }
 string_inner = ${ !("\"" | "\\") ~ ANY | escape }
 string       = ${ "\"" ~ string_inner* ~ "\"" }
 
-assignment = { lvalue ~ "=" ~ rvalue }
-lvalue     = { (name ~ (modifier)*) | ("*" ~ expr) }
+assignment = { expr ~ "=" ~ rvalue }
 rvalue     = { expr | string }
 
 add     = { "+" }
@@ -41,7 +40,7 @@ eq      = { "==" }
 ne      = { "!=" }
 lshift  = { "<<" }
 rshift  = { ">>" }
-prefix  = { "*" | "-" | "!" }
+prefix  = { "*" | "-" | "!" | "&" }
 
 operator = _{
     add
@@ -65,7 +64,7 @@ operator = _{
 }
 
 expr = { prefix* ~ term ~ suffix* ~ (operator ~ prefix* ~ term ~ suffix*)* }
-term = _{ number | name | "(" ~ expr ~ ")" | "&" ~ lvalue }
+term = _{ number | name | "(" ~ expr ~ ")" }
 
 suffix    = _{ modifier | arglist }
 modifier  = _{ subscript | member }

@@ -317,12 +317,19 @@ impl Compilable for Lvalue {
         let global_scope = &state.global_scope;
         let mut sig = sig.expect("lvalue outside a function");
 
-        match self {
-            Self::Name(name, subscripts) => {
-                if !subscripts.is_empty() {
-                    todo!("Arrays and structs aren't implemented yet")
-                }
+        match *(self.0.0) {
+            // A bunch of different things that aren't allowed
+            Expr::Number(_) |
+            Expr::Neg(_) |
+            Expr::Not(_) |
+            Expr::Address(_) |
+            Expr::Call(_, _) |
+            Expr::Infix(_, _, _) => {
+                Err(CompileError(0, 0, String::from("Not a valid lvalue")))
+            }
 
+            // Names we look up and leave the address on the stack:
+            Expr::Name(name) => {
                 if let Some(var) = lookup(&name, global_scope, &sig.local_scope) {
                     match var {
                         Variable::Literal(_) | Variable::DirectLabel(_) => {
@@ -350,9 +357,13 @@ impl Compilable for Lvalue {
                     Err(CompileError(0, 0, format!("Unknown name {}", name)))
                 }
             }
-            Self::Expr(BoxExpr(expr)) => {
-                // Just compile the expression and that's the address to write to
+            // Derefs are just evaluating the expr and leaving its value (an address) on the stack
+            Expr::Deref(BoxExpr(expr)) => {
                 (*expr).process(state, Some(sig))
+            }
+            Expr::Subscript(_, _) |
+            Expr::Member(_, _) => {
+                Err(CompileError(0, 0, String::from("Arrays and structs are not yet supported")))
             }
         }
     }

@@ -78,21 +78,28 @@ pub struct Assignment {
     pub rvalue: Rvalue,
 }
 
+// An lvalue is just a tag on an expr. Any expr parses just fine as an lvalue... not all exprs
+// will compile as lvalues. But this saves us essentially having to define the expr grammar twice:
+// in the compiler we can tell whether it makes sense for a given lvalue to compile into code that
+// yields an address or if it can only yield a value.
 #[derive(PartialEq, Clone, Debug)]
-pub enum Lvalue {
-    Expr(BoxExpr),
-    Name(String, Vec<Suffix>)
-}
+pub struct Lvalue(pub BoxExpr);
 
 impl From<&str> for Lvalue {
     fn from(name: &str) -> Self {
-        Self::Name(String::from(name), vec![])
+        Self(name.into())
     }
 }
 
 impl From<String> for Lvalue {
     fn from(name: String) -> Self {
-        Self::Name(name, vec![])
+        Self(name.into())
+    }
+}
+
+impl From<Expr> for Lvalue {
+    fn from(value: Expr) -> Self {
+        Self(value.into())
     }
 }
 
@@ -192,6 +199,12 @@ impl From<Expr> for BoxExpr {
 impl From<&str> for BoxExpr {
     fn from(value: &str) -> Self {
         Expr::Name(String::from(value)).into()
+    }
+}
+
+impl From<String> for BoxExpr {
+    fn from(value: String) -> Self {
+        Expr::Name(value).into()
     }
 }
 

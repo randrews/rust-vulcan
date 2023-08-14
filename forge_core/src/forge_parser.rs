@@ -1,4 +1,4 @@
-use pest::pratt_parser::{Op, PrattParser};
+use pest::pratt_parser::PrattParser;
 use pest::Parser;
 
 #[derive(Parser)]
@@ -322,7 +322,7 @@ impl AstNode for Assignment {
     const RULE: Rule = Rule::assignment;
     fn from_pair(pair: Pair) -> Self {
         let mut pairs = pair.into_inner();
-        let lvalue = Lvalue::from_pair(pairs.next().unwrap());
+        let lvalue = Expr::from_pair(pairs.next().unwrap()).into();
         let rvalue = Rvalue::from_pair(pairs.next().unwrap());
         Self { lvalue, rvalue }
     }
@@ -330,26 +330,26 @@ impl AstNode for Assignment {
 
 ///////////////////////////////////////////////////////////////////////////////////////////
 
-impl AstNode for Lvalue {
-    const RULE: Rule = Rule::lvalue;
-    fn from_pair(pair: Pair) -> Self {
-        let mut pairs = pair.into_inner();
-        let first = pairs.next().unwrap();
-        if first.as_rule() == Rule::expr {
-            Self::Expr(Expr::from_pair(first).into())
-        } else {
-            let name = String::from(first.as_str());
-            let subscripts: Vec<_> = pairs
-                .map(|p| match p.as_rule() {
-                    Rule::subscript => Suffix::Subscript(Expr::from_pair(p.first()).into()),
-                    Rule::member => Suffix::Member(p.first_as_string()),
-                    _ => unreachable!(),
-                })
-                .collect();
-            Self::Name(name, subscripts)
-        }
-    }
-}
+// impl AstNode for Lvalue {
+//     const RULE: Rule = Rule::lvalue;
+//     fn from_pair(pair: Pair) -> Self {
+//         let mut pairs = pair.into_inner();
+//         let first = pairs.next().unwrap();
+//         if first.as_rule() == Rule::expr {
+//             Self::Expr(Expr::from_pair(first).into())
+//         } else {
+//             let name = String::from(first.as_str());
+//             let subscripts: Vec<_> = pairs
+//                 .map(|p| match p.as_rule() {
+//                     Rule::subscript => Suffix::Subscript(Expr::from_pair(p.first()).into()),
+//                     Rule::member => Suffix::Member(p.first_as_string()),
+//                     _ => unreachable!(),
+//                 })
+//                 .collect();
+//             Self::Name(name, subscripts)
+//         }
+//     }
+// }
 
 ///////////////////////////////////////////////////////////////////////////////////////////
 
@@ -460,7 +460,6 @@ impl AstNode for Expr {
                 Rule::number => Expr::Number(term.into_number()),
                 Rule::name => Expr::Name(String::from(term.as_str())),
                 Rule::expr => Expr::from_pair(term),
-                Rule::lvalue => Expr::Address(Lvalue::from_pair(term)),
                 _ => unreachable!(),
             })
             .map_infix(|lhs, op, rhs| Expr::Infix(lhs.into(), Operator::from_pair(op), rhs.into()))
@@ -468,6 +467,7 @@ impl AstNode for Expr {
                 "-" => Expr::Neg(expr.into()),
                 "!" => Expr::Not(expr.into()),
                 "*" => Expr::Deref(expr.into()),
+                "&" => Expr::Address(expr.into()),
                 _ => unreachable!(),
             })
             .map_postfix(|expr, suffix| match suffix.as_rule() {
@@ -735,7 +735,6 @@ mod test {
     fn parse_exprs() {
         use Expr::Infix;
         use Operator::*;
-        use Suffix::*;
 
         // A very, very basic expression
         assert_eq!(Expr::from_str("23"), Ok(Expr::Number(23)));
@@ -851,7 +850,7 @@ mod test {
         // Addresses
         assert_eq!(
             Expr::from_str("&foo.bar"),
-            Ok(Expr::Address(Lvalue::Name("foo".into(), vec![Suffix::Member("bar".into())])))
+            Ok(Expr::Address(Expr::Member("foo".into(), "bar".into()).into()))
         );
 
         assert_eq!(
@@ -863,12 +862,12 @@ mod test {
             ))
         );
 
-        // This is godawful but legal _as long as it parses like this._ The arglist on the end goes
-        // on the "&foo" expression as a whole, so, it "calls" the address of foo. Essentially:
-        // "push foo; call" rather than "loadw foo; call"
+        // This is an example of a thing that will parse but not compile. This parses as an address
+        // of a call, which doesn't make sense, but because Expr::Address contains an Lvalue the
+        // compiler can detect this and error at that stage.
         assert_eq!(
             Expr::from_str("&foo()"),
-            Ok(Expr::Call(Expr::Address("foo".into()).into(), vec![]))
+            Ok(Expr::Address(Expr::Call("foo".into(), vec![]).into()))
         );
 
         // Dereferencing
@@ -932,7 +931,7 @@ mod test {
         assert_eq!(
             Assignment::from_str("foo[45] = 7"),
             Ok(Assignment {
-                lvalue: Lvalue::Name("foo".into(), vec![Suffix::Subscript(45.into())]),
+                lvalue: Expr::Subscript("foo".into(), 45.into()).into(),
                 rvalue: Rvalue::Expr(7.into()),
             })
         );
@@ -940,7 +939,7 @@ mod test {
         assert_eq!(
             Assignment::from_str("*foo = 12"),
             Ok(Assignment {
-                lvalue: Lvalue::Expr("foo".into()),
+                lvalue: Expr::Deref("foo".into()).into(),
                 rvalue: Rvalue::Expr(12.into())
             })
         );
