@@ -334,15 +334,20 @@ impl AstNode for Lvalue {
     const RULE: Rule = Rule::lvalue;
     fn from_pair(pair: Pair) -> Self {
         let mut pairs = pair.into_inner();
-        let name = String::from(pairs.next().unwrap().as_str());
-        let subscripts: Vec<_> = pairs
-            .map(|p| match p.as_rule() {
-                Rule::subscript => Suffix::Subscript(Expr::from_pair(p.first()).into()),
-                Rule::member => Suffix::Member(p.first_as_string()),
-                _ => unreachable!(),
-            })
-            .collect();
-        Self { name, subscripts }
+        let first = pairs.next().unwrap();
+        if first.as_rule() == Rule::expr {
+            Self::Expr(Expr::from_pair(first).into())
+        } else {
+            let name = String::from(first.as_str());
+            let subscripts: Vec<_> = pairs
+                .map(|p| match p.as_rule() {
+                    Rule::subscript => Suffix::Subscript(Expr::from_pair(p.first()).into()),
+                    Rule::member => Suffix::Member(p.first_as_string()),
+                    _ => unreachable!(),
+                })
+                .collect();
+            Self::Name(name, subscripts)
+        }
     }
 }
 
@@ -846,10 +851,7 @@ mod test {
         // Addresses
         assert_eq!(
             Expr::from_str("&foo.bar"),
-            Ok(Expr::Address(Lvalue {
-                name: "foo".into(),
-                subscripts: vec![Suffix::Member("bar".into())]
-            }))
+            Ok(Expr::Address(Lvalue::Name("foo".into(), vec![Suffix::Member("bar".into())])))
         );
 
         assert_eq!(
@@ -930,11 +932,16 @@ mod test {
         assert_eq!(
             Assignment::from_str("foo[45] = 7"),
             Ok(Assignment {
-                lvalue: Lvalue {
-                    name: String::from("foo"),
-                    subscripts: vec![Suffix::Subscript(45.into())]
-                },
+                lvalue: Lvalue::Name("foo".into(), vec![Suffix::Subscript(45.into())]),
                 rvalue: Rvalue::Expr(7.into()),
+            })
+        );
+
+        assert_eq!(
+            Assignment::from_str("*foo = 12"),
+            Ok(Assignment {
+                lvalue: Lvalue::Expr("foo".into()),
+                rvalue: Rvalue::Expr(12.into())
             })
         );
     }

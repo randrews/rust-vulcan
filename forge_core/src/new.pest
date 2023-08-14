@@ -20,7 +20,7 @@ string_inner = ${ !("\"" | "\\") ~ ANY | escape }
 string       = ${ "\"" ~ string_inner* ~ "\"" }
 
 assignment = { lvalue ~ "=" ~ rvalue }
-lvalue     = { name ~ (modifier)* }
+lvalue     = { (name ~ (modifier)*) | ("*" ~ expr) }
 rvalue     = { expr | string }
 
 add     = { "+" }

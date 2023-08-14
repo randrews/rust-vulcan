@@ -79,26 +79,20 @@ pub struct Assignment {
 }
 
 #[derive(PartialEq, Clone, Debug)]
-pub struct Lvalue {
-    pub name: String,
-    pub subscripts: Vec<Suffix>,
+pub enum Lvalue {
+    Expr(BoxExpr),
+    Name(String, Vec<Suffix>)
 }
 
 impl From<&str> for Lvalue {
     fn from(name: &str) -> Self {
-        Self {
-            name: String::from(name),
-            subscripts: vec![],
-        }
+        Self::Name(String::from(name), vec![])
     }
 }
 
 impl From<String> for Lvalue {
     fn from(name: String) -> Self {
-        Self {
-            name,
-            subscripts: vec![],
-        }
+        Self::Name(name, vec![])
     }
 }
 

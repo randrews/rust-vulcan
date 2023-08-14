@@ -317,35 +317,43 @@ impl Compilable for Lvalue {
         let global_scope = &state.global_scope;
         let mut sig = sig.expect("lvalue outside a function");
 
-        if !self.subscripts.is_empty() {
-            todo!("Arrays and structs aren't implemented yet")
-        }
+        match self {
+            Self::Name(name, subscripts) => {
+                if !subscripts.is_empty() {
+                    todo!("Arrays and structs aren't implemented yet")
+                }
 
-        if let Some(var) = lookup(&self.name, global_scope, &sig.local_scope) {
-            match var {
-                Variable::Literal(_) | Variable::DirectLabel(_) => {
-                    // Direct labels are (probably) functions, the important part is the
-                    // label itself, which we can't alter, so, error:
-                    Err(CompileError(0, 0, format!("Invalid lvalue {}", self.name)))
-                }
-                Variable::IndirectLabel(label) => {
-                    // Indirect labels are variables, the label is where the data is stored,
-                    // so we push that label so we can store stuff there
-                    let label = label.clone();
-                    sig.emit_arg("push", label);
-                    Ok(())
-                }
-                Variable::Local(offset) => {
-                    let offset = *offset;
-                    sig.emit_arg("loadw", "frame");
-                    if offset > 0 {
-                        sig.emit_arg("add", offset);
+                if let Some(var) = lookup(&name, global_scope, &sig.local_scope) {
+                    match var {
+                        Variable::Literal(_) | Variable::DirectLabel(_) => {
+                            // Direct labels are (probably) functions, the important part is the
+                            // label itself, which we can't alter, so, error:
+                            Err(CompileError(0, 0, format!("Invalid lvalue {}", name)))
+                        }
+                        Variable::IndirectLabel(label) => {
+                            // Indirect labels are variables, the label is where the data is stored,
+                            // so we push that label so we can store stuff there
+                            let label = label.clone();
+                            sig.emit_arg("push", label);
+                            Ok(())
+                        }
+                        Variable::Local(offset) => {
+                            let offset = *offset;
+                            sig.emit_arg("loadw", "frame");
+                            if offset > 0 {
+                                sig.emit_arg("add", offset);
+                            }
+                            Ok(())
+                        }
                     }
-                    Ok(())
+                } else {
+                    Err(CompileError(0, 0, format!("Unknown name {}", name)))
                 }
             }
-        } else {
-            Err(CompileError(0, 0, format!("Unknown name {}", self.name)))
+            Self::Expr(BoxExpr(expr)) => {
+                // Just compile the expression and that's the address to write to
+                (*expr).process(state, Some(sig))
+            }
         }
     }
 }
@@ -747,5 +755,29 @@ mod test {
             ]
             .join("\n")
         )
+    }
+
+    #[test]
+    fn test_derefs() {
+        let mut state = State::default();
+        parse("fn blah() { var x = 3; *1000 = *x; }")
+            .unwrap()
+            .process(&mut state, None)
+            .expect("Failed to compile");
+        let body = body_as_string(state.functions.get("blah").unwrap());
+        assert_eq!(
+            body,
+            vec![
+                "push 3",
+                "loadw frame",
+                "storew",      // the assignment for x
+                "loadw frame", // Now we're compiling *x, so load x's value, which is 3
+                "loadw", // Then load the value at 3
+                "push 1000", // Push the addr 1000, for the lvalue
+                "storew" // Store whatever's at 3 to 1000
+            ]
+                .join("\n")
+        )
+
     }
 }
