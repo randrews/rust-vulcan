@@ -5,33 +5,12 @@ pub struct Program(pub Vec<Declaration>);
 pub enum Declaration {
     Function(Function),
     Global(Global),
-    Struct(Struct),
     Const(Const),
-}
-
-#[derive(PartialEq, Clone, Debug, Default)]
-pub struct Varinfo {
-    pub typename: Option<String>,
-    pub size: Option<Expr>,
 }
 
 #[derive(PartialEq, Clone, Debug)]
 pub struct Global {
     pub name: String,
-    pub typename: Option<String>,
-    pub size: Option<Expr>,
-}
-
-#[derive(PartialEq, Clone, Debug)]
-pub struct Struct {
-    pub name: String,
-    pub members: Vec<Member>,
-}
-
-#[derive(PartialEq, Clone, Debug)]
-pub struct Member {
-    pub name: String,
-    pub typename: Option<String>,
     pub size: Option<Expr>,
 }
 
@@ -48,14 +27,8 @@ pub struct Block(pub Vec<Statement>);
 #[derive(PartialEq, Clone, Debug)]
 pub struct Function {
     pub name: String,
-    pub args: Vec<Argname>,
+    pub args: Vec<String>,
     pub body: Block,
-}
-
-#[derive(Eq, PartialEq, Clone, Debug)]
-pub struct Argname {
-    pub name: String,
-    pub typename: Option<String>,
 }
 
 #[derive(PartialEq, Clone, Debug)]
@@ -106,7 +79,6 @@ impl From<Expr> for Lvalue {
 #[derive(PartialEq, Clone, Debug)]
 pub struct VarDecl {
     pub name: String,
-    pub typename: Option<String>,
     pub size: Option<Expr>,
     pub initial: Option<Expr>,
 }
@@ -152,12 +124,6 @@ pub enum Operator {
     Ne,
     Lshift,
     Rshift,
-}
-
-#[derive(Debug, PartialEq, Clone)]
-pub enum Suffix {
-    Subscript(BoxExpr),
-    Member(String),
 }
 
 #[derive(Debug, PartialEq, Clone)]

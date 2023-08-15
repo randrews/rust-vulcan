@@ -183,7 +183,6 @@ impl Compilable for Declaration {
         match self {
             Declaration::Function(f) => f.process(state, None),
             Declaration::Global(g) => g.process(state, None),
-            Declaration::Struct(_) => todo!("Structs are not yet supported"),
             Declaration::Const(c) => c.process(state, None),
         }
     }
@@ -201,10 +200,7 @@ impl Compilable for Function {
 
         // Add each argument as a local
         for arg in self.args {
-            if arg.typename.is_some() {
-                todo!("Structs are not yet supported")
-            }
-            sig.add_local(&arg.name)?
+            sig.add_local(&arg)?
         }
 
         // todo we need to store arity somehow in the state, so we can check arglists even
@@ -271,8 +267,8 @@ impl Compilable for Assignment {
 impl Compilable for VarDecl {
     fn process(self, state: &mut State, sig: Option<&mut CompiledFn>) -> Result<(), CompileError> {
         let sig = sig.expect("Var declaration outside function");
-        if self.typename.is_some() || self.size.is_some() {
-            todo!("Structs and arrays are not yet supported")
+        if self.size.is_some() {
+            todo!("Arrays are not yet supported")
         }
         if let Some(initial) = self.initial {
             // If it's got an initial value, we have to compile that before we add
@@ -492,8 +488,8 @@ impl Compilable for Expr {
 
 impl Compilable for Global {
     fn process(self, state: &mut State, _: Option<&mut CompiledFn>) -> Result<(), CompileError> {
-        if self.typename.is_some() || self.size.is_some() {
-            todo!("Structs and arrays are not yet supported")
+        if self.size.is_some() {
+            todo!("Arrays are not yet supported")
         }
         state.add_global(&self.name, |s| Variable::IndirectLabel(s.gensym()))
     }

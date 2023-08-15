@@ -25,7 +25,6 @@ lazy_static::lazy_static! {
             .op(Op::prefix(Rule::prefix))
             .op(Op::postfix(Rule::arglist))
             .op(Op::postfix(Rule::subscript))
-            .op(Op::postfix(Rule::member))
     };
 }
 
@@ -156,34 +155,9 @@ impl AstNode for Declaration {
         match pair.as_rule() {
             Rule::function => Self::Function(Function::from_pair(pair)),
             Rule::global => Self::Global(Global::from_pair(pair)),
-            Rule::struct_decl => Self::Struct(Struct::from_pair(pair)),
             Rule::const_decl => Self::Const(Const::from_pair(pair)),
             _ => unreachable!(),
         }
-    }
-}
-
-///////////////////////////////////////////////////////////////////////////////////////////
-
-impl Varinfo {
-    fn read_or_default(mut pairs: Peekable<Pairs>) -> Self {
-        pairs
-            .next_if_rule(Rule::varinfo)
-            .map_or(Self::default(), Self::from_pair)
-    }
-}
-
-impl AstNode for Varinfo {
-    const RULE: Rule = Rule::varinfo;
-    fn from_pair(pair: Pair) -> Self {
-        let mut children = pair.into_inner().peekable();
-        let typename = children
-            .next_if_rule(Rule::typename)
-            .map(|t| String::from(t.first().as_str()));
-        let size = children
-            .next_if_rule(Rule::size)
-            .map(|s| Expr::from_pair(s.first()));
-        Self { typename, size }
     }
 }
 
@@ -194,41 +168,9 @@ impl AstNode for Global {
     fn from_pair(pair: Pair) -> Self {
         let mut inner = pair.into_inner().peekable();
         let name = String::from(inner.next().unwrap().as_str());
-        let Varinfo { typename, size } = Varinfo::read_or_default(inner);
+        let size = inner.next().map(Expr::from_pair);
 
-        Global {
-            name,
-            typename,
-            size,
-        }
-    }
-}
-
-///////////////////////////////////////////////////////////////////////////////////////////
-
-impl AstNode for Struct {
-    const RULE: Rule = Rule::struct_decl;
-    fn from_pair(pair: Pair<'_>) -> Self {
-        let mut inner = pair.into_inner();
-        let name = String::from(inner.next().unwrap().as_str());
-        let member_pairs = inner.next().unwrap().into_inner();
-        let members: Vec<_> = member_pairs.map(Member::from_pair).collect();
-        Struct { name, members }
-    }
-}
-
-impl AstNode for Member {
-    const RULE: Rule = Rule::member;
-    fn from_pair(pair: Pair<'_>) -> Self {
-        let mut inner = pair.into_inner().peekable();
-        let name = String::from(inner.next().unwrap().as_str());
-        let Varinfo { typename, size } = Varinfo::read_or_default(inner);
-
-        Member {
-            name,
-            typename,
-            size,
-        }
+        Global { name, size }
     }
 }
 
@@ -267,22 +209,12 @@ impl AstNode for Function {
             .next()
             .unwrap()
             .into_inner()
-            .map(Argname::from_pair)
+            .map(|p| String::from(p.as_str()))
             .collect();
 
         let body = Block::from_pair(inner.next().unwrap());
 
         Self { name, args, body }
-    }
-}
-
-impl AstNode for Argname {
-    const RULE: Rule = Rule::argname;
-    fn from_pair(pair: Pair<'_>) -> Self {
-        let mut inner = pair.into_inner().peekable();
-        let name = String::from(inner.next().unwrap().as_str());
-        let typename = inner.next().map(|t| String::from(t.first().as_str()));
-        Self { name, typename }
     }
 }
 
@@ -335,14 +267,18 @@ impl AstNode for VarDecl {
     fn from_pair(pair: Pair) -> Self {
         let mut inner = pair.into_inner();
         let name = String::from(inner.next().unwrap().as_str());
-        let Varinfo { typename, size } = Varinfo::from_pair(inner.next().unwrap());
-        let initial = inner.next().map(Expr::from_pair);
-        Self {
-            name,
-            typename,
-            size,
-            initial,
+        let mut size = None;
+        let mut initial = None;
+
+        for p in inner {
+            match p.as_rule() {
+                Rule::size => { size = Some(Expr::from_pair(p.first())) }
+                Rule::expr => { initial = Some(Expr::from_pair(p)) }
+                _ => unreachable!()
+            }
         }
+
+        Self { name, size, initial }
     }
 }
 
@@ -441,7 +377,6 @@ impl AstNode for Expr {
                 Rule::subscript => {
                     Expr::Subscript(expr.into(), Expr::from_pair(suffix.first()).into())
                 }
-                Rule::member => Expr::Member(expr.into(), suffix.first_as_string()),
                 _ => unreachable!(),
             })
             .parse(pair.into_inner())
@@ -485,22 +420,6 @@ impl AstNode for Operator {
 
 ///////////////////////////////////////////////////////////////////////////////////////////
 
-impl AstNode for Suffix {
-    const RULE: Rule = Rule::suffix;
-
-    fn from_pair(pair: Pair) -> Self {
-        let first = pair.first();
-        match first.as_rule() {
-            Rule::subscript => Self::Subscript(Expr::from_pair(first.first()).into()),
-            Rule::member => Self::Member(first.first_as_string()),
-            //Rule::arglist => Self::Arglist(first.into_inner().map(Rvalue::from_pair).collect()),
-            rule => unreachable!("Expected a subscript or member, got a {:?}", rule),
-        }
-    }
-}
-
-///////////////////////////////////////////////////////////////////////////////////////////
-
 impl AstNode for Program {
     const RULE: Rule = Rule::program;
     fn from_pair(pair: Pair) -> Self {
@@ -527,31 +446,13 @@ mod test {
             Global::from_str("global foo;"),
             Ok(Global {
                 name: "foo".into(),
-                typename: None,
                 size: None,
-            })
-        );
-        assert_eq!(
-            Global::from_str("global foo:Thing;"),
-            Ok(Global {
-                name: "foo".into(),
-                typename: Some("Thing".into()),
-                size: None,
-            })
-        );
-        assert_eq!(
-            Global::from_str("global foo:Thing[10];"),
-            Ok(Global {
-                name: "foo".into(),
-                typename: Some("Thing".into()),
-                size: Some(10.into()),
             })
         );
         assert_eq!(
             Global::from_str("global foo[10];"),
             Ok(Global {
                 name: "foo".into(),
-                typename: None,
                 size: Some(10.into()),
             })
         );
@@ -594,52 +495,6 @@ mod test {
     }
 
     #[test]
-    fn parse_structs() {
-        assert_eq!(
-            Struct::from_str("struct Point { x, y }"),
-            Ok(Struct {
-                name: "Point".into(),
-                members: vec![
-                    Member {
-                        name: "x".into(),
-                        typename: None,
-                        size: None,
-                    },
-                    Member {
-                        name: "y".into(),
-                        typename: None,
-                        size: None,
-                    },
-                ],
-            })
-        );
-
-        assert_eq!(
-            Struct::from_str("struct Foo { bar[100] }"),
-            Ok(Struct {
-                name: "Foo".into(),
-                members: vec![Member {
-                    name: "bar".into(),
-                    typename: None,
-                    size: Some(100.into()),
-                },],
-            })
-        );
-
-        assert_eq!(
-            Struct::from_str("struct Foo { bar:Thing[100] }"),
-            Ok(Struct {
-                name: "Foo".into(),
-                members: vec![Member {
-                    name: "bar".into(),
-                    typename: Some("Thing".into()),
-                    size: Some(100.into()),
-                },],
-            })
-        );
-    }
-
-    #[test]
     fn parse_function_headers() {
         assert_eq!(
             Function::from_str("fn foo() {}"),
@@ -653,45 +508,10 @@ mod test {
             Function::from_str("fn foo(a, b) {}"),
             Ok(Function {
                 name: "foo".into(),
-                args: vec![
-                    Argname {
-                        name: "a".into(),
-                        typename: None,
-                    },
-                    Argname {
-                        name: "b".into(),
-                        typename: None,
-                    },
-                ],
+                args: vec!["a".into(), "b".into()],
                 body: Block(vec![]),
             })
         );
-        assert_eq!(
-            Function::from_str("fn foo(a:Blah, b) {}"),
-            Ok(Function {
-                name: "foo".into(),
-                args: vec![
-                    Argname {
-                        name: "a".into(),
-                        typename: Some("Blah".into()),
-                    },
-                    Argname {
-                        name: "b".into(),
-                        typename: None,
-                    },
-                ],
-                body: Block(vec![]),
-            })
-        );
-
-        let func = Function {
-            name: "foo".into(),
-            args: vec![Argname {
-                name: "a".into(),
-                typename: None,
-            }],
-            body: Block(vec![]),
-        };
     }
 
     #[test]
@@ -731,10 +551,10 @@ mod test {
 
         // Multi-suffix
         assert_eq!(
-            Expr::from_str("foo[10].bar"),
-            Ok(Expr::Member(
+            Expr::from_str("foo[10][3]"),
+            Ok(Expr::Subscript(
                 Expr::Subscript("foo".into(), 10.into()).into(),
-                "bar".into()
+                3.into()
             ))
         );
 
@@ -812,8 +632,8 @@ mod test {
 
         // Addresses
         assert_eq!(
-            Expr::from_str("&foo.bar"),
-            Ok(Expr::Address(Expr::Member("foo".into(), "bar".into()).into()))
+            Expr::from_str("&foo[7]"),
+            Ok(Expr::Address(Expr::Subscript("foo".into(), 7.into()).into()))
         );
 
         assert_eq!(
@@ -914,17 +734,15 @@ mod test {
             Statement::from_str("var blah;"),
             Ok(Statement::VarDecl(VarDecl {
                 name: "blah".into(),
-                typename: None,
                 size: None,
                 initial: None,
             }))
         );
 
         assert_eq!(
-            VarDecl::from_str("var blah:Foo[7] = 35"),
+            VarDecl::from_str("var blah[7] = 35"),
             Ok(VarDecl {
                 name: "blah".into(),
-                typename: Some("Foo".into()),
                 size: Some(7.into()),
                 initial: Some(35.into()),
             })
@@ -998,10 +816,10 @@ mod test {
     #[test]
     fn parse_program() {
         assert_eq!(
-            Program::from_str("global foo; struct Point { x, y }"),
+            Program::from_str("global foo; fn blah(x) { return x + 3; }"),
             Ok(Program(vec![
                 Declaration::from_str("global foo;").unwrap(),
-                Declaration::from_str("struct Point { x, y }").unwrap(),
+                Declaration::from_str("fn blah(x) { return x + 3; }").unwrap(),
             ]))
         )
     }

@@ -65,11 +65,9 @@ operator = _{
 expr = { prefix* ~ term ~ suffix* ~ (operator ~ prefix* ~ term ~ suffix*)* }
 term = _{ number | name | "(" ~ expr ~ ")" | string }
 
-suffix    = _{ modifier | arglist }
-modifier  = _{ subscript | member }
+suffix    = _{ subscript | arglist }
 subscript = { "[" ~ expr ~ "]" }
 arglist   = { "(" ~ (expr ~ ("," ~ expr)*)? ~ ")" }
-member    = { "." ~ name }
 
 statement = { asm | ((return_stmt | var_decl | assignment | expr) ~ ";") | conditional | while_loop | repeat_loop }
 
@@ -80,23 +78,16 @@ asm_body = { (!"}" ~ ANY)* }
 block = { "{" ~ statement* ~ "}" }
 
 function = { "fn" ~ name ~ argnames ~ block }
-argnames = { "(" ~ (argname ~ ("," ~ argname)*)? ~ ")" }
-argname  = { name ~ typename? }
+argnames = { "(" ~ (name ~ ("," ~ name)*)? ~ ")" }
 
-declaration = { function | global | struct_decl | const_decl }
+declaration = { function | global | const_decl }
 program     = { (COMMENT | WHITESPACE)? ~ declaration* ~ EOI }
 
 return_stmt = { "return" ~ expr? }
 conditional = { "if" ~ "(" ~ expr ~ ")" ~ block ~ ("else" ~ block)? }
 while_loop  = { "while" ~ "(" ~ expr ~ ")" ~ block }
 repeat_loop = { "repeat" ~ "(" ~ expr ~ ")" ~ name? ~ block }
-var_decl    = { "var" ~ name ~ varinfo ~ ("=" ~ expr)? }
-global      = { "global" ~ name ~ varinfo ~ ";" }
-typename    = { ":" ~ name }
+var_decl    = { "var" ~ name ~ size? ~ ("=" ~ expr)? }
+global      = { "global" ~ name ~ size? ~ ";" }
 size        = { "[" ~ expr ~ "]" }
 const_decl  = { "const" ~ name ~ "=" ~ (string | expr) ~ ";" }
-
-struct_decl = { "struct" ~ name ~ "{" ~ members ~ "}" }
-member_decl = { name ~ varinfo }
-members     = { (member_decl ~ ("," ~ member_decl)*)? }
-varinfo     = { typename? ~ size? }
