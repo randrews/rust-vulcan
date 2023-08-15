@@ -1,7 +1,7 @@
 use crate::ast::*;
 
 use std::collections::btree_map::Entry::Vacant;
-use std::collections::{BTreeMap, HashMap};
+use std::collections::{BTreeMap};
 use std::fmt::{Display, Formatter};
 
 #[derive(Eq, Clone, PartialEq, Debug)]
@@ -80,7 +80,7 @@ impl CompiledFn {
     fn add_local(&mut self, name: &str) -> Result<(), CompileError> {
         if let Vacant(e) = self.local_scope.entry(name.into()) {
             e.insert(Variable::Local(self.frame_size));
-            self.frame_size += 3; // todo: variously-sized structs
+            self.frame_size += 3;
             Ok(())
         } else {
             Err(CompileError(0, 0, format!("Duplicate name {}", name)))
@@ -224,6 +224,14 @@ impl Compilable for Function {
                     sig.emit("pop")
                 }
                 Statement::VarDecl(vardecl) => vardecl.process(state, Some(&mut sig))?,
+                Statement::Asm(Asm { args, body}) => {
+                    // Process all the args, if any
+                    for a in args {
+                        (*a.0).process(state, Some(&mut sig))?
+                    }
+                    // Emit the body
+                    sig.emit(body.as_str())
+                }
                 Statement::Conditional(_) | Statement::WhileLoop(_) | Statement::RepeatLoop(_) => {
                     todo!()
                 }
@@ -293,7 +301,7 @@ impl Compilable for VarDecl {
 impl Compilable for Lvalue {
     fn process(self, state: &mut State, sig: Option<&mut CompiledFn>) -> Result<(), CompileError> {
         let global_scope = &state.global_scope;
-        let mut sig = sig.expect("lvalue outside a function");
+        let sig = sig.expect("lvalue outside a function");
 
         match *(self.0.0) {
             // A bunch of different things that aren't allowed
@@ -340,9 +348,8 @@ impl Compilable for Lvalue {
             Expr::Deref(BoxExpr(expr)) => {
                 (*expr).process(state, Some(sig))
             }
-            Expr::Subscript(_, _) |
-            Expr::Member(_, _) => {
-                Err(CompileError(0, 0, String::from("Arrays and structs are not yet supported")))
+            Expr::Subscript(_, _) => {
+                Err(CompileError(0, 0, String::from("Arrays are not yet supported")))
             }
         }
     }
@@ -430,7 +437,6 @@ impl Compilable for Expr {
             }
             Expr::Call(_, _) => todo!(),
             Expr::Subscript(_, _) => todo!("Structs and arrays are not yen supported"),
-            Expr::Member(_, _) => todo!("Structs and arrays are not yen supported"),
             Expr::Infix(lhs, op, rhs) => {
                 // Recurse on expressions, handling operators
                 (*lhs.0).process(state, Some(&mut sig))?;
@@ -551,7 +557,7 @@ pub fn eval_const(expr: Expr, scope: &Scope) -> Result<i32, CompileError> {
             0,
             String::from("Addresses are not known at compile time"),
         )),
-        Expr::Call(_, _) | Expr::Subscript(_, _) | Expr::Member(_, _) => Err(CompileError(
+        Expr::Call(_, _) | Expr::Subscript(_, _) => Err(CompileError(
             0,
             0,
             String::from("Constants must be statically defined"),
@@ -811,5 +817,25 @@ mod test {
             ]
                 .join("\n")
         )
+    }
+
+    #[test]
+    fn test_asm_statements() {
+        let mut state = State::default();
+        parse("fn blah() { var x; asm(&x) { swap 12\nstorew } }")
+            .unwrap()
+            .process(&mut state, None)
+            .expect("Failed to compile");
+        let body = body_as_string(state.functions.get("blah").unwrap());
+        assert_eq!(
+            body,
+            vec![
+                "loadw frame", // Push the addr of x
+                "swap 12", // The asm body, which swaps 12 behind it and stores it there
+                "storew"
+            ]
+                .join("\n")
+        )
+
     }
 }

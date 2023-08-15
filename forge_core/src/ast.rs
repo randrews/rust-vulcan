@@ -40,6 +40,7 @@ pub enum Statement {
     Conditional(Conditional),
     WhileLoop(WhileLoop),
     RepeatLoop(RepeatLoop),
+    Asm(Asm)
 }
 
 #[derive(PartialEq, Clone, Debug)]
@@ -103,6 +104,12 @@ pub struct RepeatLoop {
     pub body: Block,
 }
 
+#[derive(PartialEq, Clone, Debug)]
+pub struct Asm {
+    pub args: Vec<BoxExpr>,
+    pub body: String
+}
+
 /// One of the five arithmetical operators
 #[derive(Debug, Eq, PartialEq, Copy, Clone)]
 pub enum Operator {
@@ -136,7 +143,6 @@ pub enum Expr {
     Address(Lvalue),
     Call(BoxExpr, Vec<Expr>),
     Subscript(BoxExpr, BoxExpr),
-    Member(BoxExpr, String),
     Infix(BoxExpr, Operator, BoxExpr),
     String(String),
 }

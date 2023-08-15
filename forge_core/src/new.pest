@@ -72,7 +72,7 @@ arglist   = { "(" ~ (expr ~ ("," ~ expr)*)? ~ ")" }
 statement = { asm | ((return_stmt | var_decl | assignment | expr) ~ ";") | conditional | while_loop | repeat_loop }
 
 asm      = { "asm" ~ asm_args? ~ "{" ~ asm_body ~ "}" }
-asm_args = { "(" ~ expr ~ ("," ~ expr)* ~ ")" }
+asm_args = _{ "(" ~ expr ~ ("," ~ expr)* ~ ")" }
 asm_body = { (!"}" ~ ANY)* }
 
 block = { "{" ~ statement* ~ "}" }
