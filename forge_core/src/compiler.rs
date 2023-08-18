@@ -668,20 +668,23 @@ mod test {
             .is_err());
     }
 
-    fn body_as_string(sig: &CompiledFn) -> String {
-        sig.body.join("\n")
+    fn state_for(src: &str) -> State {
+        let mut state = State::default();
+        parse(src)
+            .unwrap()
+            .process(&mut state, None)
+            .expect("Failed to compile");
+        state
+    }
+
+    fn test_body(state: State) -> String {
+        state.functions.get("test").unwrap().body.join("\n")
     }
 
     #[test]
     fn test_basic_fns() {
-        let mut state = State::default();
-        parse("fn blah(a, b) { b = 17 + a; }")
-            .unwrap()
-            .process(&mut state, None)
-            .expect("Failed to compile");
-        let body = body_as_string(state.functions.get("blah").unwrap());
         assert_eq!(
-            body,
+            test_body(state_for("fn test(a, b) { b = 17 + a; }")),
             vec![
                 "push 17",     // Start calculating the rvalue, push the literal
                 "loadw frame", // This is looking up the "a" arg, at frame + 0
@@ -696,14 +699,8 @@ mod test {
 
     #[test]
     fn test_var_decls() {
-        let mut state = State::default();
-        parse("fn blah() { var a; var b = 7; a = b * 2; }")
-            .unwrap()
-            .process(&mut state, None)
-            .expect("Failed to compile");
-        let body = body_as_string(state.functions.get("blah").unwrap());
         assert_eq!(
-            body,
+            test_body(state_for("fn test() { var a; var b = 7; a = b * 2; }")),
             vec![
                 "push 7",      // Start calculating the rvalue, push the literal
                 "loadw frame", // "b" is the second local var at frame - 3
@@ -723,12 +720,7 @@ mod test {
 
     #[test]
     fn test_literal_strings() {
-        let mut state = State::default();
-        parse("const s1 = \"foo\"; fn blah() { var x; x = \"bar\"; var y = \"norp\"; }")
-            .unwrap()
-            .process(&mut state, None)
-            .expect("Failed to compile");
-        let body = body_as_string(state.functions.get("blah").unwrap());
+        let mut state = state_for("const s1 = \"foo\"; fn test() { var x; x = \"bar\"; var y = \"norp\"; }");
         assert_eq!(
             state.strings,
             vec![
@@ -738,7 +730,7 @@ mod test {
             ]
         );
         assert_eq!(
-            body,
+            test_body(state),
             vec![
                 "push _gensym_3",
                 "loadw frame",
@@ -754,14 +746,8 @@ mod test {
 
     #[test]
     fn test_addresses() {
-        let mut state = State::default();
-        parse("fn blah() { var x = 3; var y = &x; }")
-            .unwrap()
-            .process(&mut state, None)
-            .expect("Failed to compile");
-        let body = body_as_string(state.functions.get("blah").unwrap());
         assert_eq!(
-            body,
+            test_body(state_for("fn test() { var x = 3; var y = &x; }")),
             vec![
                 "push 3",
                 "loadw frame",
@@ -777,14 +763,8 @@ mod test {
 
     #[test]
     fn test_derefs() {
-        let mut state = State::default();
-        parse("fn blah() { var x = 3; *1000 = *x; }")
-            .unwrap()
-            .process(&mut state, None)
-            .expect("Failed to compile");
-        let body = body_as_string(state.functions.get("blah").unwrap());
         assert_eq!(
-            body,
+            test_body(state_for("fn test() { var x = 3; *1000 = *x; }")),
             vec![
                 "push 3",
                 "loadw frame",
@@ -800,14 +780,8 @@ mod test {
 
     #[test]
     fn test_string_exprs() {
-        let mut state = State::default();
-        parse("const foo = \"foo\"; fn blah() { var x = \"bar\" + 3; }")
-            .unwrap()
-            .process(&mut state, None)
-            .expect("Failed to compile");
-        let body = body_as_string(state.functions.get("blah").unwrap());
         assert_eq!(
-            body,
+            test_body(state_for("const foo = \"foo\"; fn test() { var x = \"bar\" + 3; }")),
             vec![
                 "push _gensym_3", // 1 is the label in the string table for "foo", 2 for "blah,"
                 "push 3", // so 3 is the string "bar"
@@ -821,14 +795,8 @@ mod test {
 
     #[test]
     fn test_asm_statements() {
-        let mut state = State::default();
-        parse("fn blah() { var x; asm(&x) { swap 12\nstorew } }")
-            .unwrap()
-            .process(&mut state, None)
-            .expect("Failed to compile");
-        let body = body_as_string(state.functions.get("blah").unwrap());
         assert_eq!(
-            body,
+            test_body(state_for("fn test() { var x; asm(&x) { swap 12\nstorew } }")),
             vec![
                 "loadw frame", // Push the addr of x
                 "swap 12", // The asm body, which swaps 12 behind it and stores it there
