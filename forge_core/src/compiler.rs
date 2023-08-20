@@ -157,20 +157,23 @@ impl State {
 trait Compilable {
     // Every AST node we visit can see the global compiler state (to make unique
     // symbols and reach for global names) as well as optionally the current
-    // function (for AST nodes within functions)
+    // function (for AST nodes within functions). Additionally se send a Location:
+    // This is the closest ancestor's location, in case we need to emit a compile
+    // error
     fn process(
         self,
         state: &mut State,
         function: Option<&mut CompiledFn>,
+        location: Location
     ) -> Result<(), CompileError>;
 }
 
 ///////////////////////////////////////////////////////////
 
 impl Compilable for Program {
-    fn process(self, state: &mut State, _: Option<&mut CompiledFn>) -> Result<(), CompileError> {
+    fn process(self, state: &mut State, _: Option<&mut CompiledFn>, loc: Location) -> Result<(), CompileError> {
         for decl in self.0 {
-            decl.process(state, None)?
+            decl.ast.process(state, None, decl.location)?
         }
         Ok(())
     }
@@ -179,11 +182,11 @@ impl Compilable for Program {
 ///////////////////////////////////////////////////////////
 
 impl Compilable for Declaration {
-    fn process(self, state: &mut State, _: Option<&mut CompiledFn>) -> Result<(), CompileError> {
+    fn process(self, state: &mut State, _: Option<&mut CompiledFn>, loc: Location) -> Result<(), CompileError> {
         match self {
-            Declaration::Function(f) => f.process(state, None),
-            Declaration::Global(g) => g.process(state, None),
-            Declaration::Const(c) => c.process(state, None),
+            Declaration::Function(f) => f.process(state, None, loc),
+            Declaration::Global(g) => g.process(state, None, loc),
+            Declaration::Const(c) => c.process(state, None, loc),
         }
     }
 }
@@ -191,7 +194,7 @@ impl Compilable for Declaration {
 ///////////////////////////////////////////////////////////
 
 impl Compilable for Function {
-    fn process(self, state: &mut State, _: Option<&mut CompiledFn>) -> Result<(), CompileError> {
+    fn process(self, state: &mut State, _: Option<&mut CompiledFn>, loc: Location) -> Result<(), CompileError> {
         // The signature for this function, which will eventually get added to the state
         let mut sig = CompiledFn {
             label: state.gensym(),
@@ -213,21 +216,22 @@ impl Compilable for Function {
 
         // Compile each statement:
         for stmt in self.body.0 {
-            match stmt {
+            let loc = stmt.location;
+            match stmt.ast {
                 Statement::Return(_) => {}
-                Statement::Assignment(assign) => assign.process(state, Some(&mut sig))?,
+                Statement::Assignment(assign) => assign.process(state, Some(&mut sig), loc)?,
                 Statement::Expr(expr) => {
-                    expr.process(state, Some(&mut sig))?;
+                    expr.process(state, Some(&mut sig), loc)?;
                     // Every expr leaves a single-word return value on the stack. In an rvalue this
                     // is useful but in a statement it's garbage (because nothing else is about to
                     // pick it up) so, drop it:
                     sig.emit("pop")
                 }
-                Statement::VarDecl(vardecl) => vardecl.process(state, Some(&mut sig))?,
+                Statement::VarDecl(vardecl) => vardecl.process(state, Some(&mut sig), loc)?,
                 Statement::Asm(Asm { args, body}) => {
                     // Process all the args, if any
                     for a in args {
-                        (*a.0).process(state, Some(&mut sig))?
+                        (*a.0).process(state, Some(&mut sig), loc)?
                     }
                     // Emit the body
                     sig.emit(body.as_str())
@@ -259,12 +263,12 @@ fn lookup<'a>(name: &str, global_scope: &'a Scope, local_scope: &'a Scope) -> Op
 ///////////////////////////////////////////////////////////
 
 impl Compilable for Assignment {
-    fn process(self, state: &mut State, sig: Option<&mut CompiledFn>) -> Result<(), CompileError> {
+    fn process(self, state: &mut State, sig: Option<&mut CompiledFn>, loc: Location) -> Result<(), CompileError> {
         let Assignment { lvalue, rvalue } = self;
         let sig = sig.expect("Assignment outside function");
         // First the value, then the address we'll storew it to
-        rvalue.process(state, Some(sig))?;
-        lvalue.process(state, Some(sig))?;
+        rvalue.process(state, Some(sig), loc)?;
+        lvalue.process(state, Some(sig), loc)?;
         sig.emit("storew");
         Ok(())
     }
@@ -273,7 +277,7 @@ impl Compilable for Assignment {
 ///////////////////////////////////////////////////////////
 
 impl Compilable for VarDecl {
-    fn process(self, state: &mut State, sig: Option<&mut CompiledFn>) -> Result<(), CompileError> {
+    fn process(self, state: &mut State, sig: Option<&mut CompiledFn>, loc: Location) -> Result<(), CompileError> {
         let sig = sig.expect("Var declaration outside function");
         if self.size.is_some() {
             todo!("Arrays are not yet supported")
@@ -281,11 +285,11 @@ impl Compilable for VarDecl {
         if let Some(initial) = self.initial {
             // If it's got an initial value, we have to compile that before we add
             // the name to scope, or else UB will ensue if it refers to itself:
-            initial.process(state, Some(sig))?;
+            initial.process(state, Some(sig), loc)?;
             // But then add it to scope and assign:
             sig.add_local(&self.name)?;
             // We'll just whip up an lvalue real quick...
-            Lvalue::from(self.name).process(state, Some(sig))?;
+            Lvalue::from(self.name).process(state, Some(sig), loc)?;
             sig.emit("storew"); // And store the initial value there
         } else {
             // Otherwise, just add it to scope and leave garbage in there:
@@ -299,7 +303,7 @@ impl Compilable for VarDecl {
 
 /// Evaluate an lvalue and leave its address on the stack (ready to be consumed by storew)
 impl Compilable for Lvalue {
-    fn process(self, state: &mut State, sig: Option<&mut CompiledFn>) -> Result<(), CompileError> {
+    fn process(self, state: &mut State, sig: Option<&mut CompiledFn>, loc: Location) -> Result<(), CompileError> {
         let global_scope = &state.global_scope;
         let sig = sig.expect("lvalue outside a function");
 
@@ -346,7 +350,7 @@ impl Compilable for Lvalue {
             }
             // Derefs are just evaluating the expr and leaving its value (an address) on the stack
             Expr::Deref(BoxExpr(expr)) => {
-                (*expr).process(state, Some(sig))
+                (*expr).process(state, Some(sig), loc)
             }
             Expr::Subscript(_, _) => {
                 Err(CompileError(0, 0, String::from("Arrays are not yet supported")))
@@ -360,7 +364,7 @@ impl Compilable for Lvalue {
 /// Evaluate an expression in the context of a local scope. The runtime brother to eval_const.
 /// This recursively evaluates a Node and leaves its value on the stack.
 impl Compilable for Expr {
-    fn process(self, state: &mut State, sig: Option<&mut CompiledFn>) -> Result<(), CompileError> {
+    fn process(self, state: &mut State, sig: Option<&mut CompiledFn>, loc: Location) -> Result<(), CompileError> {
         let mut sig = sig.expect("Non-const expression outside a function");
         let global_scope = &state.global_scope;
 
@@ -412,21 +416,21 @@ impl Compilable for Expr {
                 }
             }
             Expr::Neg(e) => {
-                (*e.0).process(state, Some(sig))?;
+                (*e.0).process(state, Some(sig), loc)?;
                 // To arithmetically negate something, invert and increment (2s complement)
                 sig.emit("xor -1");
                 sig.emit("add 1");
                 Ok(())
             }
             Expr::Not(e) => {
-                (*e.0).process(state, Some(sig))?;
+                (*e.0).process(state, Some(sig), loc)?;
                 sig.emit("not");
                 Ok(())
             }
             // Handling addresses is very easy because processing an lvalue leaves the address on the stack
-            Expr::Address(lvalue) => lvalue.process(state, Some(sig)),
+            Expr::Address(lvalue) => lvalue.process(state, Some(sig), loc),
             Expr::Deref(BoxExpr(e)) => {
-                (*e).process(state, Some(sig))?;
+                (*e).process(state, Some(sig), loc)?;
                 sig.emit("loadw");
                 Ok(())
             }
@@ -439,8 +443,8 @@ impl Compilable for Expr {
             Expr::Subscript(_, _) => todo!("Structs and arrays are not yen supported"),
             Expr::Infix(lhs, op, rhs) => {
                 // Recurse on expressions, handling operators
-                (*lhs.0).process(state, Some(&mut sig))?;
-                (*rhs.0).process(state, Some(&mut sig))?;
+                (*lhs.0).process(state, Some(&mut sig), loc)?;
+                (*rhs.0).process(state, Some(&mut sig), loc)?;
                 match op {
                     // Basic math
                     Operator::Add => sig.emit("add"),
@@ -493,7 +497,7 @@ impl Compilable for Expr {
 ///////////////////////////////////////////////////////////
 
 impl Compilable for Global {
-    fn process(self, state: &mut State, _: Option<&mut CompiledFn>) -> Result<(), CompileError> {
+    fn process(self, state: &mut State, _: Option<&mut CompiledFn>, loc: Location) -> Result<(), CompileError> {
         if self.size.is_some() {
             todo!("Arrays are not yet supported")
         }
@@ -504,7 +508,7 @@ impl Compilable for Global {
 ///////////////////////////////////////////////////////////
 
 impl Compilable for Const {
-    fn process(self, state: &mut State, _: Option<&mut CompiledFn>) -> Result<(), CompileError> {
+    fn process(self, state: &mut State, _: Option<&mut CompiledFn>, loc: Location) -> Result<(), CompileError> {
         let var = if self.string.is_some() {
             // If it's a string, add it to the string table
             Variable::DirectLabel(state.add_string(&self.string.unwrap()))
@@ -625,7 +629,7 @@ mod test {
         let mut state = State::default();
         parse("const foo = 17 + 3;")
             .unwrap()
-            .process(&mut state, None)
+            .process(&mut state, None, (0, 0).into())
             .unwrap();
         assert_eq!(
             state.global_scope,
@@ -638,7 +642,7 @@ mod test {
         let mut state = State::default();
         parse("const foo = \"bar\";")
             .unwrap()
-            .process(&mut state, None)
+            .process(&mut state, None, (0, 0).into())
             .unwrap();
         assert_eq!(
             state.global_scope,
@@ -651,7 +655,7 @@ mod test {
         let mut state = State::default();
         parse("global a;")
             .unwrap()
-            .process(&mut state, None)
+            .process(&mut state, None, (0, 0).into())
             .unwrap();
         assert_eq!(
             state.global_scope,
@@ -664,7 +668,7 @@ mod test {
         let mut state = State::default();
         assert!(parse("const a = 7; global a;")
             .unwrap()
-            .process(&mut state, None)
+            .process(&mut state, None, (0, 0).into())
             .is_err());
     }
 
@@ -672,7 +676,7 @@ mod test {
         let mut state = State::default();
         parse(src)
             .unwrap()
-            .process(&mut state, None)
+            .process(&mut state, None, (0, 0).into())
             .expect("Failed to compile");
         state
     }

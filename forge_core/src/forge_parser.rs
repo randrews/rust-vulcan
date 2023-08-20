@@ -126,6 +126,13 @@ impl From<pest::error::Error<Rule>> for ParseError {
 trait AstNode: Sized {
     const RULE: Rule;
     fn from_pair(pair: Pair) -> Self;
+    fn from_pair_located(pair: Pair) -> Located<Self> {
+        let loc = pair.line_col();
+        Located {
+            location: loc.into(),
+            ast: Self::from_pair(pair)
+        }
+    }
 }
 
 trait Parseable: Sized {
@@ -307,7 +314,7 @@ impl AstNode for Block {
     const RULE: Rule = Rule::block;
 
     fn from_pair(pair: Pair) -> Self {
-        Self(pair.into_inner().map(Statement::from_pair).collect())
+        Self(pair.into_inner().map(Statement::from_pair_located).collect())
     }
 }
 
@@ -447,7 +454,7 @@ impl AstNode for Program {
         Self(
             pair.into_inner()
                 .filter(|p| p.as_rule() != Rule::EOI)
-                .map(Declaration::from_pair)
+                .map(Declaration::from_pair_located)
                 .collect(),
         )
     }
@@ -770,66 +777,79 @@ mod test {
 
     #[test]
     fn parse_block() {
+        let block = Block::from_str("{ foo(); bar(); }").unwrap();
+        let statements: Vec<_> = block.0.into_iter().map(|s| s.ast).collect();
         assert_eq!(
-            Block::from_str("{ foo(); bar(); }"),
-            Ok(Block(vec![
+            statements,
+            vec![
                 Statement::Expr(Expr::Call("foo".into(), vec![])),
                 Statement::Expr(Expr::Call("bar".into(), vec![])),
-            ]))
+            ]
         );
+    }
+
+    fn dislocate<T>(block: Vec<Located<T>>) -> Vec<T> {
+        block.into_iter().map(|l| l.ast).collect()
+    }
+
+    fn dislocated_block(src: &str) -> Vec<Statement> {
+        dislocate(Block::from_str(src).unwrap().0)
     }
 
     #[test]
     fn parse_conditional() {
-        assert_eq!(
-            Statement::from_str("if(cond) { foo(); }"),
-            Ok(Statement::Conditional(Conditional {
-                condition: Expr::from_str("cond").unwrap(),
-                body: Block::from_str("{ foo(); }").unwrap(),
-                alternative: None,
-            }))
-        );
+        if let Ok(Statement::Conditional(Conditional { condition, body, alternative })) =
+            Statement::from_str("if(cond) { foo(); }") {
+            assert_eq!(condition, Expr::from_str("cond").unwrap());
+            assert_eq!(dislocate(body.0), dislocated_block("{ foo(); }"));
+            assert_eq!(alternative, None);
+        } else {
+            panic!()
+        }
 
-        assert_eq!(
-            Statement::from_str("if(cond) { foo(); } else { bar(); }"),
-            Ok(Statement::Conditional(Conditional {
-                condition: Expr::from_str("cond").unwrap(),
-                body: Block::from_str("{ foo(); }").unwrap(),
-                alternative: Some(Block::from_str("{ bar(); }").unwrap()),
-            }))
-        );
+        if let Ok(Statement::Conditional(Conditional { condition, body, alternative })) =
+            Statement::from_str("if(cond) { foo(); } else { bar(); }") {
+            assert_eq!(condition, Expr::from_str("cond").unwrap());
+            assert_eq!(dislocate(body.0), dislocated_block("{ foo(); }"));
+            assert_eq!(alternative.unwrap().0[0].ast, Block::from_str("{ bar(); }").unwrap().0[0].ast);
+        } else {
+            panic!()
+        }
     }
 
     #[test]
     fn parse_while_loops() {
-        assert_eq!(
-            Statement::from_str("while(cond) { foo(); }"),
-            Ok(Statement::WhileLoop(WhileLoop {
-                condition: Expr::from_str("cond").unwrap(),
-                body: Block::from_str("{ foo(); }").unwrap(),
-            }))
-        );
+        assert!(match Statement::from_str("while(cond) { foo(); }") {
+            Ok(Statement::WhileLoop(WhileLoop { condition, body })) => {
+                assert_eq!(condition, Expr::from_str("cond").unwrap());
+                assert_eq!(dislocate(body.0), dislocated_block("{ foo(); }"));
+                true
+            }
+            _ => false
+        });
     }
 
     #[test]
     fn parse_repeat_loops() {
-        assert_eq!(
-            Statement::from_str("repeat(10) x { foo(x); }"),
-            Ok(Statement::RepeatLoop(RepeatLoop {
-                count: 10.into(),
-                name: Some("x".into()),
-                body: Block::from_str("{ foo(x); }").unwrap(),
-            }))
-        );
+        assert!(match Statement::from_str("repeat(10) x { foo(x); }") {
+            Ok(Statement::RepeatLoop(RepeatLoop { count, name, body })) => {
+                assert_eq!(count, 10.into());
+                assert_eq!(name, Some("x".into()));
+                assert_eq!(dislocate(body.0), dislocated_block("{ foo(x); }"));
+                true
+            },
+            _ => false
+        });
 
-        assert_eq!(
-            Statement::from_str("repeat(10) { foo(); }"),
-            Ok(Statement::RepeatLoop(RepeatLoop {
-                count: 10.into(),
-                name: None,
-                body: Block::from_str("{ foo(); }").unwrap(),
-            }))
-        );
+        assert!(match Statement::from_str("repeat(10) { foo(); }") {
+            Ok(Statement::RepeatLoop(RepeatLoop { count, name, body })) => {
+                assert_eq!(count, 10.into());
+                assert_eq!(name, None);
+                assert_eq!(dislocate(body.0), dislocated_block("{ foo(); }"));
+                true
+            },
+            _ => false
+        });
     }
 
     #[test]
@@ -847,12 +867,14 @@ mod test {
 
     #[test]
     fn parse_program() {
+        let prog = Program::from_str("global foo; const blah = 3;").unwrap();
+        let decls: Vec<_> = dislocate(prog.0);
         assert_eq!(
-            Program::from_str("global foo; fn blah(x) { return x + 3; }"),
-            Ok(Program(vec![
+            decls,
+            vec![
                 Declaration::from_str("global foo;").unwrap(),
-                Declaration::from_str("fn blah(x) { return x + 3; }").unwrap(),
-            ]))
+                Declaration::from_str("const blah = 3;").unwrap(),
+            ]
         )
     }
 }

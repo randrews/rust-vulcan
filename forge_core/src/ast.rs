@@ -1,5 +1,23 @@
+#[derive(Eq, PartialEq, Copy, Clone, Debug)]
+pub struct Location {
+    pub line: usize,
+    pub col: usize
+}
+
+impl From<(usize, usize)> for Location {
+    fn from(value: (usize, usize)) -> Self {
+        Self { line: value.0, col: value.1 }
+    }
+}
+
 #[derive(PartialEq, Clone, Debug)]
-pub struct Program(pub Vec<Declaration>);
+pub struct Located<T> {
+    pub location: Location,
+    pub ast: T
+}
+
+#[derive(PartialEq, Clone, Debug)]
+pub struct Program(pub Vec<Located<Declaration>>);
 
 #[derive(PartialEq, Clone, Debug)]
 pub enum Declaration {
@@ -22,7 +40,7 @@ pub struct Const {
 }
 
 #[derive(PartialEq, Clone, Debug)]
-pub struct Block(pub Vec<Statement>);
+pub struct Block(pub Vec<Located<Statement>>);
 
 #[derive(PartialEq, Clone, Debug)]
 pub struct Function {
