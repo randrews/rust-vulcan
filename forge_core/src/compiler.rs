@@ -124,7 +124,7 @@ impl State {
     /// Generate a guaranteed-unique symbolic name
     fn gensym(&mut self) -> Label {
         self.gensym_index += 1;
-        format!("_gensym_{}", self.gensym_index)
+        format!("_forge_gensym_{}", self.gensym_index)
     }
 
     /// Return whether a name exists in the global scope already
@@ -193,6 +193,54 @@ impl Compilable for Declaration {
 
 ///////////////////////////////////////////////////////////
 
+impl Compilable for Block {
+    fn process(self, state: &mut State, sig: Option<&mut CompiledFn>, loc: Location) -> Result<(), CompileError> {
+        let sig = sig.expect("Block outside function");
+
+        // Compile each statement:
+        for stmt in self.0 {
+            let loc = stmt.location;
+            match stmt.ast {
+                Statement::Return(_) => {}
+                Statement::Assignment(assign) => assign.process(state, Some(sig), loc)?,
+                Statement::Expr(expr) => {
+                    expr.process(state, Some(sig), loc)?;
+                    // Every expr leaves a single-word return value on the stack. In an rvalue this
+                    // is useful but in a statement it's garbage (because nothing else is about to
+                    // pick it up) so, drop it:
+                    sig.emit("pop")
+                }
+                Statement::VarDecl(vardecl) => vardecl.process(state, Some(sig), loc)?,
+                Statement::Asm(Asm { args, body}) => {
+                    // Process all the args, if any
+                    for a in args {
+                        (*a.0).process(state, Some(sig), loc)?
+                    }
+                    // Emit the body
+                    sig.emit(body.as_str())
+                }
+                Statement::Conditional(Conditional { condition, body, alternative }) => {
+                    condition.process(state, Some(sig), loc)?;
+                    sig.emit("#if"); // We went to a lot of trouble making macros, shame not to use them
+                    body.process(state, Some(sig), loc)?;
+                    if let Some(alternative) = alternative {
+                        sig.emit("#else");
+                        alternative.process(state, Some(sig), loc)?;
+                    }
+                    sig.emit("#end")
+                }
+                Statement::WhileLoop(_) | Statement::RepeatLoop(_) => {
+                    todo!()
+                }
+            }
+        }
+
+        Ok(())
+    }
+}
+
+///////////////////////////////////////////////////////////
+
 impl Compilable for Function {
     fn process(self, state: &mut State, _: Option<&mut CompiledFn>, loc: Location) -> Result<(), CompileError> {
         // The signature for this function, which will eventually get added to the state
@@ -214,33 +262,7 @@ impl Compilable for Function {
         // Add it to the global namespace so we can make recursive calls
         state.add_global(&self.name, |_| Variable::DirectLabel(sig.label.clone()))?;
 
-        // Compile each statement:
-        for stmt in self.body.0 {
-            let loc = stmt.location;
-            match stmt.ast {
-                Statement::Return(_) => {}
-                Statement::Assignment(assign) => assign.process(state, Some(&mut sig), loc)?,
-                Statement::Expr(expr) => {
-                    expr.process(state, Some(&mut sig), loc)?;
-                    // Every expr leaves a single-word return value on the stack. In an rvalue this
-                    // is useful but in a statement it's garbage (because nothing else is about to
-                    // pick it up) so, drop it:
-                    sig.emit("pop")
-                }
-                Statement::VarDecl(vardecl) => vardecl.process(state, Some(&mut sig), loc)?,
-                Statement::Asm(Asm { args, body}) => {
-                    // Process all the args, if any
-                    for a in args {
-                        (*a.0).process(state, Some(&mut sig), loc)?
-                    }
-                    // Emit the body
-                    sig.emit(body.as_str())
-                }
-                Statement::Conditional(_) | Statement::WhileLoop(_) | Statement::RepeatLoop(_) => {
-                    todo!()
-                }
-            }
-        }
+        self.body.process(state, Some(&mut sig), loc)?;
 
         // This can't fail because if it were a dupe name, adding the global would have failed
         state.functions.insert(self.name.clone(), sig);
@@ -646,7 +668,7 @@ mod test {
             .unwrap();
         assert_eq!(
             state.global_scope,
-            [("foo".into(), Variable::DirectLabel("_gensym_1".into()))].into()
+            [("foo".into(), Variable::DirectLabel("_forge_gensym_1".into()))].into()
         )
     }
 
@@ -659,7 +681,7 @@ mod test {
             .unwrap();
         assert_eq!(
             state.global_scope,
-            [("a".into(), Variable::IndirectLabel("_gensym_1".into()))].into()
+            [("a".into(), Variable::IndirectLabel("_forge_gensym_1".into()))].into()
         )
     }
 
@@ -728,18 +750,18 @@ mod test {
         assert_eq!(
             state.strings,
             vec![
-                ("_gensym_1".into(), "foo".into()),
-                ("_gensym_3".into(), "bar".into()), // gensym 2 is the entrypoint of blah()
-                ("_gensym_4".into(), "norp".into())
+                ("_forge_gensym_1".into(), "foo".into()),
+                ("_forge_gensym_3".into(), "bar".into()), // gensym 2 is the entrypoint of blah()
+                ("_forge_gensym_4".into(), "norp".into())
             ]
         );
         assert_eq!(
             test_body(state),
             vec![
-                "push _gensym_3",
+                "push _forge_gensym_3",
                 "loadw frame",
                 "storew", // the assignment for x
-                "push _gensym_4",
+                "push _forge_gensym_4",
                 "loadw frame",
                 "add 3", // the address of y (frame + 3) and put gensym_4 in it
                 "storew"
@@ -787,7 +809,7 @@ mod test {
         assert_eq!(
             test_body(state_for("const foo = \"foo\"; fn test() { var x = \"bar\" + 3; }")),
             vec![
-                "push _gensym_3", // 1 is the label in the string table for "foo", 2 for "blah,"
+                "push _forge_gensym_3", // 1 is the label in the string table for "foo", 2 for "blah,"
                 "push 3", // so 3 is the string "bar"
                 "add", // Add 3 to that address
                 "loadw frame", // Store it in the first var
@@ -808,6 +830,46 @@ mod test {
             ]
                 .join("\n")
         )
+    }
 
+    #[test]
+    fn test_conditionals() {
+        assert_eq!(
+            test_body(state_for("fn test() { var x = 3; if (x > 2) { x = 1; } }")),
+            vec![
+                "push 3",
+                "loadw frame",
+                "storew", // x = 3
+                "loadw frame",
+                "push 2",
+                "agt", // The condition, x > 2
+                "#if", // The if itself
+                "push 1",
+                "loadw frame",
+                "storew", // The branch, x = 1
+                "#end"]
+                .join("\n")
+        );
+
+        assert_eq!(
+            test_body(state_for("fn test() { var x = 3; if (x > 2) { x = 1; } else { x = 7; } }")),
+            vec![
+                "push 3",
+                "loadw frame",
+                "storew", // x = 3
+                "loadw frame",
+                "push 2",
+                "agt", // The condition, x > 2
+                "#if", // The if itself
+                "push 1",
+                "loadw frame",
+                "storew", // The affirmative branch, x = 1
+                "#else", // The alternative
+                "push 7",
+                "loadw frame",
+                "storew", // x = 7
+                "#end"]
+                .join("\n")
+        )
     }
 }
