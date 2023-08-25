@@ -229,7 +229,14 @@ impl Compilable for Block {
                     }
                     sig.emit("#end")
                 }
-                Statement::WhileLoop(_) | Statement::RepeatLoop(_) => {
+                Statement::WhileLoop(WhileLoop { condition, body }) => {
+                    sig.emit("#while");
+                    condition.process(state, Some(sig), loc)?;
+                    sig.emit("#do");
+                    body.process(state, Some(sig), loc)?;
+                    sig.emit("#end")
+                }
+                Statement::RepeatLoop(_) => {
                     todo!()
                 }
             }
@@ -430,8 +437,8 @@ impl Compilable for Expr {
                         sig.emit("loadw frame");
                         if offset > 0 {
                             sig.emit_arg("add", offset);
-                            sig.emit("loadw");
                         }
+                        sig.emit("loadw");
                         Ok(())
                     }
                     None => Err(CompileError(0, 0, format!("Unknown name {}", name))),
@@ -714,6 +721,7 @@ mod test {
             vec![
                 "push 17",     // Start calculating the rvalue, push the literal
                 "loadw frame", // This is looking up the "a" arg, at frame + 0
+                "loadw",
                 "add",         // 17 + a
                 "loadw frame", // Calculate the lvalue
                 "add 3",       // "b" arg is frame + 3
@@ -729,7 +737,7 @@ mod test {
             test_body(state_for("fn test() { var a; var b = 7; a = b * 2; }")),
             vec![
                 "push 7",      // Start calculating the rvalue, push the literal
-                "loadw frame", // "b" is the second local var at frame - 3
+                "loadw frame", // "b" is the second local var at frame + 3
                 "add 3",
                 "storew",      // Do the initialization
                 "loadw frame", // Now we're evaluating b * 2
@@ -796,6 +804,7 @@ mod test {
                 "loadw frame",
                 "storew",      // the assignment for x
                 "loadw frame", // Now we're compiling *x, so load x's value, which is 3
+                "loadw",
                 "loadw", // Then load the value at 3
                 "push 1000", // Push the addr 1000, for the lvalue
                 "storew" // Store whatever's at 3 to 1000
@@ -841,6 +850,7 @@ mod test {
                 "loadw frame",
                 "storew", // x = 3
                 "loadw frame",
+                "loadw",
                 "push 2",
                 "agt", // The condition, x > 2
                 "#if", // The if itself
@@ -858,6 +868,7 @@ mod test {
                 "loadw frame",
                 "storew", // x = 3
                 "loadw frame",
+                "loadw",
                 "push 2",
                 "agt", // The condition, x > 2
                 "#if", // The if itself
@@ -871,5 +882,46 @@ mod test {
                 "#end"]
                 .join("\n")
         )
+    }
+
+    #[test]
+    fn test_while_loops() {
+        assert_eq!(
+            test_body(state_for("fn test() { var x = 0; var c = 0; while (c < 10) { x = x + c; c = c + 1; } }")),
+            vec![
+                "push 0",
+                "loadw frame",
+                "storew", // var x = 0
+                "push 0",
+                "loadw frame",
+                "add 3",
+                "storew", // var c = 0
+                "#while", // Start the loop
+                "loadw frame",
+                "add 3",
+                "loadw",
+                "push 10",
+                "alt", // c > 10
+                "#do", // Start loop body
+                "loadw frame",
+                "loadw",
+                "loadw frame",
+                "add 3",
+                "loadw",
+                "add",
+                "loadw frame",
+                "storew", // x = x + c
+                "loadw frame",
+                "add 3",
+                "loadw",
+                "push 1",
+                "add",
+                "loadw frame",
+                "add 3",
+                "storew", // c = c + 1
+                "#end" // End the loop body
+                ]
+                .join("\n")
+        );
     }
 }
