@@ -24,6 +24,7 @@ pub enum Declaration {
     Function(Function),
     Global(Global),
     Const(Const),
+    Prototype(FunctionPrototype),
 }
 
 #[derive(PartialEq, Clone, Debug)]
@@ -47,6 +48,12 @@ pub struct Function {
     pub name: String,
     pub args: Vec<String>,
     pub body: Block,
+}
+
+#[derive(PartialEq, Clone, Debug)]
+pub struct FunctionPrototype {
+    pub name: String,
+    pub args: Vec<String>,
 }
 
 #[derive(PartialEq, Clone, Debug)]

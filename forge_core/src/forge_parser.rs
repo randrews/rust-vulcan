@@ -163,6 +163,7 @@ impl AstNode for Declaration {
             Rule::function => Self::Function(Function::from_pair(pair)),
             Rule::global => Self::Global(Global::from_pair(pair)),
             Rule::const_decl => Self::Const(Const::from_pair(pair)),
+            Rule::function_prototype => Self::Prototype(FunctionPrototype::from_pair(pair)),
             _ => unreachable!(),
         }
     }
@@ -222,6 +223,24 @@ impl AstNode for Function {
         let body = Block::from_pair(inner.next().unwrap());
 
         Self { name, args, body }
+    }
+}
+
+///////////////////////////////////////////////////////////////////////////////////////////
+
+impl AstNode for FunctionPrototype {
+    const RULE: Rule = Rule::function_prototype;
+    fn from_pair(pair: Pair<'_>) -> Self {
+        let mut inner = pair.into_inner().peekable();
+        let name = String::from(inner.next().unwrap().as_str());
+        let args: Vec<_> = inner
+            .next()
+            .unwrap()
+            .into_inner()
+            .map(|p| String::from(p.as_str()))
+            .collect();
+
+        Self { name, args }
     }
 }
 
@@ -862,6 +881,17 @@ mod test {
         assert_eq!(
             Asm::from_str("asm (&a) { swap 34\nstorew }"),
             Ok(Asm { args: vec![Expr::Address("a".into()).into()], body: "swap 34\nstorew".into() })
+        );
+    }
+
+    #[test]
+    fn parse_fn_prototype() {
+        assert_eq!(
+            FunctionPrototype::from_str("fn foo();"),
+            Ok(FunctionPrototype {
+                name: "foo".into(),
+                args: vec![],
+            })
         );
     }
 

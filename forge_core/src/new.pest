@@ -80,7 +80,9 @@ block = { "{" ~ statement* ~ "}" }
 function = { "fn" ~ name ~ argnames ~ block }
 argnames = { "(" ~ (name ~ ("," ~ name)*)? ~ ")" }
 
-declaration = { function | global | const_decl }
+function_prototype = { "fn" ~ name ~ argnames ~ ";" }
+
+declaration = { function | function_prototype | global | const_decl }
 program     = { (COMMENT | WHITESPACE)? ~ declaration* ~ EOI }
 
 return_stmt = { "return" ~ expr? }

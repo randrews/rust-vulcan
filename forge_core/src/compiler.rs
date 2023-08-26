@@ -118,6 +118,8 @@ struct State {
     pub functions: BTreeMap<String, CompiledFn>,
     /// The string table
     pub strings: Vec<(Label, String)>,
+    /// The functions that have been prototyped but not yet defined
+    pub prototypes: Scope,
 }
 
 impl State {
@@ -151,6 +153,31 @@ impl State {
         let sym = self.gensym();
         self.strings.push((sym.clone(), string.into()));
         sym
+    }
+
+    fn declare_function(&mut self, name: &str, _args: Vec<String>) -> Result<(), CompileError> {
+        // If it's not already prototyped, gensym a label and put it in the list. If it is, just
+        // ignore this (we don't check arity so it's not like the arglist being different matters)
+        // todo: check arity, store it here
+        if !self.prototypes.contains_key(name) {
+            let label = self.gensym();
+            self.add_global(name, |_| Variable::DirectLabel(label.clone()))?;
+            self.prototypes.insert(name.into(), Variable::DirectLabel(label));
+        }
+        Ok(())
+    }
+
+    fn find_or_declare_function(&mut self, name: &str, loc: Location) -> Result<String, CompileError> {
+        // If it's in here, remove it and return the label:
+        // (this will only ever match this way; only thing that puts stuff in prototypes adds directlabels)
+        if let Some(Variable::DirectLabel(label)) = self.prototypes.remove(name) {
+            Ok(label)
+        } else {
+            // Otherwise, make a new label, add it to globals, and return it
+            let label = self.gensym();
+            self.add_global(name, |_| Variable::DirectLabel(label.clone()))?;
+            Ok(label)
+        }
     }
 }
 
@@ -187,6 +214,7 @@ impl Compilable for Declaration {
             Declaration::Function(f) => f.process(state, None, loc),
             Declaration::Global(g) => g.process(state, None, loc),
             Declaration::Const(c) => c.process(state, None, loc),
+            Declaration::Prototype(p) => p.process(state, None, loc),
         }
     }
 }
@@ -250,9 +278,11 @@ impl Compilable for Block {
 
 impl Compilable for Function {
     fn process(self, state: &mut State, _: Option<&mut CompiledFn>, loc: Location) -> Result<(), CompileError> {
-        // The signature for this function, which will eventually get added to the state
+        let label = state.find_or_declare_function(self.name.as_str(), loc)?;
+
+        // The CompiledFn for this function, which will eventually get stuff populated into it:
         let mut sig = CompiledFn {
-            label: state.gensym(),
+            label,
             ..Default::default()
         };
 
@@ -267,14 +297,22 @@ impl Compilable for Function {
         // at the end
 
         // Add it to the global namespace so we can make recursive calls
-        state.add_global(&self.name, |_| Variable::DirectLabel(sig.label.clone()))?;
+        // state.add_global(&self.name, |_| Variable::DirectLabel(sig.label.clone()))?;
 
+        // Compile the body, storing all of it in the CompiledFn we just created / added
         self.body.process(state, Some(&mut sig), loc)?;
 
         // This can't fail because if it were a dupe name, adding the global would have failed
         state.functions.insert(self.name.clone(), sig);
 
+        // todo actually emit the function header / body
         Ok(())
+    }
+}
+
+impl Compilable for FunctionPrototype {
+    fn process(self, state: &mut State, _: Option<&mut CompiledFn>, loc: Location) -> Result<(), CompileError> {
+        state.declare_function(self.name.as_str(), self.args)
     }
 }
 
@@ -923,5 +961,19 @@ mod test {
                 ]
                 .join("\n")
         );
+    }
+
+    #[test]
+    fn test_function_prototypes() {
+        let mut state = state_for("fn blah(a, b);");
+        assert_eq!(state.functions.get("blah"), None);
+        assert_eq!(state.prototypes.remove("blah"), Some(Variable::DirectLabel(String::from("_forge_gensym_1"))));
+    }
+
+    #[test]
+    fn test_functions_with_prototypes() {
+        let mut state = state_for("fn blah(a, b); const foo = 3; fn blah(a, b) { return 7; }");
+        assert_eq!(state.functions.remove("blah").unwrap().label, String::from("_forge_gensym_1"));
+        assert_eq!(state.prototypes.remove("blah"), None);
     }
 }
