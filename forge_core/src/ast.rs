@@ -135,6 +135,12 @@ pub struct Asm {
     pub body: String
 }
 
+#[derive(PartialEq, Clone, Debug)]
+pub struct Call {
+    pub target: BoxExpr,
+    pub args: Vec<Expr>
+}
+
 /// One of the five arithmetical operators
 #[derive(Debug, Eq, PartialEq, Copy, Clone)]
 pub enum Operator {
@@ -166,7 +172,7 @@ pub enum Expr {
     Neg(BoxExpr),
     Deref(BoxExpr),
     Address(Lvalue),
-    Call(BoxExpr, Vec<Expr>),
+    Call(Call),
     Subscript(BoxExpr, BoxExpr),
     Infix(BoxExpr, Operator, BoxExpr),
     String(String),

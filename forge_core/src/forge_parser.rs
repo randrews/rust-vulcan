@@ -416,8 +416,10 @@ impl AstNode for Expr {
             })
             .map_postfix(|expr, suffix| match suffix.as_rule() {
                 Rule::arglist => Expr::Call(
-                    expr.into(),
-                    suffix.into_inner().map(Expr::from_pair).collect(),
+                    Call {
+                        target: expr.into(),
+                        args: suffix.into_inner().map(Expr::from_pair).collect(),
+                    }
                 ),
                 Rule::subscript => {
                     Expr::Subscript(expr.into(), Expr::from_pair(suffix.first()).into())
@@ -695,7 +697,7 @@ mod test {
         // compiler can detect this and error at that stage.
         assert_eq!(
             Expr::from_str("&foo()"),
-            Ok(Expr::Address(Expr::Call("foo".into(), vec![]).into()))
+            Ok(Expr::Address(Expr::Call(Call { target: "foo".into(), args: vec![] }).into()))
         );
 
         // Dereferencing
@@ -712,7 +714,7 @@ mod test {
 
     #[test]
     fn parse_calls() {
-        let blah = Expr::Call("blah".into(), vec![]);
+        let blah = Expr::Call(Call { target: "blah".into(), args: vec![] });
 
         // Can Node parse a call?
         assert_eq!(Expr::from_str("blah()"), Ok(blah.clone()));
@@ -723,13 +725,13 @@ mod test {
         // Calls with args
         assert_eq!(
             Expr::from_str("blah(1, 2)"),
-            Ok(Expr::Call("blah".into(), vec![1.into(), 2.into()]))
+            Ok(Expr::Call(Call { target: "blah".into(), args: vec![1.into(), 2.into()] }))
         );
 
         //Calls with strings
         assert_eq!(
             Expr::from_str("blah(\"foo\", 2)"),
-            Ok(Expr::Call("blah".into(), vec![Expr::String("foo".into()), 2.into()]))
+            Ok(Expr::Call(Call { target: "blah".into(), args: vec![Expr::String("foo".into()), 2.into()] }))
         );
     }
 
@@ -801,8 +803,8 @@ mod test {
         assert_eq!(
             statements,
             vec![
-                Statement::Expr(Expr::Call("foo".into(), vec![])),
-                Statement::Expr(Expr::Call("bar".into(), vec![])),
+                Statement::Expr(Expr::Call(Call { target: "foo".into(), args: vec![] })),
+                Statement::Expr(Expr::Call(Call { target: "bar".into(), args: vec![] })),
             ]
         );
     }

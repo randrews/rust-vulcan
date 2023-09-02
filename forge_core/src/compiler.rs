@@ -99,6 +99,12 @@ impl CompiledFn {
     fn emit_arg<T: Display>(&mut self, opcode: &str, arg: T) {
         self.body.push(format!("{} {}", opcode, arg))
     }
+
+    /// The size of the local scope in bytes. This increases as variables are declared
+    /// todo: this needs to change for arrays; it won't like having vars that aren't 3 bytes long
+    fn frame_size(&self) -> usize {
+        self.local_scope.len() * 3
+    }
 }
 
 /// Maps from names to the variables they represent
@@ -296,9 +302,6 @@ impl Compilable for Function {
         // and setting signature immutably right now, passing context down ("block?") and setting it
         // at the end
 
-        // Add it to the global namespace so we can make recursive calls
-        // state.add_global(&self.name, |_| Variable::DirectLabel(sig.label.clone()))?;
-
         // Compile the body, storing all of it in the CompiledFn we just created / added
         self.body.process(state, Some(&mut sig), loc)?;
 
@@ -380,7 +383,7 @@ impl Compilable for Lvalue {
             Expr::Neg(_) |
             Expr::Not(_) |
             Expr::Address(_) |
-            Expr::Call(_, _) |
+            Expr::Call(_) |
             Expr::Infix(_, _, _) |
             Expr::String(_) => {
                 Err(CompileError(0, 0, String::from("Not a valid lvalue")))
@@ -423,6 +426,50 @@ impl Compilable for Lvalue {
                 Err(CompileError(0, 0, String::from("Arrays are not yet supported")))
             }
         }
+    }
+}
+
+///////////////////////////////////////////////////////////
+
+impl Compilable for Call {
+    fn process(self, state: &mut State, sig: Option<&mut CompiledFn>, loc: Location) -> Result<(), CompileError> {
+        // Require a function
+        let sig = sig.expect("lvalue outside a function");
+
+        // We need a stack consisting of the arguments (last on top), followed by the address to call
+        // So, first eval the args:
+        for arg in self.args {
+            arg.process(state, Some(sig), loc)?;
+        }
+
+        // Eval the target
+        self.target.0.process(state, Some(sig), loc)?;
+
+        // Before we actually do the call though, we need to deal with some paperwork around the
+        // frame pointer. We will store the current frame pointer in the rstack:
+        sig.emit("loadw frame");
+        sig.emit("pushr");
+
+        // Now we increment the frame ptr to right after the current frame:
+        let frame_size =  sig.frame_size();
+        if frame_size > 0 {
+            sig.emit("loadw frame");
+            sig.emit_arg("add", frame_size);
+            sig.emit("storew frame");
+        }
+
+        // Frame is now pointing at a safe place, the top of stack is the target, do the call:
+        sig.emit("call");
+
+        // And this is where we'll return to. The function has popped its args and left a word on
+        // the stack as a return value, which someone else will deal with (this is the word that
+        // this expr::call will end up evaluating to). But before we're done, we need to restore
+        // our frame pointerS
+        sig.emit("popr");
+        sig.emit("storew frame");
+
+        // And we're finished!
+        Ok(())
     }
 }
 
@@ -506,7 +553,7 @@ impl Compilable for Expr {
                 sig.emit_arg("push", label);
                 Ok(())
             }
-            Expr::Call(_, _) => todo!(),
+            Expr::Call(call) => call.process(state, Some(sig), loc),
             Expr::Subscript(_, _) => todo!("Structs and arrays are not yen supported"),
             Expr::Infix(lhs, op, rhs) => {
                 // Recurse on expressions, handling operators
@@ -628,7 +675,7 @@ pub fn eval_const(expr: Expr, scope: &Scope) -> Result<i32, CompileError> {
             0,
             String::from("Addresses are not known at compile time"),
         )),
-        Expr::Call(_, _) | Expr::Subscript(_, _) => Err(CompileError(
+        Expr::Call(_) | Expr::Subscript(_, _) => Err(CompileError(
             0,
             0,
             String::from("Constants must be statically defined"),
@@ -975,5 +1022,27 @@ mod test {
         let mut state = state_for("fn blah(a, b); const foo = 3; fn blah(a, b) { return 7; }");
         assert_eq!(state.functions.remove("blah").unwrap().label, String::from("_forge_gensym_1"));
         assert_eq!(state.prototypes.remove("blah"), None);
+    }
+
+    #[test]
+    fn test_calls() {
+        assert_eq!(
+            test_body(state_for("fn test(a, b) { test(2, 3); }")),
+            vec![
+                "push 2", // evaluating args, in order
+                "push 3",
+                "push _forge_gensym_1", // evaluating target (this fn)
+                "loadw frame", // Store the frame ptr
+                "pushr",
+                "loadw frame", // Increment the frame ptr
+                "add 6",
+                "storew frame",
+                "call", // Actually make the call
+                "popr", // Restore the frame ptr
+                "storew frame",
+                "pop" // expr-as-statement drops the evaluated value
+                ]
+                .join("\n")
+        );
     }
 }
