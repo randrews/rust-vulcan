@@ -235,7 +235,15 @@ impl Compilable for Block {
         for stmt in self.0 {
             let loc = stmt.location;
             match stmt.ast {
-                Statement::Return(_) => {}
+                Statement::Return(Return(None)) => {
+                    // Returning nothing, so just default to returning a 0:
+                    sig.emit_arg("ret", 0)
+                }
+                Statement::Return(Return(Some(expr))) => {
+                    // Eval the expr and emit a ret for it
+                    expr.process(state, Some(sig), loc)?;
+                    sig.emit("ret")
+                }
                 Statement::Assignment(assign) => assign.process(state, Some(sig), loc)?,
                 Statement::Expr(expr) => {
                     expr.process(state, Some(sig), loc)?;
@@ -1042,6 +1050,35 @@ mod test {
                 "storew frame",
                 "pop" // expr-as-statement drops the evaluated value
                 ]
+                .join("\n")
+        );
+    }
+
+    #[test]
+    fn test_returns() {
+        assert_eq!(
+            test_body(state_for("fn test(a) { return a + 3; }")),
+            vec![
+                "loadw frame", // Load a
+                "loadw",
+                "push 3", // Add 3
+                "add",
+                "ret", // Return that
+            ]
+                .join("\n")
+        );
+
+        assert_eq!(
+            test_body(state_for("fn test(a) { if (a > 0) { return; } }")),
+            vec![
+                "loadw frame", // Load a
+                "loadw",
+                "push 0", // Compare to 0
+                "agt",
+                "#if", // If statement
+                "ret 0", // Default return value, for an expr-less return
+                "#end",
+            ]
                 .join("\n")
         );
     }
