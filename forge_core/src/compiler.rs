@@ -278,8 +278,68 @@ impl Compilable for Block {
                     body.process(state, Some(sig), loc)?;
                     sig.emit("#end")
                 }
-                Statement::RepeatLoop(_) => {
-                    todo!()
+                Statement::RepeatLoop(RepeatLoop{ count, name: Some(name), body }) => {
+                    // A repeat loop with a name essentially starts with a vardecl, so, we'll make
+                    // a decl and process it (and deal with the error if it's a duplicate name)
+                    // TODO: This makes some assumptions about names and scoping, and opens a can of
+                    // worms. I think what we'd really like to do here is implement block scoping for real,
+                    // which actually shouldn't be too hard: after a block, reset the scope to whatever
+                    // it was before the block, and make the repeat loop counter go in its block.
+                    let decl = VarDecl{
+                        name: name.clone(),
+                        size: None,
+                        initial: Some(Expr::Number(0)),
+                    };
+                    decl.process(state, Some(sig), loc)?;
+
+                    // Okay, the counter is now declared and in scope; we'll eval the limit once
+                    count.process(state, Some(sig), loc)?;
+
+                    // Now we have a fairly normal while loop:
+                    sig.emit("#while");
+                    // Stack currently has the limit on top. We need to cmp the counter to that.
+                    sig.emit("dup");
+                    // Load the counter
+                    Expr::Name(name.clone()).process(state, Some(sig), loc)?;
+                    // Subtract the counter from (the copy of) the limit.
+                    sig.emit("sub");
+                    // cmp that to zero, for our flag
+                    sig.emit_arg("agt", 0);
+                    // Loop body:
+                    sig.emit("#do");
+                    body.process(state, Some(sig), loc)?;
+                    // After the body we need to increment the counter. Put its address on top:
+                    Expr::Address(Expr::Name(name.clone()).into()).process(state, Some(sig), loc)?;
+                    // Dup and load it:
+                    sig.emit("dup");
+                    sig.emit("loadw");
+                    // Increment it:
+                    sig.emit_arg("add", 1);
+                    // Now we have ( counted-addr new-ctr-val ) so swap and store
+                    sig.emit("swap");
+                    sig.emit("storew");
+                    // Back to the check!
+                    sig.emit("#end");
+                    // Done with the loop, but the limit is still on the stack, pop it:
+                    sig.emit("pop");
+                }
+                Statement::RepeatLoop(RepeatLoop{ count, name: None, body }) => {
+                    // No name, so, what we'll do is, eval the count:
+                    count.process(state, Some(sig), loc)?;
+                    // Now the count is on top of the stack, so we'll do a #while loop counting it
+                    // down to zero:
+                    sig.emit("#while");
+                    sig.emit("dup");
+                    // Only go through the loop if the counter is positive:
+                    sig.emit_arg("agt", 0);
+                    sig.emit("#do");
+                    body.process(state, Some(sig), loc)?;
+                    // After the body we need to decrement the counter:
+                    sig.emit_arg("sub", 1);
+                    // Back to the check!
+                    sig.emit("#end");
+                    // Loop is over so we're left with the dead counter on the top, drop it:
+                    sig.emit("pop");
                 }
             }
         }
@@ -562,7 +622,7 @@ impl Compilable for Expr {
                 Ok(())
             }
             Expr::Call(call) => call.process(state, Some(sig), loc),
-            Expr::Subscript(_, _) => todo!("Structs and arrays are not yen supported"),
+            Expr::Subscript(_, _) => todo!("Structs and arrays are not yet supported"),
             Expr::Infix(lhs, op, rhs) => {
                 // Recurse on expressions, handling operators
                 (*lhs.0).process(state, Some(&mut sig), loc)?;
@@ -1080,6 +1140,90 @@ mod test {
                 "#end",
             ]
                 .join("\n")
+        );
+    }
+
+    #[test]
+    fn test_repeat_loops() {
+        // With a counter
+        assert_eq!(
+            test_body(state_for("fn test(a) { var x = 0; repeat(a) c { x = x + c; } return x; }")),
+            vec![
+                "push 0", // Create the 'x' var and store 0 in it
+                "loadw frame",
+                "add 3",
+                "storew",
+                "push 0", // Create the 'c' var and store 0 in it
+                "loadw frame",
+                "add 6",
+                "storew",
+                "loadw frame", // Load 'a' from args
+                "loadw",
+                "#while", // Starting the loop:
+                "dup", // Copy the limit
+                "loadw frame", // Load c
+                "add 6",
+                "loadw",
+                "sub", // Subtract c from a
+                "agt 0", // Are we still positive?
+                "#do",
+                "loadw frame", // Load x
+                "add 3",
+                "loadw",
+                "loadw frame", // Load c
+                "add 6",
+                "loadw",
+                "add", // Add c to x
+                "loadw frame", // Load x as an lvalue
+                "add 3",
+                "storew", // Store c + x into it
+                "loadw frame", // Load c as an lvalue
+                "add 6",
+                "dup", // Dup it, load it, add 1
+                "loadw",
+                "add 1",
+                "swap", // Swap the addr on top and store it
+                "storew",
+                "#end", // End of the loop body!
+                "pop", // Drop the limit off the top
+                "loadw frame", // Load x so we can return it
+                "add 3",
+                "loadw",
+                "ret"
+            ]
+                .join("\n")
+        );
+
+        // No counter
+        assert_eq!(
+            test_body(state_for("fn test(a) { var x = 1; repeat(a) { x = x * 2; } return x; }")),
+            vec![
+                "push 1", // Create the 'x' var and store 1 in it
+                "loadw frame",
+                "add 3",
+                "storew",
+                "loadw frame", // Load 'a' from args
+                "loadw",
+                "#while", // Starting the loop:
+                "dup", // Copy the limit
+                "agt 0", // Are we still positive?
+                "#do",
+                "loadw frame", // Load x
+                "add 3",
+                "loadw",
+                "push 2", // double it
+                "mul",
+                "loadw frame", // Load x as an lvalue
+                "add 3",
+                "storew", // Store 2x into it
+                "sub 1", // decrement the counter
+                "#end", // End of the loop body!
+                "pop", // Drop the limit off the top
+                "loadw frame", // Load x so we can return it
+                "add 3",
+                "loadw",
+                "ret"
+            ].join("\n")
         );
     }
 }
