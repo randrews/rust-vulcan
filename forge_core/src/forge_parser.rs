@@ -110,7 +110,7 @@ impl PairsExt for Peekable<Pairs<'_>> {
 }
 
 #[derive(Eq, PartialEq, Clone, Debug)]
-pub struct ParseError(usize, usize, String);
+pub struct ParseError(pub usize, pub usize, pub String);
 
 impl From<pest::error::Error<Rule>> for ParseError {
     fn from(err: Error<Rule>) -> Self {

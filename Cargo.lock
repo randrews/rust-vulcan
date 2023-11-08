@@ -1504,6 +1504,7 @@ dependencies = [
 name = "vtest"
 version = "0.1.0"
 dependencies = [
+ "forge_core",
  "vasm_core",
  "vcore",
 ]

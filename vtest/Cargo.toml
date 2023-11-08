@@ -8,3 +8,4 @@ edition = "2021"
 [dependencies]
 vcore = { path = "../vcore" }
 vasm_core = { path = "../vasm_core" }
+forge_core = { path = "../forge_core" }
