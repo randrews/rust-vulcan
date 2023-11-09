@@ -16,6 +16,13 @@ fn main_return(src: &str) -> i32 {
     cpu.pop_data().into()
 }
 
+fn error_message(src: &str) -> Option<String> {
+    match forge_core::compiler::build_boot(src) {
+        Ok(_) => None,
+        Err(forge_core::compiler::CompileError(_, _, s)) => Some(s)
+    }
+}
+
 #[test]
 fn basic_forge_test() {
     assert_eq!(
@@ -49,5 +56,28 @@ fn arg_test() {
             "fn sub(a, b) { return a - b; }
                  fn main() { return sub(5, 3); }"),
         2
+    )
+}
+
+#[test]
+fn scope_test() {
+    // Refer to a var that's now out of scope, to ensure block scoping works
+    assert_eq!(
+        error_message(
+            "fn main() {
+               if (1) { var a = 3; } // scoped to the block!
+               return a; // should error!
+             }"),
+        Some("Unknown name a".into())
+    );
+
+    // Refer to a var that's still in scope, to ensure we're not wiping too much out
+    assert_eq!(
+        error_message(
+            "fn main(a) {
+               if (1) { var b = 3; } // scoped to the block!
+               return a; // should work, we didn't remove the thing that dropped
+             }"),
+        None
     )
 }

@@ -6,7 +6,7 @@ use std::fmt::{Display, Formatter};
 use crate::forge_parser::{ParseError, parse};
 
 #[derive(Eq, Clone, PartialEq, Debug)]
-pub struct CompileError(usize, usize, String);
+pub struct CompileError(pub usize, pub usize, pub String);
 
 impl From<ParseError> for CompileError {
     fn from(value: ParseError) -> Self {
@@ -41,8 +41,7 @@ pub enum Variable {
 ///
 /// A complete function implementation consists of:
 /// - A label for the entrypoint
-/// - Preamble code to set up the stack frame
-/// - The function body
+/// - The function body (including preamble code to set up the stack frame)
 ///
 /// The stack frame is managed by the function through a global pointer called "frame". When
 /// the function is called, it can assume that all memory after "frame" is free for use (this
@@ -142,6 +141,32 @@ impl CompiledFn {
         }
 
         Ok(())
+    }
+
+    /// Takes a new frame size and removes all names from the local scope that would be placed
+    /// beyond that frame length: used when compiling blocks to de-scope names that should only
+    /// be visible in the block
+    fn reduce_frame_size_to(&mut self, new_size: usize) {
+        self.frame_size = new_size;
+        let mut to_remove: Vec<String> = Vec::new();
+        for (name, var) in self.local_scope.iter() {
+            if let Variable::Local(offset) = var {
+                if *offset >= self.frame_size {
+                    to_remove.push(name.clone());
+                }
+            }
+        }
+
+        for name in to_remove {
+            self.local_scope.remove(name.as_str());
+        }
+    }
+
+    /// Reduces the frame size by one word, to throw out the most recently declared local.
+    /// Used for things like repeat loops where there's a name declared outside a block but which
+    /// should only be visible in the block anyway.
+    fn forget_last_local(&mut self) {
+        self.reduce_frame_size_to(self.frame_size - 3);
     }
 }
 
@@ -269,6 +294,8 @@ impl Compilable for Block {
     fn process(self, state: &mut State, sig: Option<&mut CompiledFn>, _loc: Location) -> Result<(), CompileError> {
         let sig = sig.expect("Block outside function");
 
+        let frame_size_before_block = sig.frame_size;
+
         // Compile each statement:
         for stmt in self.0 {
             let loc = stmt.location;
@@ -316,69 +343,93 @@ impl Compilable for Block {
                     body.process(state, Some(sig), loc)?;
                     sig.emit("#end")
                 }
-                Statement::RepeatLoop(RepeatLoop{ count, name: Some(name), body }) => {
-                    // A repeat loop with a name essentially starts with a vardecl, so, we'll make
-                    // a decl and process it (and deal with the error if it's a duplicate name)
-                    // TODO: This makes some assumptions about names and scoping, and opens a can of
-                    // worms. I think what we'd really like to do here is implement block scoping for real,
-                    // which actually shouldn't be too hard: after a block, reset the scope to whatever
-                    // it was before the block, and make the repeat loop counter go in its block.
-                    let decl = VarDecl{
-                        name: name.clone(),
-                        size: None,
-                        initial: Some(Expr::Number(0)),
-                    };
-                    decl.process(state, Some(sig), loc)?;
-
-                    // Okay, the counter is now declared and in scope; we'll eval the limit once
-                    count.process(state, Some(sig), loc)?;
-
-                    // Now we have a fairly normal while loop:
-                    sig.emit("#while");
-                    // Stack currently has the limit on top. We need to cmp the counter to that.
-                    sig.emit("dup");
-                    // Load the counter
-                    Expr::Name(name.clone()).process(state, Some(sig), loc)?;
-                    // Subtract the counter from (the copy of) the limit.
-                    sig.emit("sub");
-                    // cmp that to zero, for our flag
-                    sig.emit_arg("agt", 0);
-                    // Loop body:
-                    sig.emit("#do");
-                    body.process(state, Some(sig), loc)?;
-                    // After the body we need to increment the counter. Put its address on top:
-                    Expr::Address(Expr::Name(name.clone()).into()).process(state, Some(sig), loc)?;
-                    // Dup and load it:
-                    sig.emit("dup");
-                    sig.emit("loadw");
-                    // Increment it:
-                    sig.emit_arg("add", 1);
-                    // Now we have ( counted-addr new-ctr-val ) so swap and store
-                    sig.emit("swap");
-                    sig.emit("storew");
-                    // Back to the check!
-                    sig.emit("#end");
-                    // Done with the loop, but the limit is still on the stack, pop it:
-                    sig.emit("pop");
+                Statement::RepeatLoop(repeat_loop) => {
+                    repeat_loop.process(state, Some(sig), loc)?;
                 }
-                Statement::RepeatLoop(RepeatLoop{ count, name: _, body }) => {
-                    // No name, so, what we'll do is, eval the count:
-                    count.process(state, Some(sig), loc)?;
-                    // Now the count is on top of the stack, so we'll do a #while loop counting it
-                    // down to zero:
-                    sig.emit("#while");
-                    sig.emit("dup");
-                    // Only go through the loop if the counter is positive:
-                    sig.emit_arg("agt", 0);
-                    sig.emit("#do");
-                    body.process(state, Some(sig), loc)?;
-                    // After the body we need to decrement the counter:
-                    sig.emit_arg("sub", 1);
-                    // Back to the check!
-                    sig.emit("#end");
-                    // Loop is over so we're left with the dead counter on the top, drop it:
-                    sig.emit("pop");
-                }
+            }
+        }
+
+        // If we declared anything inside the block, we'll know that because the frame size will
+        // have increased, so, simply blow away those names to make them block scoped. This doesn't
+        // give us shadowing, it's not a true scope chain, but this is much simpler and fixes some
+        // common cases where you want that.
+        sig.reduce_frame_size_to(frame_size_before_block);
+
+        Ok(())
+    }
+}
+
+///////////////////////////////////////////////////////////
+
+impl Compilable for RepeatLoop {
+    fn process(self, state: &mut State, sig: Option<&mut CompiledFn>, loc: Location) -> Result<(), CompileError> {
+        let sig = sig.expect("Repeat loop outside function");
+
+        if let RepeatLoop{ count, name, body } = self {
+            let named_counter = name.is_some();
+            let mut counter_name = String::new();
+            if let Some(name) = name {
+                counter_name = name;
+            }
+
+            if named_counter {
+                let decl = VarDecl{
+                    name: counter_name.clone(),
+                    size: None,
+                    initial: Some(Expr::Number(0)),
+                };
+                decl.process(state, Some(sig), loc)?;
+            }
+
+            // Okay, the counter (if present) is now declared and in scope; we'll eval the limit once
+            count.process(state, Some(sig), loc)?;
+
+            // Now we have a fairly normal while loop:
+            sig.emit("#while");
+            // Stack currently has the limit on top. We need to cmp the counter to that.
+            sig.emit("dup");
+
+            // Load the counter, if present:
+            if named_counter {
+                Expr::Name(counter_name.clone()).process(state, Some(sig), loc)?;
+                // Subtract the counter from (the copy of) the limit.
+                sig.emit("sub");
+            }
+
+            // cmp that to zero, for our flag: this is either limit - ctr or limit, depending if
+            // there's a counter
+            sig.emit_arg("agt", 0);
+
+            // Loop body:
+            sig.emit("#do");
+            body.process(state, Some(sig), loc)?;
+
+            // After the body we need to increment the counter if there is one
+            if named_counter {
+                // Put its address on top:
+                Expr::Address(Expr::Name(counter_name.clone()).into()).process(state, Some(sig), loc)?;
+                // Dup and load it:
+                sig.emit("dup");
+                sig.emit("loadw");
+                // Increment it:
+                sig.emit_arg("add", 1);
+                // Now we have ( counted-addr new-ctr-val ) so swap and store
+                sig.emit("swap");
+                sig.emit("storew");
+            } else {
+                // No counter, so just decrement the limit, which is already on top:
+                sig.emit_arg("sub", 1);
+            }
+
+            // Back to the check!
+            sig.emit("#end");
+            // Done with the loop, but the limit is still on the stack, pop it:
+            sig.emit("pop");
+
+            // If we have added a counter variable, we need to forget that because (even
+            // though declared outside the block) it should be scoped to the block:
+            if named_counter {
+                sig.forget_last_local();
             }
         }
 
@@ -878,7 +929,7 @@ mod test {
             ("foo".into(), Variable::Literal(10)),
             ("bar".into(), Variable::Literal(5)),
         ]
-        .into();
+            .into();
         assert_eq!(eval_const(to_expr("foo + 5"), &scope), Ok(15));
         assert_eq!(eval_const(to_expr("bar * foo"), &scope), Ok(50));
 
@@ -968,7 +1019,7 @@ mod test {
                 "add 3",       // "b" arg is frame + 3
                 "storew",      // Finally store
             ]
-            .join("\n")
+                .join("\n")
         )
     }
 
@@ -989,7 +1040,7 @@ mod test {
                 "loadw frame", // Loading "a" as an lvalue
                 "storew",      // doing the assignment
             ]
-            .join("\n")
+                .join("\n")
         )
     }
 
@@ -1015,7 +1066,7 @@ mod test {
                 "add 3", // the address of y (frame + 3) and put gensym_4 in it
                 "storew"
             ]
-            .join("\n")
+                .join("\n")
         )
     }
 
@@ -1032,7 +1083,7 @@ mod test {
                 "add 3", // the address of y (frame + 3) and put the addr of x (frame) in it
                 "storew"
             ]
-            .join("\n")
+                .join("\n")
         )
     }
 
@@ -1161,7 +1212,7 @@ mod test {
                 "add 3",
                 "storew", // c = c + 1
                 "#end" // End the loop body
-                ]
+            ]
                 .join("\n")
         );
     }
@@ -1202,7 +1253,7 @@ mod test {
                 "popr", // Restore the frame ptr
                 "storew frame",
                 "pop" // expr-as-statement drops the evaluated value
-                ]
+            ]
                 .join("\n")
         );
     }
@@ -1356,5 +1407,42 @@ mod test {
             "frame: .db $+1",
             ".db 0"
         ].join("\n"))
+    }
+
+    #[test]
+    fn test_block_scoping() {
+        assert_eq!(
+            test_body(state_for("fn test() { repeat(5) c { 2; } var k = 5; return k; }")),
+            vec![
+                "push 0", // Create the 'c' var and store 0 in it
+                "loadw frame",
+                "storew",
+                "push 5",
+                "#while", // Starting the loop:
+                "dup", // Copy the limit
+                "loadw frame", // Load c
+                "loadw",
+                "sub", // Subtract c from a
+                "agt 0", // Are we still positive?
+                "#do",
+                "push 2", // Pointless loop body
+                "pop",
+                "loadw frame", // Load c as an lvalue
+                "dup", // Dup it, load it, add 1
+                "loadw",
+                "add 1",
+                "swap", // Swap the addr on top and store it
+                "storew",
+                "#end", // End of the loop body!
+                "pop", // Drop the limit off the top
+                "push 5", // Push the rvalue we'll put in 'k'
+                "loadw frame", // THIS IS THE TEST: 'k' should go at frame + 0, because it's
+                "storew", // taking the same (now freed) frame slot that c took, because c is
+                "loadw frame", // now out of scope
+                "loadw",
+                "ret"
+            ]
+                .join("\n")
+        );
     }
 }
