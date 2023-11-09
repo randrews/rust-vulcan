@@ -260,7 +260,7 @@ trait Compilable {
         self,
         state: &mut State,
         function: Option<&mut CompiledFn>,
-        location: Location
+        location: Location,
     ) -> Result<(), CompileError>;
 }
 
@@ -318,7 +318,7 @@ impl Compilable for Block {
                     sig.emit("pop")
                 }
                 Statement::VarDecl(vardecl) => vardecl.process(state, Some(sig), loc)?,
-                Statement::Asm(Asm { args, body}) => {
+                Statement::Asm(Asm { args, body }) => {
                     // Process all the args, if any
                     for a in args {
                         (*a.0).process(state, Some(sig), loc)?
@@ -365,72 +365,71 @@ impl Compilable for RepeatLoop {
     fn process(self, state: &mut State, sig: Option<&mut CompiledFn>, loc: Location) -> Result<(), CompileError> {
         let sig = sig.expect("Repeat loop outside function");
 
-        if let RepeatLoop{ count, name, body } = self {
-            let named_counter = name.is_some();
-            let mut counter_name = String::new();
-            if let Some(name) = name {
-                counter_name = name;
-            }
+        let RepeatLoop { count, name, body } = self;
+        let named_counter = name.is_some();
+        let mut counter_name = String::new();
+        if let Some(name) = name {
+            counter_name = name;
+        }
 
-            if named_counter {
-                let decl = VarDecl{
-                    name: counter_name.clone(),
-                    size: None,
-                    initial: Some(Expr::Number(0)),
-                };
-                decl.process(state, Some(sig), loc)?;
-            }
+        if named_counter {
+            let decl = VarDecl {
+                name: counter_name.clone(),
+                size: None,
+                initial: Some(Expr::Number(0)),
+            };
+            decl.process(state, Some(sig), loc)?;
+        }
 
-            // Okay, the counter (if present) is now declared and in scope; we'll eval the limit once
-            count.process(state, Some(sig), loc)?;
+        // Okay, the counter (if present) is now declared and in scope; we'll eval the limit once
+        count.process(state, Some(sig), loc)?;
 
-            // Now we have a fairly normal while loop:
-            sig.emit("#while");
-            // Stack currently has the limit on top. We need to cmp the counter to that.
+        // Now we have a fairly normal while loop:
+        sig.emit("#while");
+        // Stack currently has the limit on top. We need to cmp the counter to that.
+        sig.emit("dup");
+
+        // Load the counter, if present:
+        if named_counter {
+            Expr::Name(counter_name.clone()).process(state, Some(sig), loc)?;
+            // Subtract the counter from (the copy of) the limit.
+            sig.emit("sub");
+        }
+
+        // cmp that to zero, for our flag: this is either limit - ctr or limit, depending if
+        // there's a counter
+        sig.emit_arg("agt", 0);
+
+        // Loop body:
+        sig.emit("#do");
+        body.process(state, Some(sig), loc)?;
+
+        // After the body we need to increment the counter if there is one
+        if named_counter {
+            // Put its address on top:
+            Expr::Address(Expr::Name(counter_name.clone()).into()).process(state, Some(sig), loc)?;
+            // Dup and load it:
             sig.emit("dup");
+            sig.emit("loadw");
+            // Increment it:
+            sig.emit_arg("add", 1);
+            // Now we have ( counted-addr new-ctr-val ) so swap and store
+            sig.emit("swap");
+            sig.emit("storew");
+        } else {
+            // No counter, so just decrement the limit, which is already on top:
+            sig.emit_arg("sub", 1);
+        }
 
-            // Load the counter, if present:
-            if named_counter {
-                Expr::Name(counter_name.clone()).process(state, Some(sig), loc)?;
-                // Subtract the counter from (the copy of) the limit.
-                sig.emit("sub");
-            }
+        // Back to the check!
+        sig.emit("#end");
+        // Done with the loop, but the limit is still on the stack, pop it:
+        sig.emit("pop");
 
-            // cmp that to zero, for our flag: this is either limit - ctr or limit, depending if
-            // there's a counter
-            sig.emit_arg("agt", 0);
-
-            // Loop body:
-            sig.emit("#do");
-            body.process(state, Some(sig), loc)?;
-
-            // After the body we need to increment the counter if there is one
-            if named_counter {
-                // Put its address on top:
-                Expr::Address(Expr::Name(counter_name.clone()).into()).process(state, Some(sig), loc)?;
-                // Dup and load it:
-                sig.emit("dup");
-                sig.emit("loadw");
-                // Increment it:
-                sig.emit_arg("add", 1);
-                // Now we have ( counted-addr new-ctr-val ) so swap and store
-                sig.emit("swap");
-                sig.emit("storew");
-            } else {
-                // No counter, so just decrement the limit, which is already on top:
-                sig.emit_arg("sub", 1);
-            }
-
-            // Back to the check!
-            sig.emit("#end");
-            // Done with the loop, but the limit is still on the stack, pop it:
-            sig.emit("pop");
-
-            // If we have added a counter variable, we need to forget that because (even
-            // though declared outside the block) it should be scoped to the block:
-            if named_counter {
-                sig.forget_last_local();
-            }
+        // If we have added a counter variable, we need to forget that because (even
+        // though declared outside the block) it should be scoped to the block:
+        if named_counter {
+            sig.forget_last_local();
         }
 
         Ok(())
@@ -609,7 +608,7 @@ impl Compilable for Call {
         sig.emit("pushr");
 
         // Now we increment the frame ptr to right after the current frame:
-        let frame_size =  sig.frame_size();
+        let frame_size = sig.frame_size();
         if frame_size > 0 {
             sig.emit("loadw frame");
             sig.emit_arg("add", frame_size);
@@ -1052,7 +1051,7 @@ mod test {
             vec![
                 ("_forge_gensym_1".into(), "foo".into()),
                 ("_forge_gensym_3".into(), "bar".into()), // gensym 2 is the entrypoint of blah()
-                ("_forge_gensym_4".into(), "norp".into())
+                ("_forge_gensym_4".into(), "norp".into()),
             ]
         );
         assert_eq!(
@@ -1064,7 +1063,7 @@ mod test {
                 "push _forge_gensym_4",
                 "loadw frame",
                 "add 3", // the address of y (frame + 3) and put gensym_4 in it
-                "storew"
+                "storew",
             ]
                 .join("\n")
         )
@@ -1081,7 +1080,7 @@ mod test {
                 "loadw frame", // The addr of x
                 "loadw frame",
                 "add 3", // the address of y (frame + 3) and put the addr of x (frame) in it
-                "storew"
+                "storew",
             ]
                 .join("\n")
         )
@@ -1099,7 +1098,7 @@ mod test {
                 "loadw",
                 "loadw", // Then load the value at 3
                 "push 1000", // Push the addr 1000, for the lvalue
-                "storew" // Store whatever's at 3 to 1000
+                "storew", // Store whatever's at 3 to 1000
             ]
                 .join("\n")
         )
@@ -1114,7 +1113,7 @@ mod test {
                 "push 3", // so 3 is the string "bar"
                 "add", // Add 3 to that address
                 "loadw frame", // Store it in the first var
-                "storew"
+                "storew",
             ]
                 .join("\n")
         )
@@ -1127,7 +1126,7 @@ mod test {
             vec![
                 "loadw frame", // Push the addr of x
                 "swap 12", // The asm body, which swaps 12 behind it and stores it there
-                "storew"
+                "storew",
             ]
                 .join("\n")
         )
@@ -1211,7 +1210,7 @@ mod test {
                 "loadw frame",
                 "add 3",
                 "storew", // c = c + 1
-                "#end" // End the loop body
+                "#end", // End the loop body
             ]
                 .join("\n")
         );
@@ -1252,7 +1251,7 @@ mod test {
                 "call", // Actually make the call
                 "popr", // Restore the frame ptr
                 "storew frame",
-                "pop" // expr-as-statement drops the evaluated value
+                "pop", // expr-as-statement drops the evaluated value
             ]
                 .join("\n")
         );
@@ -1339,7 +1338,7 @@ mod test {
                 "loadw frame", // Load x so we can return it
                 "add 3",
                 "loadw",
-                "ret"
+                "ret",
             ]
                 .join("\n")
         );
@@ -1374,7 +1373,7 @@ mod test {
                 "loadw frame", // Load x so we can return it
                 "add 3",
                 "loadw",
-                "ret"
+                "ret",
             ].join("\n")
         );
     }
@@ -1391,7 +1390,7 @@ mod test {
             "push 5",
             "ret",
             "frame: .db $+1",
-            ".db 0"
+            ".db 0",
         ].join("\n"));
 
         // Slightly more complicated, with a global str
@@ -1405,7 +1404,7 @@ mod test {
             "push _forge_gensym_1",
             "ret",
             "frame: .db $+1",
-            ".db 0"
+            ".db 0",
         ].join("\n"))
     }
 
@@ -1440,7 +1439,7 @@ mod test {
                 "storew", // taking the same (now freed) frame slot that c took, because c is
                 "loadw frame", // now out of scope
                 "loadw",
-                "ret"
+                "ret",
             ]
                 .join("\n")
         );
