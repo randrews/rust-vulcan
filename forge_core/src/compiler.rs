@@ -211,7 +211,7 @@ impl State {
         Ok(())
     }
 
-    fn find_or_declare_function(&mut self, name: &str, loc: Location) -> Result<String, CompileError> {
+    fn find_or_declare_function(&mut self, name: &str, _loc: Location) -> Result<String, CompileError> {
         // If it's in here, remove it and return the label:
         // (this will only ever match this way; only thing that puts stuff in prototypes adds directlabels)
         if let Some(Variable::DirectLabel(label)) = self.prototypes.remove(name) {
@@ -242,7 +242,7 @@ trait Compilable {
 ///////////////////////////////////////////////////////////
 
 impl Compilable for Program {
-    fn process(self, state: &mut State, _: Option<&mut CompiledFn>, loc: Location) -> Result<(), CompileError> {
+    fn process(self, state: &mut State, _: Option<&mut CompiledFn>, _loc: Location) -> Result<(), CompileError> {
         for decl in self.0 {
             decl.ast.process(state, None, decl.location)?
         }
@@ -266,7 +266,7 @@ impl Compilable for Declaration {
 ///////////////////////////////////////////////////////////
 
 impl Compilable for Block {
-    fn process(self, state: &mut State, sig: Option<&mut CompiledFn>, loc: Location) -> Result<(), CompileError> {
+    fn process(self, state: &mut State, sig: Option<&mut CompiledFn>, _loc: Location) -> Result<(), CompileError> {
         let sig = sig.expect("Block outside function");
 
         // Compile each statement:
@@ -361,7 +361,7 @@ impl Compilable for Block {
                     // Done with the loop, but the limit is still on the stack, pop it:
                     sig.emit("pop");
                 }
-                Statement::RepeatLoop(RepeatLoop{ count, name: None, body }) => {
+                Statement::RepeatLoop(RepeatLoop{ count, name: _, body }) => {
                     // No name, so, what we'll do is, eval the count:
                     count.process(state, Some(sig), loc)?;
                     // Now the count is on top of the stack, so we'll do a #while loop counting it
@@ -421,7 +421,7 @@ impl Compilable for Function {
 }
 
 impl Compilable for FunctionPrototype {
-    fn process(self, state: &mut State, _: Option<&mut CompiledFn>, loc: Location) -> Result<(), CompileError> {
+    fn process(self, state: &mut State, _: Option<&mut CompiledFn>, _loc: Location) -> Result<(), CompileError> {
         state.declare_function(self.name.as_str(), self.args)
     }
 }
@@ -718,7 +718,7 @@ impl Compilable for Expr {
 ///////////////////////////////////////////////////////////
 
 impl Compilable for Global {
-    fn process(self, state: &mut State, _: Option<&mut CompiledFn>, loc: Location) -> Result<(), CompileError> {
+    fn process(self, state: &mut State, _: Option<&mut CompiledFn>, _loc: Location) -> Result<(), CompileError> {
         if self.size.is_some() {
             todo!("Arrays are not yet supported")
         }
@@ -729,7 +729,7 @@ impl Compilable for Global {
 ///////////////////////////////////////////////////////////
 
 impl Compilable for Const {
-    fn process(self, state: &mut State, _: Option<&mut CompiledFn>, loc: Location) -> Result<(), CompileError> {
+    fn process(self, state: &mut State, _: Option<&mut CompiledFn>, _loc: Location) -> Result<(), CompileError> {
         let var = if self.string.is_some() {
             // If it's a string, add it to the string table
             Variable::DirectLabel(state.add_string(&self.string.unwrap()))
