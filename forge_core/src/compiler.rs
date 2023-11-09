@@ -77,6 +77,7 @@ pub struct CompiledFn {
     pub label: Label,
     pub frame_size: usize,
     pub local_scope: Scope,
+    pub arity: usize,
     pub body: Vec<String>,
 }
 
@@ -111,6 +112,36 @@ impl CompiledFn {
     /// todo: this needs to change for arrays; it won't like having vars that aren't 3 bytes long
     fn frame_size(&self) -> usize {
         self.local_scope.len() * 3
+    }
+
+    /// Emit the code to add the arguments' names to the local scopr, and move the arguments off
+    /// the stack into the frame. Should be run before the body is compiled, because this code
+    /// has to be the first thing in the body
+    fn handle_args(&mut self, function: &Function) -> Result<(), CompileError> {
+        let mut arg_names: Vec<&str> = Vec::new();
+
+        // Add each argument as a local
+        for name in function.args.iter() {
+            self.add_local(name.as_str())?;
+            arg_names.push(name.as_str());
+            self.arity += 1;
+        }
+
+        // Arguments in calls are pushed with the last on top, so, reverse the vec just to make
+        // the following loop easier:
+        arg_names.reverse();
+
+        for name in arg_names {
+            if let Variable::Local(offset) = self.local_scope[name] {
+                self.emit("loadw frame");
+                if offset != 0 {
+                    self.emit_arg("add", offset);
+                }
+                self.emit("storew");
+            }
+        }
+
+        Ok(())
     }
 }
 
@@ -367,10 +398,9 @@ impl Compilable for Function {
             ..Default::default()
         };
 
-        // Add each argument as a local
-        for arg in self.args {
-            sig.add_local(&arg)?
-        }
+        // This generates the code to copy the args into the frame as well as adds all the arguments
+        // to the local scope and calculates the arity.
+        sig.handle_args(&self)?;
 
         // todo we need to store arity somehow in the state, so we can check arglists even
         // with recursive calls. This probably becomes splitting "signature" from "function context"
@@ -383,7 +413,9 @@ impl Compilable for Function {
         // This can't fail because if it were a dupe name, adding the global would have failed
         state.functions.insert(self.name.clone(), sig);
 
-        // todo actually emit the function header / body
+        // And we're done: the function body now stores everything we need to emit that function...
+        // but we can't actually emit it yet because we don't know how we're building things. This
+        // is the equivalent of the object-file step in a more real compiler.
         Ok(())
     }
 }
@@ -923,6 +955,11 @@ mod test {
         assert_eq!(
             test_body(state_for("fn test(a, b) { b = 17 + a; }")),
             vec![
+                "loadw frame", // Capture var b
+                "add 3",
+                "storew",
+                "loadw frame", // Capture var a
+                "storew",
                 "push 17",     // Start calculating the rvalue, push the literal
                 "loadw frame", // This is looking up the "a" arg, at frame + 0
                 "loadw",
@@ -1148,6 +1185,11 @@ mod test {
         assert_eq!(
             test_body(state_for("fn test(a, b) { test(2, 3); }")),
             vec![
+                "loadw frame", // capture arg b
+                "add 3",
+                "storew",
+                "loadw frame", // capture arg a
+                "storew",
                 "push 2", // evaluating args, in order
                 "push 3",
                 "push _forge_gensym_1", // evaluating target (this fn)
@@ -1170,6 +1212,8 @@ mod test {
         assert_eq!(
             test_body(state_for("fn test(a) { return a + 3; }")),
             vec![
+                "loadw frame", // capture arg a
+                "storew",
                 "loadw frame", // Load a
                 "loadw",
                 "push 3", // Add 3
@@ -1182,6 +1226,8 @@ mod test {
         assert_eq!(
             test_body(state_for("fn test(a) { if (a > 0) { return; } }")),
             vec![
+                "loadw frame", // capture arg a
+                "storew",
                 "loadw frame", // Load a
                 "loadw",
                 "push 0", // Compare to 0
@@ -1200,6 +1246,8 @@ mod test {
         assert_eq!(
             test_body(state_for("fn test(a) { var x = 0; repeat(a) c { x = x + c; } return x; }")),
             vec![
+                "loadw frame", // capture arg a
+                "storew",
                 "push 0", // Create the 'x' var and store 0 in it
                 "loadw frame",
                 "add 3",
@@ -1249,6 +1297,8 @@ mod test {
         assert_eq!(
             test_body(state_for("fn test(a) { var x = 1; repeat(a) { x = x * 2; } return x; }")),
             vec![
+                "loadw frame", // capture arg a
+                "storew",
                 "push 1", // Create the 'x' var and store 1 in it
                 "loadw frame",
                 "add 3",

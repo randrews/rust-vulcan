@@ -24,22 +24,30 @@ fn basic_forge_test() {
     )
 }
 
-// TODO The reason this fails is that functions don't copy their args to the frame when they enter.
-// The fix is for fns to know their arity and to do that copy before the body, probably as some
-// subroutine call itself (push frame, push arity, call blah, which is written in asm)
-// #[test]
-// fn loop_test() {
-//     assert_eq!(
-//         main_return(
-//             "fn triangle(rows) {
-//                     var total = 0;
-//                     repeat (rows) n {
-//                         total = total + (n + 1);
-//                     }
-//                     return total;
-//                  }
-//
-//                  fn main() { return triangle(5); }"),
-//         15
-//     )
-// }
+#[test]
+fn loop_test() {
+    assert_eq!(
+        main_return(
+            "fn triangle(rows) {
+                    var total = 0;
+                    repeat (rows) n {
+                        total = total + (n + 1);
+                    }
+                    return total;
+                 }
+
+                 fn main() { return triangle(5); }"),
+        15
+    )
+}
+
+#[test]
+fn arg_test() {
+    // Send in two args where the order matters, to ensure that args are being captured correctly
+    assert_eq!(
+        main_return(
+            "fn sub(a, b) { return a - b; }
+                 fn main() { return sub(5, 3); }"),
+        2
+    )
+}
