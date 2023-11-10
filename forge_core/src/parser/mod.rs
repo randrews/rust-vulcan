@@ -2,7 +2,7 @@ use pest::pratt_parser::PrattParser;
 use pest::Parser;
 
 #[derive(Parser)]
-#[grammar = "new.pest"]
+#[grammar = "parser/forge.pest"]
 struct ForgeParser;
 
 lazy_static::lazy_static! {
@@ -28,8 +28,10 @@ lazy_static::lazy_static! {
     };
 }
 
+/// Expose Pest's generated `Rule` type so other things can see it.
+pub type PestRule = Rule;
+
 use crate::ast::*;
-use pest::error::{Error, LineColLocation};
 use std::iter::Peekable;
 use std::str::FromStr;
 
@@ -109,19 +111,10 @@ impl PairsExt for Peekable<Pairs<'_>> {
     }
 }
 
-#[derive(Eq, PartialEq, Clone, Debug)]
-pub struct ParseError(pub usize, pub usize, pub String);
+mod parse_error;
+mod pairs_ext;
 
-impl From<pest::error::Error<Rule>> for ParseError {
-    fn from(err: Error<Rule>) -> Self {
-        let message = err.to_string();
-        match err.line_col {
-            LineColLocation::Pos((line, col)) | LineColLocation::Span((line, col), _) => {
-                Self(line, col, message)
-            }
-        }
-    }
-}
+pub use parse_error::ParseError;
 
 trait AstNode: Sized {
     const RULE: Rule;

@@ -3,7 +3,7 @@ use crate::ast::*;
 use std::collections::btree_map::Entry::Vacant;
 use std::collections::{BTreeMap};
 use std::fmt::{Display, Formatter};
-use crate::forge_parser::{ParseError, parse};
+use crate::parser::{ParseError, parse};
 
 #[derive(Eq, Clone, PartialEq, Debug)]
 pub struct CompileError(pub usize, pub usize, pub String);
@@ -908,7 +908,7 @@ pub fn build_boot(src: &str) -> Result<Vec<String>, CompileError> {
 #[cfg(test)]
 mod test {
     use super::*;
-    use crate::forge_parser::parse;
+    use crate::parser::parse;
 
     #[test]
     fn test_eval_const() {
