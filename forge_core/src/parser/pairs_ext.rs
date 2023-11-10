@@ -3,7 +3,7 @@ use std::str::FromStr;
 use crate::parser::{Pair, Pairs, PestRule};
 
 /// Some handy utility methods to extend Pair with
-trait PairExt {
+pub trait PairExt {
     /// Go down one level in the AST, return the first node. Assumes the first node exists
     fn first(self) -> Self;
 
@@ -71,7 +71,7 @@ impl<'a> PairExt for Pair<'a> {
 }
 
 /// Some handy utility methods to extend Pairs with
-trait PairsExt {
+pub trait PairsExt {
     /// Peek the next sibling but only if it matches a given rule: used for things
     /// with optional modifiers following
     fn next_if_rule(&mut self, rule: PestRule) -> Option<Pair>;

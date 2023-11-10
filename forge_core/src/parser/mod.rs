@@ -28,94 +28,20 @@ lazy_static::lazy_static! {
     };
 }
 
-/// Expose Pest's generated `Rule` type so other things can see it.
+/// Make some Pest types a little more ergonomic to refer to, especially outside this file:
 pub type PestRule = Rule;
-
-use crate::ast::*;
-use std::iter::Peekable;
-use std::str::FromStr;
-
 pub(crate) type Pair<'a> = pest::iterators::Pair<'a, Rule>;
 pub(crate) type Pairs<'i, R = Rule> = pest::iterators::Pairs<'i, R>;
-
-trait PairExt {
-    fn first(self) -> Self;
-    fn first_as_string(self) -> String;
-    fn only(self) -> Self;
-    fn into_number(self) -> i32;
-
-    /// Create a String containing the string represented by a given pair. Since the pair will
-    /// reference bytes containing escape sequences, this isn't the same as an &str to the
-    /// original code; this is a new string translating those escape sequences to their actual
-    /// bytes.
-    fn into_quoted_string(self) -> String;
-}
-
-impl<'a> PairExt for Pair<'a> {
-    fn first(self) -> Self {
-        self.into_inner().next().unwrap()
-    }
-
-    fn first_as_string(self) -> String {
-        String::from(self.first().as_str())
-    }
-
-    fn only(self) -> Pair<'a> {
-        let mut iter = self.into_inner();
-        let child = iter.next().unwrap();
-        debug_assert_eq!(iter.next(), None);
-        child
-    }
-
-    fn into_number(self) -> i32 {
-        let first = self.into_inner().next().unwrap();
-        match first.as_rule() {
-            Rule::dec_number | Rule::dec_zero => i32::from_str(first.as_str()).unwrap(),
-            Rule::hex_number => i32::from_str_radix(first.as_str().get(2..).unwrap(), 16).unwrap(),
-            Rule::bin_number => i32::from_str_radix(first.as_str().get(2..).unwrap(), 2).unwrap(),
-            Rule::oct_number => i32::from_str_radix(first.as_str().get(2..).unwrap(), 8).unwrap(),
-            _ => panic!("Expected a number, got {}", first.as_str()),
-        }
-    }
-
-    fn into_quoted_string(self) -> String {
-        let mut string = String::with_capacity(self.as_str().len());
-        for inner in self.into_inner() {
-            let string_inner = inner.as_str();
-            match string_inner {
-                "\\t" => string.push('\t'),
-                "\\r" => string.push('\r'),
-                "\\n" => string.push('\n'),
-                "\\0" => string.push('\0'),
-                "\\\\" => string.push('\\'),
-                "\\\"" => string.push('\"'),
-                _ => string.push_str(string_inner),
-            }
-        }
-        string
-    }
-}
-
-trait PairsExt {
-    fn next_if_rule(&mut self, rule: Rule) -> Option<Pair>;
-    fn first(&mut self) -> Pair;
-}
-
-impl PairsExt for Peekable<Pairs<'_>> {
-    fn next_if_rule(&mut self, rule: Rule) -> Option<Pair> {
-        self.next_if(|p| p.as_rule() == rule)
-    }
-
-    fn first(&mut self) -> Pair {
-        self.next().unwrap().first()
-    }
-}
 
 mod parse_error;
 mod pairs_ext;
 
+use crate::ast::*;
+pub use pairs_ext::*;
 pub use parse_error::ParseError;
 
+/// A trait that represents something that can be parsed into an AST node: impl this to turn
+/// a pair into your node, by from_pair-ing child nodes.
 trait AstNode: Sized {
     const RULE: Rule;
     fn from_pair(pair: Pair) -> Self;
@@ -128,6 +54,9 @@ trait AstNode: Sized {
     }
 }
 
+/// A companion trait to AstNode: Parseable things can be parsed from strings, and Parseable
+/// AstNodes have a default way of doing that (using the ForgeParser to make a pair and then
+/// from_pair-ing it
 trait Parseable: Sized {
     fn from_str(src: &str) -> Result<Self, ParseError>;
 }
@@ -142,87 +71,24 @@ impl<T: AstNode> Parseable for T {
     }
 }
 
+/// Try and parse a program into an AST node. A convenience method (since Program is both
+/// Parseable and an AstNode) but also the outside entry point into this whole module.
 pub fn parse(src: &str) -> Result<Program, ParseError> {
     Program::from_str(src)
 }
 
-///////////////////////////////////////////////////////////////////////////////////////////
-
-impl AstNode for Declaration {
-    const RULE: Rule = Rule::declaration;
-    fn from_pair(pair: Pair) -> Self {
-        let pair = pair.first();
-        match pair.as_rule() {
-            Rule::function => Self::Function(Function::from_pair(pair)),
-            Rule::global => Self::Global(Global::from_pair(pair)),
-            Rule::const_decl => Self::Const(Const::from_pair(pair)),
-            Rule::function_prototype => Self::Prototype(FunctionPrototype::from_pair(pair)),
-            _ => unreachable!(),
-        }
-    }
-}
+mod ast_nodes;
 
 ///////////////////////////////////////////////////////////////////////////////////////////
 
-impl AstNode for Global {
-    const RULE: Rule = Rule::global;
-    fn from_pair(pair: Pair) -> Self {
-        let mut inner = pair.into_inner().peekable();
-        let name = String::from(inner.next().unwrap().as_str());
-        let size = inner.next().map(Expr::from_pair);
-
-        Global { name, size }
-    }
-}
-
 ///////////////////////////////////////////////////////////////////////////////////////////
 
-impl AstNode for Const {
-    const RULE: Rule = Rule::const_decl;
-    fn from_pair(pair: Pair) -> Self {
-        let mut inner = pair.into_inner();
-        let name = String::from(inner.next().unwrap().as_str());
-        let value = inner.next().unwrap();
-        match value.as_rule() {
-            Rule::string => Const {
-                name,
-                string: Some(value.into_quoted_string()),
-                value: None,
-            },
-            Rule::expr => Const {
-                name,
-                string: None,
-                value: Some(Expr::from_pair(value)),
-            },
-            _ => unreachable!(),
-        }
-    }
-}
-
 ///////////////////////////////////////////////////////////////////////////////////////////
-
-impl AstNode for Function {
-    const RULE: Rule = Rule::function;
-    fn from_pair(pair: Pair<'_>) -> Self {
-        let mut inner = pair.into_inner().peekable();
-        let name = String::from(inner.next().unwrap().as_str());
-        let args: Vec<_> = inner
-            .next()
-            .unwrap()
-            .into_inner()
-            .map(|p| String::from(p.as_str()))
-            .collect();
-
-        let body = Block::from_pair(inner.next().unwrap());
-
-        Self { name, args, body }
-    }
-}
 
 ///////////////////////////////////////////////////////////////////////////////////////////
 
 impl AstNode for FunctionPrototype {
-    const RULE: Rule = Rule::function_prototype;
+    const RULE: PestRule = PestRule::function_prototype;
     fn from_pair(pair: Pair<'_>) -> Self {
         let mut inner = pair.into_inner().peekable();
         let name = String::from(inner.next().unwrap().as_str());
@@ -240,18 +106,18 @@ impl AstNode for FunctionPrototype {
 ///////////////////////////////////////////////////////////////////////////////////////////
 
 impl AstNode for Statement {
-    const RULE: Rule = Rule::statement;
+    const RULE: PestRule = PestRule::statement;
     fn from_pair(pair: Pair) -> Self {
         let pair = pair.first();
         match pair.as_rule() {
-            Rule::return_stmt => Self::Return(Return::from_pair(pair)),
-            Rule::assignment => Self::Assignment(Assignment::from_pair(pair)),
-            Rule::expr => Self::Expr(Expr::from_pair(pair)),
-            Rule::var_decl => Self::VarDecl(VarDecl::from_pair(pair)),
-            Rule::conditional => Self::Conditional(Conditional::from_pair(pair)),
-            Rule::while_loop => Self::WhileLoop(WhileLoop::from_pair(pair)),
-            Rule::repeat_loop => Self::RepeatLoop(RepeatLoop::from_pair(pair)),
-            Rule::asm => Self::Asm(Asm::from_pair(pair)),
+            PestRule::return_stmt => Self::Return(Return::from_pair(pair)),
+            PestRule::assignment => Self::Assignment(Assignment::from_pair(pair)),
+            PestRule::expr => Self::Expr(Expr::from_pair(pair)),
+            PestRule::var_decl => Self::VarDecl(VarDecl::from_pair(pair)),
+            PestRule::conditional => Self::Conditional(Conditional::from_pair(pair)),
+            PestRule::while_loop => Self::WhileLoop(WhileLoop::from_pair(pair)),
+            PestRule::repeat_loop => Self::RepeatLoop(RepeatLoop::from_pair(pair)),
+            PestRule::asm => Self::Asm(Asm::from_pair(pair)),
             _ => unreachable!(),
         }
     }
@@ -260,14 +126,14 @@ impl AstNode for Statement {
 ///////////////////////////////////////////////////////////////////////////////////////////
 
 impl AstNode for Asm {
-    const RULE: Rule = Rule::asm;
+    const RULE: PestRule = PestRule::asm;
     fn from_pair(pair: Pair) -> Self {
         let mut args = Vec::new();
         let mut body = None;
         for p in pair.into_inner() {
             match p.as_rule() {
-                Rule::expr => args.push(Expr::from_pair(p).into()),
-                Rule::asm_body => body = Some(String::from(p.as_str().trim())),
+                PestRule::expr => args.push(Expr::from_pair(p).into()),
+                PestRule::asm_body => body = Some(String::from(p.as_str().trim())),
                 _ => unreachable!()
             }
         }
@@ -278,7 +144,7 @@ impl AstNode for Asm {
 ///////////////////////////////////////////////////////////////////////////////////////////
 
 impl AstNode for Return {
-    const RULE: Rule = Rule::return_stmt;
+    const RULE: PestRule = PestRule::return_stmt;
     fn from_pair(pair: Pair) -> Self {
         pair.into_inner()
             .next()
@@ -289,7 +155,7 @@ impl AstNode for Return {
 ///////////////////////////////////////////////////////////////////////////////////////////
 
 impl AstNode for Assignment {
-    const RULE: Rule = Rule::assignment;
+    const RULE: PestRule = PestRule::assignment;
     fn from_pair(pair: Pair) -> Self {
         let mut pairs = pair.into_inner();
         let lvalue = Expr::from_pair(pairs.next().unwrap()).into();
@@ -301,7 +167,7 @@ impl AstNode for Assignment {
 ///////////////////////////////////////////////////////////////////////////////////////////
 
 impl AstNode for VarDecl {
-    const RULE: Rule = Rule::var_decl;
+    const RULE: PestRule = PestRule::var_decl;
     fn from_pair(pair: Pair) -> Self {
         let mut inner = pair.into_inner();
         let name = String::from(inner.next().unwrap().as_str());
@@ -310,8 +176,8 @@ impl AstNode for VarDecl {
 
         for p in inner {
             match p.as_rule() {
-                Rule::size => { size = Some(Expr::from_pair(p.first())) }
-                Rule::expr => { initial = Some(Expr::from_pair(p)) }
+                PestRule::size => { size = Some(Expr::from_pair(p.first())) }
+                PestRule::expr => { initial = Some(Expr::from_pair(p)) }
                 _ => unreachable!()
             }
         }
@@ -323,7 +189,7 @@ impl AstNode for VarDecl {
 ///////////////////////////////////////////////////////////////////////////////////////////
 
 impl AstNode for Block {
-    const RULE: Rule = Rule::block;
+    const RULE: PestRule = PestRule::block;
 
     fn from_pair(pair: Pair) -> Self {
         Self(pair.into_inner().map(Statement::from_pair_located).collect())
@@ -333,7 +199,7 @@ impl AstNode for Block {
 ///////////////////////////////////////////////////////////////////////////////////////////
 
 impl AstNode for Conditional {
-    const RULE: Rule = Rule::conditional;
+    const RULE: PestRule = PestRule::conditional;
     fn from_pair(pair: Pair) -> Self {
         let mut inner = pair.into_inner();
         let condition = Expr::from_pair(inner.next().unwrap());
@@ -350,7 +216,7 @@ impl AstNode for Conditional {
 ///////////////////////////////////////////////////////////////////////////////////////////
 
 impl AstNode for WhileLoop {
-    const RULE: Rule = Rule::while_loop;
+    const RULE: PestRule = PestRule::while_loop;
     fn from_pair(pair: Pair) -> Self {
         let mut inner = pair.into_inner();
         Self {
@@ -363,12 +229,12 @@ impl AstNode for WhileLoop {
 ///////////////////////////////////////////////////////////////////////////////////////////
 
 impl AstNode for RepeatLoop {
-    const RULE: Rule = Rule::repeat_loop;
+    const RULE: PestRule = PestRule::repeat_loop;
     fn from_pair(pair: Pair) -> Self {
         let mut inner = pair.into_inner().peekable();
         let count = Expr::from_pair(inner.next().unwrap());
         let name = inner
-            .next_if_rule(Rule::name)
+            .next_if_rule(PestRule::name)
             .map(|p| String::from(p.as_str()));
         let body = Block::from_pair(inner.next().unwrap());
         Self { count, name, body }
@@ -378,7 +244,7 @@ impl AstNode for RepeatLoop {
 ///////////////////////////////////////////////////////////////////////////////////////////
 
 impl AstNode for Expr {
-    const RULE: Rule = Rule::expr;
+    const RULE: PestRule = PestRule::expr;
     fn from_pair(pair: Pair) -> Self {
         // The way this works is, the rule has to be of the form:
         // expr = { prefix* ~ val ~ suffix* ~ (operator ~ prefix* ~ val ~ suffix*)* }
@@ -393,10 +259,10 @@ impl AstNode for Expr {
         // various forms.
         PRATT_PARSER
             .map_primary(|term| match term.as_rule() {
-                Rule::number => Expr::Number(term.into_number()),
-                Rule::name => Expr::Name(String::from(term.as_str())),
-                Rule::expr => Expr::from_pair(term),
-                Rule::string => Self::String(term.into_quoted_string()),
+                PestRule::number => Expr::Number(term.into_number()),
+                PestRule::name => Expr::Name(String::from(term.as_str())),
+                PestRule::expr => Expr::from_pair(term),
+                PestRule::string => Self::String(term.into_quoted_string()),
                 _ => unreachable!(),
             })
             .map_infix(|lhs, op, rhs| Expr::Infix(lhs.into(), Operator::from_pair(op), rhs.into()))
@@ -408,13 +274,13 @@ impl AstNode for Expr {
                 _ => unreachable!(),
             })
             .map_postfix(|expr, suffix| match suffix.as_rule() {
-                Rule::arglist => Expr::Call(
+                PestRule::arglist => Expr::Call(
                     Call {
                         target: expr.into(),
                         args: suffix.into_inner().map(Expr::from_pair).collect(),
                     }
                 ),
-                Rule::subscript => {
+                PestRule::subscript => {
                     Expr::Subscript(expr.into(), Expr::from_pair(suffix.first()).into())
                 }
                 _ => unreachable!(),
@@ -432,7 +298,7 @@ impl Expr {
 ///////////////////////////////////////////////////////////////////////////////////////////
 
 impl AstNode for Operator {
-    const RULE: Rule = Rule::operator;
+    const RULE: PestRule = PestRule::operator;
     fn from_pair(pair: Pair) -> Self {
         match pair.as_str() {
             "+" => Self::Add,
@@ -461,13 +327,13 @@ impl AstNode for Operator {
 ///////////////////////////////////////////////////////////////////////////////////////////
 
 impl AstNode for Program {
-    const RULE: Rule = Rule::program;
+    const RULE: PestRule = PestRule::program;
     fn from_pair(pair: Pair) -> Self {
         // Program captures EOI, to make sure that it's parsing the entire stream. We need to
         // ignore that though:
         Self(
             pair.into_inner()
-                .filter(|p| p.as_rule() != Rule::EOI)
+                .filter(|p| p.as_rule() != PestRule::EOI)
                 .map(Declaration::from_pair_located)
                 .collect(),
         )
@@ -479,80 +345,6 @@ impl AstNode for Program {
 #[cfg(test)]
 mod test {
     use super::*;
-
-    #[test]
-    fn parse_globals() {
-        assert_eq!(
-            Global::from_str("global foo;"),
-            Ok(Global {
-                name: "foo".into(),
-                size: None,
-            })
-        );
-        assert_eq!(
-            Global::from_str("global foo[10];"),
-            Ok(Global {
-                name: "foo".into(),
-                size: Some(10.into()),
-            })
-        );
-    }
-
-    #[test]
-    fn parse_consts() {
-        assert_eq!(
-            Const::from_str("const a = 123;"),
-            Ok(Const {
-                name: "a".into(),
-                value: Some(123.into()),
-                string: None,
-            })
-        );
-        assert_eq!(
-            Const::from_str("const a = 0xaa;"),
-            Ok(Const {
-                name: "a".into(),
-                value: Some(0xaa.into()),
-                string: None,
-            })
-        );
-        assert_eq!(
-            Const::from_str("const a = -7;"),
-            Ok(Const {
-                name: "a".into(),
-                value: Some(Expr::Neg(7.into()).into()),
-                string: None,
-            })
-        );
-        assert_eq!(
-            Const::from_str("const a = \"foo bar\";"),
-            Ok(Const {
-                name: "a".into(),
-                value: None,
-                string: Some("foo bar".into()),
-            })
-        )
-    }
-
-    #[test]
-    fn parse_function_headers() {
-        assert_eq!(
-            Function::from_str("fn foo() {}"),
-            Ok(Function {
-                name: "foo".into(),
-                args: vec![],
-                body: Block(vec![]),
-            })
-        );
-        assert_eq!(
-            Function::from_str("fn foo(a, b) {}"),
-            Ok(Function {
-                name: "foo".into(),
-                args: vec!["a".into(), "b".into()],
-                body: Block(vec![]),
-            })
-        );
-    }
 
     #[test]
     fn parse_exprs() {
