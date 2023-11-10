@@ -367,10 +367,7 @@ impl Compilable for RepeatLoop {
 
         let RepeatLoop { count, name, body } = self;
         let named_counter = name.is_some();
-        let mut counter_name = String::new();
-        if let Some(name) = name {
-            counter_name = name;
-        }
+        let counter_name = name.unwrap_or_default();
 
         if named_counter {
             let decl = VarDecl {
