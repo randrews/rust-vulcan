@@ -87,82 +87,13 @@ mod ast_nodes;
 
 ///////////////////////////////////////////////////////////////////////////////////////////
 
-impl AstNode for FunctionPrototype {
-    const RULE: PestRule = PestRule::function_prototype;
-    fn from_pair(pair: Pair<'_>) -> Self {
-        let mut inner = pair.into_inner().peekable();
-        let name = String::from(inner.next().unwrap().as_str());
-        let args: Vec<_> = inner
-            .next()
-            .unwrap()
-            .into_inner()
-            .map(|p| String::from(p.as_str()))
-            .collect();
-
-        Self { name, args }
-    }
-}
+///////////////////////////////////////////////////////////////////////////////////////////
 
 ///////////////////////////////////////////////////////////////////////////////////////////
 
-impl AstNode for Statement {
-    const RULE: PestRule = PestRule::statement;
-    fn from_pair(pair: Pair) -> Self {
-        let pair = pair.first();
-        match pair.as_rule() {
-            PestRule::return_stmt => Self::Return(Return::from_pair(pair)),
-            PestRule::assignment => Self::Assignment(Assignment::from_pair(pair)),
-            PestRule::expr => Self::Expr(Expr::from_pair(pair)),
-            PestRule::var_decl => Self::VarDecl(VarDecl::from_pair(pair)),
-            PestRule::conditional => Self::Conditional(Conditional::from_pair(pair)),
-            PestRule::while_loop => Self::WhileLoop(WhileLoop::from_pair(pair)),
-            PestRule::repeat_loop => Self::RepeatLoop(RepeatLoop::from_pair(pair)),
-            PestRule::asm => Self::Asm(Asm::from_pair(pair)),
-            _ => unreachable!(),
-        }
-    }
-}
-
 ///////////////////////////////////////////////////////////////////////////////////////////
 
-impl AstNode for Asm {
-    const RULE: PestRule = PestRule::asm;
-    fn from_pair(pair: Pair) -> Self {
-        let mut args = Vec::new();
-        let mut body = None;
-        for p in pair.into_inner() {
-            match p.as_rule() {
-                PestRule::expr => args.push(Expr::from_pair(p).into()),
-                PestRule::asm_body => body = Some(String::from(p.as_str().trim())),
-                _ => unreachable!()
-            }
-        }
-        Self { args, body: body.unwrap() }
-    }
-}
-
 ///////////////////////////////////////////////////////////////////////////////////////////
-
-impl AstNode for Return {
-    const RULE: PestRule = PestRule::return_stmt;
-    fn from_pair(pair: Pair) -> Self {
-        pair.into_inner()
-            .next()
-            .map_or(Self(None), |expr| Self(Some(Expr::from_pair(expr))))
-    }
-}
-
-///////////////////////////////////////////////////////////////////////////////////////////
-
-impl AstNode for Assignment {
-    const RULE: PestRule = PestRule::assignment;
-    fn from_pair(pair: Pair) -> Self {
-        let mut pairs = pair.into_inner();
-        let lvalue = Expr::from_pair(pairs.next().unwrap()).into();
-        let rvalue = Expr::from_pair(pairs.next().unwrap());
-        Self { lvalue, rvalue }
-    }
-}
 
 ///////////////////////////////////////////////////////////////////////////////////////////
 
@@ -521,46 +452,6 @@ mod test {
     }
 
     #[test]
-    fn parse_return() {
-        assert_eq!(
-            Statement::from_str("return;"),
-            Ok(Statement::Return(Return(None)))
-        );
-
-        assert_eq!(
-            Statement::from_str("return 17;"),
-            Ok(Statement::Return(Return(Some(17.into()))))
-        );
-    }
-
-    #[test]
-    fn parse_assignment() {
-        assert_eq!(
-            Statement::from_str("foo = 7;"),
-            Ok(Statement::Assignment(Assignment {
-                lvalue: "foo".into(),
-                rvalue: 7.into(),
-            }))
-        );
-
-        assert_eq!(
-            Assignment::from_str("foo[45] = 7"),
-            Ok(Assignment {
-                lvalue: Expr::Subscript("foo".into(), 45.into()).into(),
-                rvalue: 7.into(),
-            })
-        );
-
-        assert_eq!(
-            Assignment::from_str("*foo = 12"),
-            Ok(Assignment {
-                lvalue: Expr::Deref("foo".into()).into(),
-                rvalue: 12.into()
-            })
-        );
-    }
-
-    #[test]
     fn parse_var_decl() {
         assert_eq!(
             Statement::from_str("var blah;"),
@@ -656,30 +547,6 @@ mod test {
             },
             _ => false
         });
-    }
-
-    #[test]
-    fn parse_asm() {
-        assert_eq!(
-            Asm::from_str("asm { push 34 }"),
-            Ok(Asm { args: vec![], body: "push 34".into() })
-        );
-
-        assert_eq!(
-            Asm::from_str("asm (&a) { swap 34\nstorew }"),
-            Ok(Asm { args: vec![Expr::Address("a".into()).into()], body: "swap 34\nstorew".into() })
-        );
-    }
-
-    #[test]
-    fn parse_fn_prototype() {
-        assert_eq!(
-            FunctionPrototype::from_str("fn foo();"),
-            Ok(FunctionPrototype {
-                name: "foo".into(),
-                args: vec![],
-            })
-        );
     }
 
     #[test]
