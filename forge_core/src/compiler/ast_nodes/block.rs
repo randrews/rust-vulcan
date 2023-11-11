@@ -1,4 +1,4 @@
-use crate::ast::{Asm, Block, Conditional, Location, Statement, WhileLoop};
+use crate::ast::{Asm, Block, Location, Statement};
 use crate::compiler::compilable::Compilable;
 use crate::compiler::compiled_fn::CompiledFn;
 use crate::compiler::CompileError;
@@ -34,24 +34,11 @@ impl Compilable for Block {
                     // Emit the body
                     sig.emit(body.as_str())
                 }
-                Statement::Conditional(Conditional { condition, body, alternative }) => {
-                    // todo split into new file
-                    condition.process(state, Some(sig), loc)?;
-                    sig.emit("#if"); // We went to a lot of trouble making macros, shame not to use them
-                    body.process(state, Some(sig), loc)?;
-                    if let Some(alternative) = alternative {
-                        sig.emit("#else");
-                        alternative.process(state, Some(sig), loc)?;
-                    }
-                    sig.emit("#end")
+                Statement::Conditional(cond) => {
+                    cond.process(state, Some(sig), loc)?;
                 }
-                Statement::WhileLoop(WhileLoop { condition, body }) => {
-                    // todo split into new file
-                    sig.emit("#while");
-                    condition.process(state, Some(sig), loc)?;
-                    sig.emit("#do");
-                    body.process(state, Some(sig), loc)?;
-                    sig.emit("#end")
+                Statement::WhileLoop(while_loop) => {
+                    while_loop.process(state, Some(sig), loc)?;
                 }
                 Statement::RepeatLoop(repeat_loop) => {
                     repeat_loop.process(state, Some(sig), loc)?;
@@ -84,90 +71,6 @@ mod test {
             ]
                 .join("\n")
         )
-    }
-
-    #[test]
-    fn test_conditionals() {
-        assert_eq!(
-            test_body(state_for("fn test() { var x = 3; if (x > 2) { x = 1; } }")),
-            vec![
-                "push 3",
-                "loadw frame",
-                "storew", // x = 3
-                "loadw frame",
-                "loadw",
-                "push 2",
-                "agt", // The condition, x > 2
-                "#if", // The if itself
-                "push 1",
-                "loadw frame",
-                "storew", // The branch, x = 1
-                "#end"]
-                .join("\n")
-        );
-
-        assert_eq!(
-            test_body(state_for("fn test() { var x = 3; if (x > 2) { x = 1; } else { x = 7; } }")),
-            vec![
-                "push 3",
-                "loadw frame",
-                "storew", // x = 3
-                "loadw frame",
-                "loadw",
-                "push 2",
-                "agt", // The condition, x > 2
-                "#if", // The if itself
-                "push 1",
-                "loadw frame",
-                "storew", // The affirmative branch, x = 1
-                "#else", // The alternative
-                "push 7",
-                "loadw frame",
-                "storew", // x = 7
-                "#end"]
-                .join("\n")
-        )
-    }
-
-    #[test]
-    fn test_while_loops() {
-        assert_eq!(
-            test_body(state_for("fn test() { var x = 0; var c = 0; while (c < 10) { x = x + c; c = c + 1; } }")),
-            vec![
-                "push 0",
-                "loadw frame",
-                "storew", // var x = 0
-                "push 0",
-                "loadw frame",
-                "add 3",
-                "storew", // var c = 0
-                "#while", // Start the loop
-                "loadw frame",
-                "add 3",
-                "loadw",
-                "push 10",
-                "alt", // c > 10
-                "#do", // Start loop body
-                "loadw frame",
-                "loadw",
-                "loadw frame",
-                "add 3",
-                "loadw",
-                "add",
-                "loadw frame",
-                "storew", // x = x + c
-                "loadw frame",
-                "add 3",
-                "loadw",
-                "push 1",
-                "add",
-                "loadw frame",
-                "add 3",
-                "storew", // c = c + 1
-                "#end", // End the loop body
-            ]
-                .join("\n")
-        );
     }
 
     #[test]

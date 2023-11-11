@@ -83,7 +83,6 @@ pub fn parse(src: &str) -> Result<Program, ParseError> {
 
 ///////////////////////////////////////////////////////////////////////////////////////////
 
-// todo: can this die? it's only used in compiler tests but needs to be here for visibility reasons
 #[cfg(test)]
 impl Expr {
     pub(crate) fn parse(src: &str) -> Result<Self, ParseError> {
