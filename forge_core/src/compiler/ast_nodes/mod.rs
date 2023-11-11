@@ -1,0 +1,14 @@
+mod program;
+mod declaration;
+mod block;
+mod repeat_loop;
+mod function;
+mod function_prototype;
+mod assignment;
+mod var_decl;
+mod lvalue;
+mod call;
+mod expr;
+mod global;
+mod r#const;
+mod r#return;

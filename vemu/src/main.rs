@@ -10,10 +10,8 @@ use winit::{
 use crate::keyboard::convert_keycode;
 use pixels::{Pixels, SurfaceTexture};
 use std::collections::VecDeque;
-use std::fs::File;
-use std::io::Read;
 use std::time::{Duration, Instant};
-use vasm_core::{assemble_file, assemble_snippet};
+use vasm_core::assemble_snippet;
 use vcore::cpu::CPU;
 use vcore::memory::{Memory, PeekPoke};
 use vcore::word::Word;

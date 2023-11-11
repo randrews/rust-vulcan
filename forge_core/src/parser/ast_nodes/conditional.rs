@@ -20,7 +20,7 @@ impl AstNode for Conditional {
 mod test {
     use crate::ast::Statement;
     use crate::parser::Parseable;
-    use crate::parser::ast_nodes::test_utils::*;
+    use crate::parser::test_utils::*;
     use super::*;
 
     #[test]

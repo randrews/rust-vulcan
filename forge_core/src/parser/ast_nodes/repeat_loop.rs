@@ -17,7 +17,7 @@ impl AstNode for RepeatLoop {
 #[cfg(test)]
 mod test {
     use crate::ast::Statement;
-    use crate::parser::ast_nodes::test_utils::{dislocate, dislocated_block};
+    use crate::parser::test_utils::{dislocate, dislocated_block};
     use crate::parser::Parseable;
     use super::*;
 

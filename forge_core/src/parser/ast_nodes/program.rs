@@ -17,7 +17,7 @@ impl AstNode for Program {
 
 #[cfg(test)]
 mod test {
-    use crate::parser::ast_nodes::test_utils::dislocate;
+    use crate::parser::test_utils::dislocate;
     use crate::parser::Parseable;
     use super::*;
 

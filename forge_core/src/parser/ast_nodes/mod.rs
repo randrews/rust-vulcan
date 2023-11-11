@@ -10,7 +10,6 @@ mod assignment;
 mod var_decl;
 mod block;
 mod conditional;
-mod test_utils;
 mod while_loop;
 mod repeat_loop;
 mod program;

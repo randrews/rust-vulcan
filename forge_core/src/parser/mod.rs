@@ -1,6 +1,17 @@
 use pest::pratt_parser::PrattParser;
 use pest::Parser;
 
+use crate::ast::*;
+pub use pairs_ext::*;
+pub use parse_error::ParseError;
+
+mod parse_error;
+mod pairs_ext;
+mod ast_nodes;
+
+#[cfg(test)]
+mod test_utils;
+
 #[derive(Parser)]
 #[grammar = "parser/forge.pest"]
 struct ForgeParser;
@@ -32,13 +43,6 @@ lazy_static::lazy_static! {
 pub type PestRule = Rule;
 pub(crate) type Pair<'a> = pest::iterators::Pair<'a, Rule>;
 pub(crate) type Pairs<'i, R = Rule> = pest::iterators::Pairs<'i, R>;
-
-mod parse_error;
-mod pairs_ext;
-
-use crate::ast::*;
-pub use pairs_ext::*;
-pub use parse_error::ParseError;
 
 /// A trait that represents something that can be parsed into an AST node: impl this to turn
 /// a pair into your node, by from_pair-ing child nodes.
@@ -77,11 +81,10 @@ pub fn parse(src: &str) -> Result<Program, ParseError> {
     Program::from_str(src)
 }
 
-mod ast_nodes;
-
 ///////////////////////////////////////////////////////////////////////////////////////////
 
 // todo: can this die? it's only used in compiler tests but needs to be here for visibility reasons
+#[cfg(test)]
 impl Expr {
     pub(crate) fn parse(src: &str) -> Result<Self, ParseError> {
         Self::from_str(src)

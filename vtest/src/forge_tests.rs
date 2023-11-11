@@ -1,6 +1,5 @@
 use vasm_core::assemble_snippet;
-use vcore::memory::{Memory, PeekPokeExt};
-use vcore::word::Word;
+use vcore::memory::Memory;
 use vcore::CPU;
 
 fn run_forge(src: &str) -> CPU {

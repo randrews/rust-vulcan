@@ -381,9 +381,9 @@ impl CPU {
 
         match self.fetch() {
             Ok(instr) => {
-                //if cfg!(debug_assertions) {
-                //self.debug_instr(instr);
-                //}
+                if cfg!(debug_assertions) {
+                    self.debug_instr(instr);
+                }
 
                 self.pc = if let Some(err) = self.error(instr) {
                     self.handle_error(err)
