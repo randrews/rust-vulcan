@@ -132,6 +132,7 @@ mod test {
                 "popr", // toss old frame ptr
                 "pop",
                 "ret",
+                "popr", "pop", "ret 0" // Implicit void return
             ]
                 .join("\n")
         );
@@ -173,6 +174,7 @@ mod test {
                 "popr", // Toss old frame ptr
                 "pop",
                 "ret",
+                "popr", "pop", "ret 0" // Implicit void return
             ].join("\n")
         );
     }

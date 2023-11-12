@@ -58,7 +58,8 @@ mod test {
                 "peekr",
                 "add 3",
                 "storew", // c = c + 1
-                "#end" // End the loop body
+                "#end", // End the loop body
+                "popr", "pop", "ret 0" // Implicit void return
             ]
                 .join("\n")
         );

@@ -166,6 +166,7 @@ mod test {
                 "peekr",
                 "add 3", // the address of y (frame + 3) and put gensym_4 in it
                 "storew",
+                "popr", "pop", "ret 0" // Implicit void return
             ]
                 .join("\n")
         )
@@ -184,6 +185,7 @@ mod test {
                 "peekr",
                 "add 3", // the address of y (frame + 3) and put the addr of x (frame) in it
                 "storew",
+                "popr", "pop", "ret 0" // Implicit void return
             ]
                 .join("\n")
         )
@@ -203,6 +205,7 @@ mod test {
                 "loadw", // Then load the value at 3
                 "push 1000", // Push the addr 1000, for the lvalue
                 "storew", // Store whatever's at 3 to 1000
+                "popr", "pop", "ret 0" // Implicit void return
             ]
                 .join("\n")
         )
@@ -219,6 +222,7 @@ mod test {
                 "add", // Add 3 to that address
                 "peekr", // Store it in the first var
                 "storew",
+                "popr", "pop", "ret 0" // Implicit void return
             ]
                 .join("\n")
         )

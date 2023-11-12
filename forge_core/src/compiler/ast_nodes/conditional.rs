@@ -43,7 +43,9 @@ mod test {
                 "push 1",
                 "peekr",
                 "storew", // The branch, x = 1
-                "#end"]
+                "#end",
+                "popr", "pop", "ret 0" // Implicit void return
+            ]
                 .join("\n")
         );
     }
@@ -69,7 +71,9 @@ mod test {
                 "push 7",
                 "peekr",
                 "storew", // x = 7
-                "#end"]
+                "#end",
+                "popr", "pop", "ret 0" // Implicit void return
+            ]
                 .join("\n")
         )
     }

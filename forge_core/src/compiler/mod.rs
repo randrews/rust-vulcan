@@ -79,6 +79,7 @@ mod test {
             "popr",
             "pop",
             "ret",
+            "popr", "pop", "ret 0", // Implicit void return
             "stack: .db 0",
         ].join("\n"));
 
@@ -96,6 +97,38 @@ mod test {
             "popr",
             "pop",
             "ret",
+            "popr", "pop", "ret 0", // Implicit void return
+            "stack: .db 0",
+        ].join("\n"))
+    }
+
+    #[test]
+    fn test_global_vars() {
+
+    }
+
+    #[test]
+    fn test_no_return() {
+        let asm = build_boot("fn foo() { } fn main() { foo(); }".into()).unwrap();
+        assert_eq!(asm.join("\n"), vec![
+            ".org 0x400",
+            "push stack",
+            "call _forge_gensym_2",
+            "hlt",
+            "_forge_gensym_1:", // fn foo()
+            "pushr", // capture frame ptr
+            "popr", // drop it and ret
+            "pop",
+            "ret 0",
+            "_forge_gensym_2:", // fn main()
+            "pushr", // capture frame ptr
+            "peekr", // prep frame ptr to send to foo
+            "push _forge_gensym_1", // load foo
+            "call", // call it
+            "pop", // Throw away its return value
+            "popr", // drop frame ptr and ret
+            "pop",
+            "ret 0",
             "stack: .db 0",
         ].join("\n"))
     }

@@ -69,6 +69,7 @@ mod test {
                 "peekr", // Push the addr of x
                 "swap 12", // The asm body, which swaps 12 behind it and stores it there
                 "storew",
+                "popr", "pop", "ret 0" // Implicit void return
             ]
                 .join("\n")
         )
@@ -109,6 +110,7 @@ mod test {
                 "popr", // Blow away old frame ptr
                 "pop",
                 "ret",
+                "popr", "pop", "ret 0" // Implicit void return
             ]
                 .join("\n")
         );

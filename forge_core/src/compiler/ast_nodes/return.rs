@@ -52,6 +52,7 @@ mod test {
                 "popr", // Toss frame ptr
                 "pop",
                 "ret", // Return that
+                "popr", "pop", "ret 0" // Implicit void return
             ]
                 .join("\n")
         );
@@ -74,6 +75,7 @@ mod test {
                 "pop",
                 "ret 0", // Default return value, for an expr-less return
                 "#end",
+                "popr", "pop", "ret 0" // Implicit void return
             ]
                 .join("\n")
         );

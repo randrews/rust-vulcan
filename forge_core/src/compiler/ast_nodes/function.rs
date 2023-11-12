@@ -1,4 +1,4 @@
-use crate::ast::{Function, Location};
+use crate::ast::{Function, Location, Return};
 use crate::compiler::compilable::Compilable;
 use crate::compiler::compiled_fn::CompiledFn;
 use crate::compiler::CompileError;
@@ -25,6 +25,10 @@ impl Compilable for Function {
 
         // Compile the body, storing all of it in the CompiledFn we just created / added
         self.body.process(state, Some(&mut sig), loc)?;
+
+        // This fn probably has a return statement... but it's not required. As a final catch just
+        // in case we fall through to this point, we'll generate a void return and compile it:
+        Return(None).process(state, Some(&mut sig), loc)?;
 
         // This can't fail because if it were a dupe name, adding the global would have failed
         state.functions.insert(self.name.clone(), sig);
@@ -58,6 +62,7 @@ mod test {
                 "peekr", // Calculate the lvalue
                 "add 3",       // "b" arg is frame + 3
                 "storew",      // Finally store
+                "popr", "pop", "ret 0" // Implicit void return
             ]
                 .join("\n")
         )
