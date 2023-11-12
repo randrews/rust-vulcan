@@ -84,11 +84,14 @@ impl CompiledFn {
         self.local_scope.len() * 3
     }
 
-    /// Emit the code to add the arguments' names to the local scopr, and move the arguments off
+    /// Emit the code to add the arguments' names to the local scope, and move the arguments off
     /// the stack into the frame. Should be run before the body is compiled, because this code
     /// has to be the first thing in the body
     pub(crate) fn handle_args(&mut self, function: &Function) -> Result<(), CompileError> {
         let mut arg_names: Vec<&str> = Vec::new();
+
+        // Top argument is the frame ptr; copy it to the rstack:
+        self.emit("pushr");
 
         // Add each argument as a local
         for name in function.args.iter() {
@@ -103,7 +106,7 @@ impl CompiledFn {
 
         for name in arg_names {
             if let Variable::Local(offset) = self.local_scope[name] {
-                self.emit("loadw frame");
+                self.emit("peekr");
                 if offset != 0 {
                     self.emit_arg("add", offset);
                 }

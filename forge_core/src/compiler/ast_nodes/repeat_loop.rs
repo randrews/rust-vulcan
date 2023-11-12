@@ -86,37 +86,38 @@ mod test {
         assert_eq!(
             test_body(state_for("fn test(a) { var x = 0; repeat(a) c { x = x + c; } return x; }")),
             vec![
-                "loadw frame", // capture arg a
+                "pushr",
+                "peekr", // capture arg a
                 "storew",
                 "push 0", // Create the 'x' var and store 0 in it
-                "loadw frame",
+                "peekr",
                 "add 3",
                 "storew",
                 "push 0", // Create the 'c' var and store 0 in it
-                "loadw frame",
+                "peekr",
                 "add 6",
                 "storew",
-                "loadw frame", // Load 'a' from args
+                "peekr", // Load 'a' from args
                 "loadw",
                 "#while", // Starting the loop:
                 "dup", // Copy the limit
-                "loadw frame", // Load c
+                "peekr", // Load c
                 "add 6",
                 "loadw",
                 "sub", // Subtract c from a
                 "agt 0", // Are we still positive?
                 "#do",
-                "loadw frame", // Load x
+                "peekr", // Load x
                 "add 3",
                 "loadw",
-                "loadw frame", // Load c
+                "peekr", // Load c
                 "add 6",
                 "loadw",
                 "add", // Add c to x
-                "loadw frame", // Load x as an lvalue
+                "peekr", // Load x as an lvalue
                 "add 3",
                 "storew", // Store c + x into it
-                "loadw frame", // Load c as an lvalue
+                "peekr", // Load c as an lvalue
                 "add 6",
                 "dup", // Dup it, load it, add 1
                 "loadw",
@@ -125,9 +126,11 @@ mod test {
                 "storew",
                 "#end", // End of the loop body!
                 "pop", // Drop the limit off the top
-                "loadw frame", // Load x so we can return it
+                "peekr", // Load x so we can return it
                 "add 3",
                 "loadw",
+                "popr", // toss old frame ptr
+                "pop",
                 "ret",
             ]
                 .join("\n")
@@ -140,32 +143,35 @@ mod test {
         assert_eq!(
             test_body(state_for("fn test(a) { var x = 1; repeat(a) { x = x * 2; } return x; }")),
             vec![
-                "loadw frame", // capture arg a
+                "pushr",
+                "peekr", // capture arg a
                 "storew",
                 "push 1", // Create the 'x' var and store 1 in it
-                "loadw frame",
+                "peekr",
                 "add 3",
                 "storew",
-                "loadw frame", // Load 'a' from args
+                "peekr", // Load 'a' from args
                 "loadw",
                 "#while", // Starting the loop:
                 "dup", // Copy the limit
                 "agt 0", // Are we still positive?
                 "#do",
-                "loadw frame", // Load x
+                "peekr", // Load x
                 "add 3",
                 "loadw",
                 "push 2", // double it
                 "mul",
-                "loadw frame", // Load x as an lvalue
+                "peekr", // Load x as an lvalue
                 "add 3",
                 "storew", // Store 2x into it
                 "sub 1", // decrement the counter
                 "#end", // End of the loop body!
                 "pop", // Drop the limit off the top
-                "loadw frame", // Load x so we can return it
+                "peekr", // Load x so we can return it
                 "add 3",
                 "loadw",
+                "popr", // Toss old frame ptr
+                "pop",
                 "ret",
             ].join("\n")
         );

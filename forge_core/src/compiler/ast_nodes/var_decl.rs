@@ -36,16 +36,17 @@ mod test {
         assert_eq!(
             test_body(state_for("fn test() { var a; var b = 7; a = b * 2; }")),
             vec![
+                "pushr",
                 "push 7",      // Start calculating the rvalue, push the literal
-                "loadw frame", // "b" is the second local var at frame + 3
+                "peekr", // "b" is the second local var at frame + 3
                 "add 3",
                 "storew",      // Do the initialization
-                "loadw frame", // Now we're evaluating b * 2
+                "peekr", // Now we're evaluating b * 2
                 "add 3",       // b is at frame + 3...
                 "loadw",       // load it to the stack
                 "push 2",
                 "mul",         // b * 2 evaluated
-                "loadw frame", // Loading "a" as an lvalue
+                "peekr", // Loading "a" as an lvalue
                 "storew",      // doing the assignment
             ]
                 .join("\n")

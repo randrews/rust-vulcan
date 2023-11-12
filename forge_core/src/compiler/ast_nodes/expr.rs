@@ -28,7 +28,6 @@ impl Compilable for Expr {
                 Ok(())
             }
             Expr::Name(name) => {
-                // todo split into new file
                 match lookup(&name, global_scope, &sig.local_scope) {
                     // Names are treated differently depending on what they are
                     Some(Variable::Literal(val)) => {
@@ -51,7 +50,8 @@ impl Compilable for Expr {
                     Some(Variable::Local(offset)) => {
                         // Names of locals are added from the frame pointer
                         let offset = *offset;
-                        sig.emit("loadw frame");
+
+                        sig.emit("peekr"); // Frame ptr is top of rstack
                         if offset > 0 {
                             sig.emit_arg("add", offset);
                         }
@@ -158,11 +158,12 @@ mod test {
         assert_eq!(
             test_body(state),
             vec![
+                "pushr",
                 "push _forge_gensym_3",
-                "loadw frame",
+                "peekr",
                 "storew", // the assignment for x
                 "push _forge_gensym_4",
-                "loadw frame",
+                "peekr",
                 "add 3", // the address of y (frame + 3) and put gensym_4 in it
                 "storew",
             ]
@@ -175,11 +176,12 @@ mod test {
         assert_eq!(
             test_body(state_for("fn test() { var x = 3; var y = &x; }")),
             vec![
+                "pushr",
                 "push 3",
-                "loadw frame",
+                "peekr",
                 "storew",      // the assignment for x
-                "loadw frame", // The addr of x
-                "loadw frame",
+                "peekr", // The addr of x
+                "peekr",
                 "add 3", // the address of y (frame + 3) and put the addr of x (frame) in it
                 "storew",
             ]
@@ -192,10 +194,11 @@ mod test {
         assert_eq!(
             test_body(state_for("fn test() { var x = 3; *1000 = *x; }")),
             vec![
+                "pushr",
                 "push 3",
-                "loadw frame",
+                "peekr",
                 "storew",      // the assignment for x
-                "loadw frame", // Now we're compiling *x, so load x's value, which is 3
+                "peekr", // Now we're compiling *x, so load x's value, which is 3
                 "loadw",
                 "loadw", // Then load the value at 3
                 "push 1000", // Push the addr 1000, for the lvalue
@@ -210,10 +213,11 @@ mod test {
         assert_eq!(
             test_body(state_for("const foo = \"foo\"; fn test() { var x = \"bar\" + 3; }")),
             vec![
+                "pushr",
                 "push _forge_gensym_3", // 1 is the label in the string table for "foo", 2 for "blah,"
                 "push 3", // so 3 is the string "bar"
                 "add", // Add 3 to that address
-                "loadw frame", // Store it in the first var
+                "peekr", // Store it in the first var
                 "storew",
             ]
                 .join("\n")

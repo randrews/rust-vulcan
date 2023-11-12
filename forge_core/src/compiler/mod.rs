@@ -31,6 +31,9 @@ pub fn build_boot(src: &str) -> Result<Vec<String>, CompileError> {
         // Now we start piling stuff into the vec, starting with an org:
         asm.push(".org 0x400".into());
 
+        // Main takes no args, but it does take a frame ptr:
+        asm.push("push stack".into());
+
         // jmp into main:
         asm.push(format!("call {}", label));
 
@@ -48,8 +51,7 @@ pub fn build_boot(src: &str) -> Result<Vec<String>, CompileError> {
 
         // Final thing is to place a label for the stack:
         // (this is just a cell with the address of the following word)
-        asm.push("frame: .db $+1".into());
-        asm.push(".db 0".into());
+        asm.push("stack: .db 0".into());
         Ok(asm)
     } else {
         Err(CompileError(0, 0, "Function main not defined (or not a function)".into()))
@@ -68,27 +70,33 @@ mod test {
         let asm = build_boot("fn main() { return 5; }".into()).unwrap();
         assert_eq!(asm.join("\n"), vec![
             ".org 0x400",
+            "push stack",
             "call _forge_gensym_1",
             "hlt",
             "_forge_gensym_1:",
+            "pushr",
             "push 5",
+            "popr",
+            "pop",
             "ret",
-            "frame: .db $+1",
-            ".db 0",
+            "stack: .db 0",
         ].join("\n"));
 
         // Slightly more complicated, with a global str
         let asm = build_boot("const str = \"blah\"; fn main() { return str; }".into()).unwrap();
         assert_eq!(asm.join("\n"), vec![
             ".org 0x400",
+            "push stack",
             "call _forge_gensym_2",
             "hlt",
             "_forge_gensym_1: .db \"blah\\0\"",
             "_forge_gensym_2:",
+            "pushr",
             "push _forge_gensym_1",
+            "popr",
+            "pop",
             "ret",
-            "frame: .db $+1",
-            ".db 0",
+            "stack: .db 0",
         ].join("\n"))
     }
 }

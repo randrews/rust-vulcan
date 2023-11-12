@@ -31,16 +31,17 @@ mod test {
         assert_eq!(
             test_body(state_for("fn test() { var x = 3; if (x > 2) { x = 1; } }")),
             vec![
+                "pushr",
                 "push 3",
-                "loadw frame",
+                "peekr",
                 "storew", // x = 3
-                "loadw frame",
+                "peekr",
                 "loadw",
                 "push 2",
                 "agt", // The condition, x > 2
                 "#if", // The if itself
                 "push 1",
-                "loadw frame",
+                "peekr",
                 "storew", // The branch, x = 1
                 "#end"]
                 .join("\n")
@@ -52,20 +53,21 @@ mod test {
         assert_eq!(
             test_body(state_for("fn test() { var x = 3; if (x > 2) { x = 1; } else { x = 7; } }")),
             vec![
+                "pushr",
                 "push 3",
-                "loadw frame",
+                "peekr",
                 "storew", // x = 3
-                "loadw frame",
+                "peekr",
                 "loadw",
                 "push 2",
                 "agt", // The condition, x > 2
                 "#if", // The if itself
                 "push 1",
-                "loadw frame",
+                "peekr",
                 "storew", // The affirmative branch, x = 1
                 "#else", // The alternative
                 "push 7",
-                "loadw frame",
+                "peekr",
                 "storew", // x = 7
                 "#end"]
                 .join("\n")

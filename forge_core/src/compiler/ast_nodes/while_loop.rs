@@ -27,37 +27,38 @@ mod test {
         assert_eq!(
             test_body(state_for("fn test() { var x = 0; var c = 0; while (c < 10) { x = x + c; c = c + 1; } }")),
             vec![
+                "pushr",
                 "push 0",
-                "loadw frame",
+                "peekr",
                 "storew", // var x = 0
                 "push 0",
-                "loadw frame",
+                "peekr",
                 "add 3",
                 "storew", // var c = 0
                 "#while", // Start the loop
-                "loadw frame",
+                "peekr",
                 "add 3",
                 "loadw",
                 "push 10",
                 "alt", // c > 10
                 "#do", // Start loop body
-                "loadw frame",
+                "peekr",
                 "loadw",
-                "loadw frame",
+                "peekr",
                 "add 3",
                 "loadw",
                 "add",
-                "loadw frame",
+                "peekr",
                 "storew", // x = x + c
-                "loadw frame",
+                "peekr",
                 "add 3",
                 "loadw",
                 "push 1",
                 "add",
-                "loadw frame",
+                "peekr",
                 "add 3",
                 "storew", // c = c + 1
-                "#end", // End the loop body
+                "#end" // End the loop body
             ]
                 .join("\n")
         );

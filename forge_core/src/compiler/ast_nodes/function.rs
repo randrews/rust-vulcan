@@ -45,16 +45,17 @@ mod test {
         assert_eq!(
             test_body(state_for("fn test(a, b) { b = 17 + a; }")),
             vec![
-                "loadw frame", // Capture var b
+                "pushr", // Store frame ptr
+                "peekr", // Capture var b
                 "add 3",
                 "storew",
-                "loadw frame", // Capture var a
+                "peekr", // Capture var a
                 "storew",
                 "push 17",     // Start calculating the rvalue, push the literal
-                "loadw frame", // This is looking up the "a" arg, at frame + 0
+                "peekr", // This is looking up the "a" arg, at frame + 0
                 "loadw",
                 "add",         // 17 + a
-                "loadw frame", // Calculate the lvalue
+                "peekr", // Calculate the lvalue
                 "add 3",       // "b" arg is frame + 3
                 "storew",      // Finally store
             ]

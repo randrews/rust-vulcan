@@ -65,7 +65,8 @@ mod test {
         assert_eq!(
             test_body(state_for("fn test() { var x; asm(&x) { swap 12\nstorew } }")),
             vec![
-                "loadw frame", // Push the addr of x
+                "pushr", // capture frame ptr
+                "peekr", // Push the addr of x
                 "swap 12", // The asm body, which swaps 12 behind it and stores it there
                 "storew",
             ]
@@ -78,20 +79,21 @@ mod test {
         assert_eq!(
             test_body(state_for("fn test() { repeat(5) c { 2; } var k = 5; return k; }")),
             vec![
+                "pushr", // capture frame ptr
                 "push 0", // Create the 'c' var and store 0 in it
-                "loadw frame",
+                "peekr",
                 "storew",
                 "push 5",
                 "#while", // Starting the loop:
                 "dup", // Copy the limit
-                "loadw frame", // Load c
+                "peekr", // Load c
                 "loadw",
                 "sub", // Subtract c from a
                 "agt 0", // Are we still positive?
                 "#do",
                 "push 2", // Pointless loop body
                 "pop",
-                "loadw frame", // Load c as an lvalue
+                "peekr", // Load c as an lvalue
                 "dup", // Dup it, load it, add 1
                 "loadw",
                 "add 1",
@@ -100,10 +102,12 @@ mod test {
                 "#end", // End of the loop body!
                 "pop", // Drop the limit off the top
                 "push 5", // Push the rvalue we'll put in 'k'
-                "loadw frame", // THIS IS THE TEST: 'k' should go at frame + 0, because it's
+                "peekr", // THIS IS THE TEST: 'k' should go at frame + 0, because it's
                 "storew", // taking the same (now freed) frame slot that c took, because c is
-                "loadw frame", // now out of scope
+                "peekr", // now out of scope
                 "loadw",
+                "popr", // Blow away old frame ptr
+                "pop",
                 "ret",
             ]
                 .join("\n")

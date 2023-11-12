@@ -11,11 +11,20 @@ impl Compilable for Return {
         match self {
             Return(None) => {
                 // Returning nothing, so just default to returning a 0:
+                // (but pop our frame pointer first)
+                sig.emit("popr");
+                sig.emit("pop");
                 sig.emit_arg("ret", 0)
             }
             Return(Some(expr)) => {
                 // Eval the expr and emit a ret for it
                 expr.process(state, Some(sig), loc)?;
+
+                // Now that we're done with it, blow away the frame ptr:
+                sig.emit("popr");
+                sig.emit("pop");
+
+                // Finally ret
                 sig.emit("ret")
             }
         }
@@ -33,12 +42,15 @@ mod test {
         assert_eq!(
             test_body(state_for("fn test(a) { return a + 3; }")),
             vec![
-                "loadw frame", // capture arg a
+                "pushr",
+                "peekr", // capture arg a
                 "storew",
-                "loadw frame", // Load a
+                "peekr", // Load a
                 "loadw",
                 "push 3", // Add 3
                 "add",
+                "popr", // Toss frame ptr
+                "pop",
                 "ret", // Return that
             ]
                 .join("\n")
@@ -50,13 +62,16 @@ mod test {
         assert_eq!(
             test_body(state_for("fn test(a) { if (a > 0) { return; } }")),
             vec![
-                "loadw frame", // capture arg a
+                "pushr",
+                "peekr", // capture arg a
                 "storew",
-                "loadw frame", // Load a
+                "peekr", // Load a
                 "loadw",
                 "push 0", // Compare to 0
                 "agt",
                 "#if", // If statement
+                "popr", // Toss frame ptr
+                "pop",
                 "ret 0", // Default return value, for an expr-less return
                 "#end",
             ]

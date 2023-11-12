@@ -41,7 +41,7 @@ impl Compilable for Lvalue {
                         }
                         Variable::Local(offset) => {
                             let offset = *offset;
-                            sig.emit_arg("loadw", "frame");
+                            sig.emit("peekr");
                             if offset > 0 {
                                 sig.emit_arg("add", offset);
                             }
