@@ -11,3 +11,6 @@ members = [
     "vgfx",
     "forge_core"
 ]
+
+[profile.test]
+debug-assertions = false

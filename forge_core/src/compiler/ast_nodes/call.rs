@@ -17,9 +17,6 @@ impl Compilable for Call {
         }
 
         // Now we increment the frame ptr to right after the current frame:
-        // todo this messes with recursive calls: we're hard-coding the frame size _right now,_
-        // which may increase later with later vardecls in the fn, which could be _executed_ before
-        // this call is. We need to store the top of the frame at runtime somehow.
         sig.emit("peekr");
         let frame_size = sig.frame_size();
         if frame_size > 0 {

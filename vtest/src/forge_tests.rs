@@ -10,6 +10,10 @@ fn run_forge(src: &str) -> CPU {
     cpu
 }
 
+fn compiler_output(src: &str) -> Vec<String> {
+    forge_core::compiler::build_boot(src).unwrap()
+}
+
 fn main_return(src: &str) -> i32 {
     let mut cpu = run_forge(src);
     cpu.pop_data().into()
@@ -79,4 +83,58 @@ fn scope_test() {
              }"),
         None
     )
+}
+
+#[test]
+fn cursed_call_test() {
+    // This is a cursed subtlety of block scoping and the way calls are compiled. It's not actually
+    // a bug. It's explained below:
+    let src = "
+        fn foo() { return 2; }
+        fn main() {
+            repeat (2) n {
+                if (n == 1) { foo(); }
+                var x = 0;
+                if (n == 0) { x = 1; }
+            }
+        }
+    ";
+
+    assert_eq!(main_return(src), 0); // It runs
+
+    assert_eq!(compiler_output(src).join("\n"), vec![
+        ".org 0x400",
+        "push stack",
+        "call _forge_gensym_2",
+        "hlt",
+        "_forge_gensym_1:", // foo()
+        "pushr","push 2","popr","pop","ret","popr","pop","ret 0",
+        "_forge_gensym_2:", // main()
+        "pushr", // preamble (no args)
+        "push 0", "peekr", "storew", // repeat counter var (n)
+        "push 2", // repeat limit
+        "#while",
+        "dup", "peekr", "loadw", "sub", "agt 0", // check repeat limit (2 - n > 0)
+        "#do",
+        "peekr","loadw","push 1","xor","not","#if", // if n == 1
+        "peekr","add 3","push _forge_gensym_1","call","pop", // call foo, notice the 3-byte stack
+        // frame, which leaves room for n but not anything else
+        "#end",
+        "push 0","peekr","add 3","storew", // Declare x, store 0 in it (n and x are now in scope)
+        "peekr","loadw","push 0","xor","not","#if", // If n == 0
+        // This is the trap: x is allocated at frame+3, but the call above is passing frame+3 as foo's
+        // frame pointer. It doesn't yet know that x will exist so it can't reserve space for it. But!
+        // This is not actually a problem because during that call, x is not actually in scope; in order
+        // for this to occur, x has to both enter _and leave_ scope between now and when the call is
+        // executed. If it enters scope but doesn't leave, then compiling the call will take it into
+        // account. Because it leaves, if it gets clobbered it can't matter. There's no way for flow
+        // of control to pass back to here, after adding a local, without that local leaving scope:
+        // the loop structures are all block-level, there's no goto.
+        "push 1","peekr","add 3","storew", // store 1 in x.
+        "#end",
+        "peekr","dup","loadw","add 1","swap","storew","#end", // inc n, end the loop
+        "pop", // Drop the loop limit off
+        "popr","pop","ret 0", // Implicit return 0 to end main
+        "stack: .db 0", // The stack
+    ].join("\n"))
 }
