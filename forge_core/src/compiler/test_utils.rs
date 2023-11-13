@@ -18,3 +18,7 @@ pub(crate) fn test_body(state: State) -> String {
 pub(crate) fn test_preamble(state: State) -> String {
     state.functions.get("test").unwrap().preamble.join("\n")
 }
+
+pub(crate) fn test_outro(state: State) -> String {
+    state.functions.get("test").unwrap().outro.join("\n")
+}

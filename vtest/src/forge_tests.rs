@@ -108,9 +108,9 @@ fn cursed_call_test() {
         "call _forge_gensym_3",
         "hlt",
         "_forge_gensym_1:", // foo()
-        "pushr","push 2","jmpr @_forge_gensym_2","push 0","_forge_gensym_2:","popr","pop","ret",
+        "dup", "pushr", "pushr","push 2","jmpr @_forge_gensym_2","push 0","_forge_gensym_2:","popr","pop", "popr","pop","ret",
         "_forge_gensym_3:", // main()
-        "pushr", // preamble (no args)
+        "dup", "add 6", "pushr", "pushr", // preamble (no args, but 3 locals)
         "push 0", "peekr", "storew", // repeat counter var (n)
         "push 2", // repeat limit
         "#while",
@@ -136,7 +136,7 @@ fn cursed_call_test() {
         "pop", // Drop the loop limit off
         "push 0", // Implicit return value
         "_forge_gensym_4:",
-        "popr","pop","ret", // Standard outro
+        "popr","pop","popr","pop","ret", // Standard outro
         "stack: .db 0", // The stack
     ].join("\n"))
 }

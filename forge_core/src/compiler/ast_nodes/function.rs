@@ -46,7 +46,7 @@ impl Compilable for Function {
 
 #[cfg(test)]
 mod test {
-    use crate::compiler::test_utils::{state_for, test_body, test_preamble};
+    use crate::compiler::test_utils::*;
 
     #[test]
     fn test_basic_fns() {
@@ -70,12 +70,30 @@ mod test {
         assert_eq!(
             test_preamble(state_for("fn test(a, b) { b = 17 + a; }")),
             vec![
+                "dup", // Create pool ptr
+                "add 6",
+                "pushr", // Store pool ptr
                 "pushr", // Store frame ptr
                 "peekr", // Capture var b
                 "add 3",
                 "storew",
                 "peekr", // Capture var a
                 "storew",
+            ]
+                .join("\n")
+        )
+    }
+
+    #[test]
+    fn test_args_outro() {
+        assert_eq!(
+            test_outro(state_for("fn test(a, b) { b = 17 + a; }")),
+            vec![
+                "push 0", // Default return value if we fall through
+                "_forge_gensym_2:", // outro label
+                "popr", "pop", // Toss the frame ptr
+                "popr", "pop", // Toss the pool ptr
+                "ret", // Actually return
             ]
                 .join("\n")
         )

@@ -1,3 +1,4 @@
+use std::cmp::max;
 use std::collections::btree_map::Entry::Vacant;
 use std::fmt::Display;
 use crate::compiler::compile_error::CompileError;
@@ -22,6 +23,13 @@ use crate::compiler::utils::{Label, Scope, Variable};
 /// you make a call to another function, you need to increment frame by the current frame size,
 /// and put that on the top of the data stack. Functions store their pointer in the top of the
 /// rstack, and locals can be found by adding some offset from the frame pointer.
+///
+/// The max_frams_size field is important: this is the most entries that can be in scope at one time.
+/// The reason that's important is that anything in the stack _after_ that many slots is available
+/// for use by the allocator pool. The second entry in the rstack is the "pool pointer" which is the
+/// address of the first byte of the stack that we haven't used yet. When we want to allocate more
+/// memory for any reason (like, new(), or calling a fn and giving it a valid frame ptr), this is
+/// what we pass.
 ///
 /// todo: the allocator problem has (probably) been solved! Make an alloca() that increases the
 /// current frame pointer by some size. To dynamically allocate memory, just put it in the stack
@@ -48,10 +56,9 @@ use crate::compiler::utils::{Label, Scope, Variable};
 pub struct CompiledFn {
     pub label: Label,
     pub end_label: Label,
-    pub frame_size: usize,
+    pub max_frame_size: usize,
     pub local_scope: Scope,
     pub arity: usize,
-    pub alloc: bool,
     pub preamble: Vec<String>,
     pub body: Vec<String>,
     pub outro: Vec<String>,
@@ -62,9 +69,10 @@ impl CompiledFn {
     /// - Increases the size of the stack frame by that much
     /// - Records the offset into the local stack frame where that variable is stored
     pub(crate) fn add_local(&mut self, name: &str) -> Result<(), CompileError> {
+        let frame = self.frame_size();
         if let Vacant(e) = self.local_scope.entry(name.into()) {
-            e.insert(Variable::Local(self.frame_size));
-            self.frame_size += 3;
+            e.insert(Variable::Local(frame));
+            self.max_frame_size = max(frame, self.max_frame_size);
             Ok(())
         } else {
             Err(CompileError(0, 0, format!("Duplicate name {}", name)))
@@ -104,8 +112,8 @@ impl CompiledFn {
         self.preamble.push(format!("{} {}", opcode, arg))
     }
 
-    /// The size of the local scope in bytes. This increases as variables are declared
-    /// todo: this needs to change for arrays; it won't like having vars that aren't 3 bytes long
+    /// The (current) size of the local scope in bytes. This increases as variables are declared,
+    /// decreases as they leave scope
     pub(crate) fn frame_size(&self) -> usize {
         self.local_scope.len() * 3
     }
@@ -127,14 +135,16 @@ impl CompiledFn {
     /// depends on knowledge of the body of the fn, but what this produces will be emitted to
     /// the final listing before the fn body
     pub(crate) fn generate_preamble_outro(&mut self, args: &Vec<String>) -> Result<(), CompileError> {
-        // Does our fn make any allocations? If so we need to save the old alloc pool pointer:
-        if self.alloc {
-            todo!("alloc pool not actually implemented");
-            //self.preamble_emit("loadw pool");
-            //self.preamble_emit("pushr");
+        // First, we need a pool pointer on the rstack. We know this because it's the current top
+        // (the frame ptr) plus a (known) max scope size:
+        self.preamble_emit("dup");
+        if self.max_frame_size > 0 {
+            // Pool ptr is right after the locals, so, max_frame_size + 3
+            self.preamble_emit_arg("add", self.max_frame_size + 3);
         }
+        self.preamble_emit("pushr");
 
-        // Top argument is the frame ptr; copy it to the rstack:
+        // The top argument we were sent is the frame ptr, store that also:
         self.preamble_emit("pushr");
 
         // Add each argument as a local
@@ -163,14 +173,12 @@ impl CompiledFn {
         // Now, the outro label:
         self.outro_emit(format!("{}:", self.end_label).as_str());
 
-        // The top of the rstack is, of course, the frame ptr. So we need to get rid of that:
+        // The top of the rstack is, of course, the frame ptr and pool ptr. So we need to get rid of
+        // those:
         self.outro_emit("popr");
         self.outro_emit("pop");
-
-        // If we alloced anything, we need to drain that pool:
-        if self.alloc {
-            todo!("alloc pool not implemented yet");
-        }
+        self.outro_emit("popr");
+        self.outro_emit("pop");
 
         // We're in the same condition we entered in except that our return value is on the stack
         // (or a default 0 is) so time to actually return:
@@ -183,11 +191,10 @@ impl CompiledFn {
     /// beyond that frame length: used when compiling blocks to de-scope names that should only
     /// be visible in the block
     pub(crate) fn reduce_frame_size_to(&mut self, new_size: usize) {
-        self.frame_size = new_size;
         let mut to_remove: Vec<String> = Vec::new();
         for (name, var) in self.local_scope.iter() {
             if let Variable::Local(offset) = var {
-                if *offset >= self.frame_size {
+                if *offset >= new_size {
                     to_remove.push(name.clone());
                 }
             }
@@ -202,6 +209,6 @@ impl CompiledFn {
     /// Used for things like repeat loops where there's a name declared outside a block but which
     /// should only be visible in the block anyway.
     pub(crate) fn forget_last_local(&mut self) {
-        self.reduce_frame_size_to(self.frame_size - 3);
+        self.reduce_frame_size_to(self.frame_size() - 3);
     }
 }

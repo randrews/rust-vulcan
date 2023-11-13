@@ -8,7 +8,7 @@ impl Compilable for Block {
     fn process(self, state: &mut State, sig: Option<&mut CompiledFn>, _loc: Location) -> Result<(), CompileError> {
         let sig = sig.expect("Block outside function");
 
-        let frame_size_before_block = sig.frame_size;
+        let frame_size_before_block = sig.frame_size();
 
         // Compile each statement:
         for stmt in self.0 {

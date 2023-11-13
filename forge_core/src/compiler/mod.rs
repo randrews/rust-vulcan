@@ -76,11 +76,15 @@ mod test {
             "call _forge_gensym_1",
             "hlt",
             "_forge_gensym_1:",
+            "dup",
+            "pushr",
             "pushr",
             "push 5",
             "jmpr @_forge_gensym_2",
             "push 0",
             "_forge_gensym_2:",
+            "popr",
+            "pop",
             "popr",
             "pop",
             "ret",
@@ -96,11 +100,15 @@ mod test {
             "hlt",
             "_forge_gensym_1: .db \"blah\\0\"",
             "_forge_gensym_2:",
+            "dup",
+            "pushr",
             "pushr",
             "push _forge_gensym_1", // Push the str
             "jmpr @_forge_gensym_3", // Return
             "push 0", // Implicit return val
             "_forge_gensym_3:", // outro
+            "popr",
+            "pop",
             "popr",
             "pop",
             "ret",
@@ -122,13 +130,15 @@ mod test {
             "call _forge_gensym_3",
             "hlt",
             "_forge_gensym_1:", // fn foo()
+            "dup", "pushr", // capture pool ptr
             "pushr", // capture frame ptr
             "push 0", // implicit return
             "_forge_gensym_2:",
-            "popr",
-            "pop",
+            "popr", "pop",
+            "popr", "pop",
             "ret",
             "_forge_gensym_3:", // fn main()
+            "dup", "pushr", // capture pool ptr
             "pushr", // capture frame ptr
             "peekr", // prep frame ptr to send to foo
             "push _forge_gensym_1", // load foo
@@ -136,7 +146,9 @@ mod test {
             "pop", // Throw away its return value
             "push 0", // Implicit return value
             "_forge_gensym_4:", // Outro start
-            "popr", // Restore frame ptr
+            "popr", // Drop frame ptr
+            "pop",
+            "popr", // Drop pool ptr
             "pop",
             "ret",
             "stack: .db 0",
