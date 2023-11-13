@@ -17,6 +17,7 @@ impl Compilable for Call {
         }
 
         // Now we increment the frame ptr to right after the current frame:
+        // see cursed test case in vtest/forge_tests.rs
         sig.emit("peekr");
         let frame_size = sig.frame_size();
         if frame_size > 0 {
@@ -25,11 +26,6 @@ impl Compilable for Call {
 
         // Eval the target
         self.target.0.process(state, Some(sig), loc)?;
-
-        // Before we actually do the call though, we need to deal with some paperwork around the
-        // frame pointer. We will store the current frame pointer in the rstack:
-        //sig.emit("loadw frame");
-        //sig.emit("pushr");
 
         // Do the call:
         sig.emit("call");
@@ -53,12 +49,6 @@ mod test {
         assert_eq!(
             test_body(state_for("fn test(a, b) { test(2, 3); }")),
             vec![
-                "pushr",
-                "peekr", // capture arg b
-                "add 3",
-                "storew",
-                "peekr", // capture arg a
-                "storew",
                 "push 2", // evaluating args, in order
                 "push 3",
                 "peekr", // The new fn's frame ptr:

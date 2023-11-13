@@ -86,6 +86,7 @@ impl Compilable for Expr {
                 Ok(())
             }
             Expr::Call(call) => call.process(state, Some(sig), loc),
+            Expr::New(size) => todo!("new not yet supported"),
             Expr::Subscript(_, _) => todo!("Structs and arrays are not yet supported"),
             Expr::Infix(lhs, op, rhs) => {
                 // Recurse on expressions, handling operators
@@ -158,7 +159,6 @@ mod test {
         assert_eq!(
             test_body(state),
             vec![
-                "pushr",
                 "push _forge_gensym_3",
                 "peekr",
                 "storew", // the assignment for x
@@ -177,7 +177,6 @@ mod test {
         assert_eq!(
             test_body(state_for("fn test() { var x = 3; var y = &x; }")),
             vec![
-                "pushr",
                 "push 3",
                 "peekr",
                 "storew",      // the assignment for x
@@ -196,7 +195,6 @@ mod test {
         assert_eq!(
             test_body(state_for("fn test() { var x = 3; *1000 = *x; }")),
             vec![
-                "pushr",
                 "push 3",
                 "peekr",
                 "storew",      // the assignment for x
@@ -216,7 +214,6 @@ mod test {
         assert_eq!(
             test_body(state_for("const foo = \"foo\"; fn test() { var x = \"bar\" + 3; }")),
             vec![
-                "pushr",
                 "push _forge_gensym_3", // 1 is the label in the string table for "foo", 2 for "blah,"
                 "push 3", // so 3 is the string "bar"
                 "add", // Add 3 to that address

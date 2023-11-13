@@ -46,7 +46,9 @@ pub fn build_boot(src: &str) -> Result<Vec<String>, CompileError> {
         }
         for (_, val) in state.functions.iter_mut() {
             asm.push(format!("{}:", val.label));
+            asm.append(val.preamble.as_mut());
             asm.append(val.body.as_mut());
+            asm.append(val.outro.as_mut());
         }
 
         // Final thing is to place a label for the stack:

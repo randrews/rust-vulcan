@@ -31,7 +31,6 @@ mod test {
         assert_eq!(
             test_body(state_for("fn test() { var x = 3; if (x > 2) { x = 1; } }")),
             vec![
-                "pushr",
                 "push 3",
                 "peekr",
                 "storew", // x = 3
@@ -55,7 +54,6 @@ mod test {
         assert_eq!(
             test_body(state_for("fn test() { var x = 3; if (x > 2) { x = 1; } else { x = 7; } }")),
             vec![
-                "pushr",
                 "push 3",
                 "peekr",
                 "storew", // x = 3

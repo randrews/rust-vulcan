@@ -18,6 +18,7 @@ impl AstNode for Expr {
         PRATT_PARSER
             .map_primary(|term| match term.as_rule() {
                 PestRule::number => Expr::Number(term.into_number()),
+                PestRule::alloc => Expr::New(Expr::from_pair(term.first()).into()),
                 PestRule::name => Expr::Name(String::from(term.as_str())),
                 PestRule::expr => Expr::from_pair(term),
                 PestRule::string => Self::String(term.into_quoted_string()),
@@ -268,5 +269,10 @@ mod test {
             Expr::from_str("blah(\"foo\", 2)"),
             Ok(Expr::Call(Call { target: "blah".into(), args: vec![Expr::String("foo".into()), 2.into()] }))
         );
+    }
+
+    #[test]
+    fn alloc() {
+        assert_eq!(Expr::from_str("new(8)"), Ok(Expr::New(8.into())));
     }
 }

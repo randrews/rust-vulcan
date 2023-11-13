@@ -49,7 +49,7 @@ pub fn eval_const(expr: Expr, scope: &Scope) -> Result<i32, CompileError> {
             0,
             String::from("Addresses are not known at compile time"),
         )),
-        Expr::Call(_) | Expr::Subscript(_, _) => Err(CompileError(
+        Expr::Call(_) | Expr::Subscript(_, _) | Expr::New(_) => Err(CompileError(
             0,
             0,
             String::from("Constants must be statically defined"),

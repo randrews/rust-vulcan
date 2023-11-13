@@ -42,9 +42,6 @@ mod test {
         assert_eq!(
             test_body(state_for("fn test(a) { return a + 3; }")),
             vec![
-                "pushr",
-                "peekr", // capture arg a
-                "storew",
                 "peekr", // Load a
                 "loadw",
                 "push 3", // Add 3
@@ -63,9 +60,6 @@ mod test {
         assert_eq!(
             test_body(state_for("fn test(a) { if (a > 0) { return; } }")),
             vec![
-                "pushr",
-                "peekr", // capture arg a
-                "storew",
                 "peekr", // Load a
                 "loadw",
                 "push 0", // Compare to 0

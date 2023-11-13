@@ -173,6 +173,7 @@ pub enum Expr {
     Deref(BoxExpr),
     Address(Lvalue),
     Call(Call),
+    New(BoxExpr),
     Subscript(BoxExpr, BoxExpr),
     Infix(BoxExpr, Operator, BoxExpr),
     String(String),

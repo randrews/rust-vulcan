@@ -27,7 +27,6 @@ mod test {
         assert_eq!(
             test_body(state_for("fn test() { var x = 0; var c = 0; while (c < 10) { x = x + c; c = c + 1; } }")),
             vec![
-                "pushr",
                 "push 0",
                 "peekr",
                 "storew", // var x = 0

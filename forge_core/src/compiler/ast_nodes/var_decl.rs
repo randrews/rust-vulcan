@@ -36,7 +36,6 @@ mod test {
         assert_eq!(
             test_body(state_for("fn test() { var a; var b = 7; a = b * 2; }")),
             vec![
-                "pushr",
                 "push 7",      // Start calculating the rvalue, push the literal
                 "peekr", // "b" is the second local var at frame + 3
                 "add 3",

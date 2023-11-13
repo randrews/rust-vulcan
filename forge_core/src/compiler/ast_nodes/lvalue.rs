@@ -18,6 +18,7 @@ impl Compilable for Lvalue {
             Expr::Not(_) |
             Expr::Address(_) |
             Expr::Call(_) |
+            Expr::New(_) |
             Expr::Infix(_, _, _) |
             Expr::String(_) => {
                 Err(CompileError(0, 0, String::from("Not a valid lvalue")))

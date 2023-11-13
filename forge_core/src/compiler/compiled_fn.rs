@@ -48,7 +48,10 @@ pub struct CompiledFn {
     pub frame_size: usize,
     pub local_scope: Scope,
     pub arity: usize,
+    pub alloc: bool,
+    pub preamble: Vec<String>,
     pub body: Vec<String>,
+    pub outro: Vec<String>,
 }
 
 impl CompiledFn {
@@ -72,10 +75,30 @@ impl CompiledFn {
         self.body.push(String::from(opcode))
     }
 
+    /// Emit a string (ideally one instruction, but whatever) to the function preamble.
+    /// This is very similar to `emit` but it appends the line to a section that will be written
+    /// before the body. If we need to write something that depends on the body but must be run
+    /// before it, it gets written through here.
+    pub(crate) fn preamble_emit(&mut self, opcode: &str) {
+        self.preamble.push(String::from(opcode))
+    }
+
+    /// Emit a string (ideally one instruction, but whatever) to the function outro. Just like the
+    /// body and preamble, the outro is part of the fn, but will be emitted after the fn body. Any
+    /// cleanup that needs to happen should happen here.
+    pub(crate) fn outro_emit(&mut self, opcode: &str) {
+        self.outro.push(String::from(opcode))
+    }
+
     /// A shorthand method to emit something with a `Display` arg, because emitting a
     /// single instruction with a variable (numeric or label) arg is very common.
     pub(crate) fn emit_arg<T: Display>(&mut self, opcode: &str, arg: T) {
         self.body.push(format!("{} {}", opcode, arg))
+    }
+
+    /// Preamble version of emit_arg
+    pub(crate) fn preamble_emit_arg<T: Display>(&mut self, opcode: &str, arg: T) {
+        self.preamble.push(format!("{} {}", opcode, arg))
     }
 
     /// The size of the local scope in bytes. This increases as variables are declared
@@ -84,33 +107,49 @@ impl CompiledFn {
         self.local_scope.len() * 3
     }
 
-    /// Emit the code to add the arguments' names to the local scope, and move the arguments off
-    /// the stack into the frame. Should be run before the body is compiled, because this code
-    /// has to be the first thing in the body
-    pub(crate) fn handle_args(&mut self, function: &Function) -> Result<(), CompileError> {
-        let mut arg_names: Vec<&str> = Vec::new();
-
-        // Top argument is the frame ptr; copy it to the rstack:
-        self.emit("pushr");
-
+    /// We won't generate the code to actually capture the args until we generate the preamble
+    /// (which we can't do until we compile the body) but we need to do some recognition of the
+    /// args here: count how many there are, add them to the scope, so we know how to refer to them.
+    pub(crate) fn calculate_arity(&mut self, args: &Vec<String>) -> Result<(), CompileError> {
         // Add each argument as a local
-        for name in function.args.iter() {
+        for name in args.iter() {
             self.add_local(name.as_str())?;
-            arg_names.push(name.as_str());
             self.arity += 1;
         }
+        Ok(())
+    }
+
+    /// Emit the code to add the arguments' names to the local scope, and move the arguments off
+    /// the stack into the frame. Should be run after the body is compiled, because this code
+    /// depends on knowledge of the body of the fn, but what this produces will be emitted to
+    /// the final listing before the fn body
+    pub(crate) fn generate_preamble_outro(&mut self, args: &Vec<String>) -> Result<(), CompileError> {
+        let mut arg_names: Vec<&str> = Vec::new();
+
+        // Does our fn make any allocations? If so we need to save the old alloc pool pointer:
+        if self.alloc {
+            todo!("alloc pool not actually implemented");
+            self.preamble_emit("loadw pool");
+            self.preamble_emit("pushr");
+        }
+
+        // Top argument is the frame ptr; copy it to the rstack:
+        self.preamble_emit("pushr");
+
+        // Add each argument as a local
+        let mut arg_names: Vec<_> = args.iter().map(|a| a.clone()).collect();
 
         // Arguments in calls are pushed with the last on top, so, reverse the vec just to make
         // the following loop easier:
         arg_names.reverse();
 
         for name in arg_names {
-            if let Variable::Local(offset) = self.local_scope[name] {
-                self.emit("peekr");
+            if let Variable::Local(offset) = self.local_scope[&name] {
+                self.preamble_emit("peekr");
                 if offset != 0 {
-                    self.emit_arg("add", offset);
+                    self.preamble_emit_arg("add", offset);
                 }
-                self.emit("storew");
+                self.preamble_emit("storew");
             }
         }
 

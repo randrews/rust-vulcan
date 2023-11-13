@@ -65,7 +65,6 @@ mod test {
         assert_eq!(
             test_body(state_for("fn test() { var x; asm(&x) { swap 12\nstorew } }")),
             vec![
-                "pushr", // capture frame ptr
                 "peekr", // Push the addr of x
                 "swap 12", // The asm body, which swaps 12 behind it and stores it there
                 "storew",
@@ -80,7 +79,6 @@ mod test {
         assert_eq!(
             test_body(state_for("fn test() { repeat(5) c { 2; } var k = 5; return k; }")),
             vec![
-                "pushr", // capture frame ptr
                 "push 0", // Create the 'c' var and store 0 in it
                 "peekr",
                 "storew",

@@ -86,9 +86,6 @@ mod test {
         assert_eq!(
             test_body(state_for("fn test(a) { var x = 0; repeat(a) c { x = x + c; } return x; }")),
             vec![
-                "pushr",
-                "peekr", // capture arg a
-                "storew",
                 "push 0", // Create the 'x' var and store 0 in it
                 "peekr",
                 "add 3",
@@ -144,9 +141,6 @@ mod test {
         assert_eq!(
             test_body(state_for("fn test(a) { var x = 1; repeat(a) { x = x * 2; } return x; }")),
             vec![
-                "pushr",
-                "peekr", // capture arg a
-                "storew",
                 "push 1", // Create the 'x' var and store 1 in it
                 "peekr",
                 "add 3",
