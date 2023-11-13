@@ -57,8 +57,12 @@ impl Compilable for Lvalue {
             Expr::Deref(BoxExpr(expr)) => {
                 (*expr).process(state, Some(sig), loc)
             }
-            Expr::Subscript(_, _) => {
-                Err(CompileError(0, 0, String::from("Arrays are not yet supported")))
+            Expr::Subscript(array, index) => {
+                array.0.process(state, Some(sig), loc)?;
+                index.0.process(state, Some(sig), loc)?;
+                sig.emit_arg("mul", 3); // Indices are in words, convert to byte offset
+                sig.emit("add"); // Add offset
+                Ok(())
             }
         }
     }

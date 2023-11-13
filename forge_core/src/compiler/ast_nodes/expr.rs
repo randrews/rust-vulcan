@@ -86,8 +86,19 @@ impl Compilable for Expr {
                 Ok(())
             }
             Expr::Call(call) => call.process(state, Some(sig), loc),
-            Expr::New(_size) => todo!("new not yet supported"),
-            Expr::Subscript(_, _) => todo!("Structs and arrays are not yet supported"),
+            Expr::New(size_expr) => {
+                size_expr.0.process(state, Some(sig), loc)?;
+                compile_alloc(&mut sig);
+                Ok(())
+            },
+            Expr::Subscript(array, index) => {
+                array.0.process(state, Some(sig), loc)?;
+                index.0.process(state, Some(sig), loc)?;
+                sig.emit_arg("mul", 3); // Indices are in words, convert to byte offset
+                sig.emit("add"); // Add offset
+                sig.emit("loadw");
+                Ok(())
+            },
             Expr::Infix(lhs, op, rhs) => {
                 // Recurse on expressions, handling operators
                 (*lhs.0).process(state, Some(&mut sig), loc)?;
@@ -139,6 +150,28 @@ impl Compilable for Expr {
             }
         }
     }
+}
+
+/// Compile the code to run an alloc. This is just generated in-place for now.
+fn compile_alloc(sig: &mut CompiledFn) {
+    // We have the size we want to alloc on top of the stack, in words. So first turn it to bytes:
+    sig.emit_arg("mul", 3);
+
+    // We need to pull off the frame ptr and pool ptr, so the stack looks like ( frame pool size )
+    sig.emit("popr");
+    sig.emit("swap");
+    sig.emit("popr");
+    sig.emit("swap");
+
+    // We need to leave the pool pointer (as it was at the start) on top of the stack. So, copy it
+    // and move it forward, so the stack is ( frame old-pool new-pool )
+    sig.emit_arg("pick", 1);
+    sig.emit("add");
+
+    // Put the new pool in place and the frame on top of it, so the stack is just ( old-pool ):
+    sig.emit("pushr");
+    sig.emit("swap");
+    sig.emit("pushr");
 }
 
 #[cfg(test)]
@@ -218,6 +251,35 @@ mod test {
                 "storew",
             ]
                 .join("\n")
+        )
+    }
+
+    #[test]
+    fn test_alloc() {
+        assert_eq!(
+            test_body(state_for("fn test() { var x = new(10); return x[2]; }")),
+            vec![
+                "push 10", // eval the size
+                "mul 3", // turn to bytes
+                "popr", // take out the frame / old-pool
+                "swap",
+                "popr",
+                "swap",
+                "pick 1", // construct new-pool
+                "add",
+                "pushr", // put new-pool in place
+                "swap", // put frame back in place
+                "pushr",
+                "peekr", // store new-pool in x
+                "storew",
+                "peekr", // Get x
+                "loadw",
+                "push 2", // Index...
+                "mul 3", // ...to byte offset...
+                "add", // ..added to base...
+                "loadw", // ...And loaded
+                "jmpr @_forge_gensym_2", // (and returned)
+            ].join("\n")
         )
     }
 }

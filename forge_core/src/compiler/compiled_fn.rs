@@ -31,11 +31,6 @@ use crate::compiler::utils::{Label, Scope, Variable};
 /// memory for any reason (like, new(), or calling a fn and giving it a valid frame ptr), this is
 /// what we pass.
 ///
-/// todo: the allocator problem has (probably) been solved! Make an alloca() that increases the
-/// current frame pointer by some size. To dynamically allocate memory, just put it in the stack
-/// frame of the current fn. All fns return one word and all params are one word long (structs
-/// get passed around by reference)
-///
 /// todo: more of a global todo. Add a register that stores an offset that's added implicitly to
 /// all absolute addresses. This makes it a lot simpler to make relocatable code
 ///
@@ -72,6 +67,7 @@ impl CompiledFn {
         let frame = self.frame_size();
         if let Vacant(e) = self.local_scope.entry(name.into()) {
             e.insert(Variable::Local(frame));
+            let frame = self.frame_size();
             self.max_frame_size = max(frame, self.max_frame_size);
             Ok(())
         } else {
@@ -139,8 +135,8 @@ impl CompiledFn {
         // (the frame ptr) plus a (known) max scope size:
         self.preamble_emit("dup");
         if self.max_frame_size > 0 {
-            // Pool ptr is right after the locals, so, max_frame_size + 3
-            self.preamble_emit_arg("add", self.max_frame_size + 3);
+            // Pool ptr is right after the locals, so, add max_frame_size
+            self.preamble_emit_arg("add", self.max_frame_size);
         }
         self.preamble_emit("pushr");
 
@@ -210,5 +206,53 @@ impl CompiledFn {
     /// should only be visible in the block anyway.
     pub(crate) fn forget_last_local(&mut self) {
         self.reduce_frame_size_to(self.frame_size() - 3);
+    }
+}
+
+#[cfg(test)]
+mod test {
+    use super::*;
+    use crate::compiler::test_utils::*;
+
+    #[test]
+    fn max_frame_size_args() {
+        assert_eq!(test_preamble(state_for("fn test(a) { return 5; }")),
+            vec![
+                "dup", // ( frame frame )
+                "add 3", // add max size to frame to get ( frame pool )
+                "pushr", // save pool ptr
+                "pushr", // save frame ptr
+                "peekr", // store param in 'a'
+                "storew",
+            ].join("\n")
+        )
+    }
+
+    #[test]
+    fn max_frame_size_locals() {
+        assert_eq!(test_preamble(state_for("fn test() { var x; return 5; }")),
+                   vec![
+                       "dup", // ( frame frame )
+                       "add 3", // add max size to frame to get ( frame pool )
+                       "pushr", // save pool ptr
+                       "pushr", // save frame ptr
+                   ].join("\n")
+        )
+    }
+
+    #[test]
+    fn max_frame_size_block_scope() {
+        assert_eq!(test_preamble(state_for("fn test(p) { var x; if(3) { var y; } var z; }")),
+                   vec![
+                       "dup", // ( frame frame )
+                       // This is the test: p and x are always in scope; y is created but leaves
+                       // scope before z enters so z can reuse y's slot
+                       "add 9", // add max size to frame to get ( frame pool )
+                       "pushr", // save pool ptr
+                       "pushr", // save frame ptr
+                       "peekr", // Capture param p
+                       "storew",
+                   ].join("\n")
+        )
     }
 }

@@ -10,6 +10,7 @@ fn run_forge(src: &str) -> CPU {
     cpu
 }
 
+#[allow(dead_code)]
 fn compiler_output(src: &str) -> Vec<String> {
     forge_core::compiler::build_boot(src).unwrap()
 }
@@ -99,6 +100,29 @@ fn recursion_test() {
                 }
                  fn main() { return sum(5); }"),
         15
+    )
+}
+
+#[test]
+fn array_test() {
+    // Declare an array and do things
+    assert_eq!(
+        main_return(
+            "fn sum(arr) {
+                    var i = 0;
+                    var s = 0;
+                    while (arr[i] != -1) {
+                        s = arr[i] + s;
+                        i = i + 1;
+                    }
+                    return s;
+                }
+                fn main() {
+                    var a = new(5);
+                    a[0] = 1; a[1] = 3; a[2] = 5; a[3] = -1; a[4] = 10;
+                    return sum(a);
+                }"),
+        9
     )
 }
 
