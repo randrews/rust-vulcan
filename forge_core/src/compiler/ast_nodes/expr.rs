@@ -86,7 +86,7 @@ impl Compilable for Expr {
                 Ok(())
             }
             Expr::Call(call) => call.process(state, Some(sig), loc),
-            Expr::New(size) => todo!("new not yet supported"),
+            Expr::New(_size) => todo!("new not yet supported"),
             Expr::Subscript(_, _) => todo!("Structs and arrays are not yet supported"),
             Expr::Infix(lhs, op, rhs) => {
                 // Recurse on expressions, handling operators
@@ -152,21 +152,20 @@ mod test {
             state.strings,
             vec![
                 ("_forge_gensym_1".into(), "foo".into()),
-                ("_forge_gensym_3".into(), "bar".into()), // gensym 2 is the entrypoint of blah()
-                ("_forge_gensym_4".into(), "norp".into()),
+                ("_forge_gensym_4".into(), "bar".into()), // gensym 2 and 3 are the entry and outro of blah()
+                ("_forge_gensym_5".into(), "norp".into()),
             ]
         );
         assert_eq!(
             test_body(state),
             vec![
-                "push _forge_gensym_3",
+                "push _forge_gensym_4",
                 "peekr",
                 "storew", // the assignment for x
-                "push _forge_gensym_4",
+                "push _forge_gensym_5",
                 "peekr",
                 "add 3", // the address of y (frame + 3) and put gensym_4 in it
                 "storew",
-                "popr", "pop", "ret 0" // Implicit void return
             ]
                 .join("\n")
         )
@@ -184,7 +183,6 @@ mod test {
                 "peekr",
                 "add 3", // the address of y (frame + 3) and put the addr of x (frame) in it
                 "storew",
-                "popr", "pop", "ret 0" // Implicit void return
             ]
                 .join("\n")
         )
@@ -203,7 +201,6 @@ mod test {
                 "loadw", // Then load the value at 3
                 "push 1000", // Push the addr 1000, for the lvalue
                 "storew", // Store whatever's at 3 to 1000
-                "popr", "pop", "ret 0" // Implicit void return
             ]
                 .join("\n")
         )
@@ -214,12 +211,11 @@ mod test {
         assert_eq!(
             test_body(state_for("const foo = \"foo\"; fn test() { var x = \"bar\" + 3; }")),
             vec![
-                "push _forge_gensym_3", // 1 is the label in the string table for "foo", 2 for "blah,"
+                "push _forge_gensym_4", // 1 is the label in the string table for "foo", 2 for "blah," 3 for blah's outro
                 "push 3", // so 3 is the string "bar"
                 "add", // Add 3 to that address
                 "peekr", // Store it in the first var
                 "storew",
-                "popr", "pop", "ret 0" // Implicit void return
             ]
                 .join("\n")
         )

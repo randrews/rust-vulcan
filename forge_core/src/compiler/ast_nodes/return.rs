@@ -11,23 +11,16 @@ impl Compilable for Return {
         match self {
             Return(None) => {
                 // Returning nothing, so just default to returning a 0:
-                // (but pop our frame pointer first)
-                sig.emit("popr");
-                sig.emit("pop");
-                sig.emit_arg("ret", 0)
+                sig.emit_arg("push", 0);
             }
             Return(Some(expr)) => {
                 // Eval the expr and emit a ret for it
                 expr.process(state, Some(sig), loc)?;
-
-                // Now that we're done with it, blow away the frame ptr:
-                sig.emit("popr");
-                sig.emit("pop");
-
-                // Finally ret
-                sig.emit("ret")
             }
         }
+
+        // The return value is on the stack so jmpr to the outro to do the actual return
+        sig.emit_arg("jmpr", format!("@{}",sig.end_label));
 
         Ok(())
     }
@@ -46,10 +39,7 @@ mod test {
                 "loadw",
                 "push 3", // Add 3
                 "add",
-                "popr", // Toss frame ptr
-                "pop",
-                "ret", // Return that
-                "popr", "pop", "ret 0" // Implicit void return
+                "jmpr @_forge_gensym_2", // Return that
             ]
                 .join("\n")
         );
@@ -65,11 +55,9 @@ mod test {
                 "push 0", // Compare to 0
                 "agt",
                 "#if", // If statement
-                "popr", // Toss frame ptr
-                "pop",
-                "ret 0", // Default return value, for an expr-less return
+                "push 0", // Default return value, for an expr-less return
+                "jmpr @_forge_gensym_2",
                 "#end",
-                "popr", "pop", "ret 0" // Implicit void return
             ]
                 .join("\n")
         );

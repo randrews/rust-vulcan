@@ -126,10 +126,7 @@ mod test {
                 "peekr", // Load x so we can return it
                 "add 3",
                 "loadw",
-                "popr", // toss old frame ptr
-                "pop",
-                "ret",
-                "popr", "pop", "ret 0" // Implicit void return
+                "jmpr @_forge_gensym_2",
             ]
                 .join("\n")
         );
@@ -165,10 +162,7 @@ mod test {
                 "peekr", // Load x so we can return it
                 "add 3",
                 "loadw",
-                "popr", // Toss old frame ptr
-                "pop",
-                "ret",
-                "popr", "pop", "ret 0" // Implicit void return
+                "jmpr @_forge_gensym_2",
             ].join("\n")
         );
     }

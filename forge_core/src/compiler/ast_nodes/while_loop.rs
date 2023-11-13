@@ -58,7 +58,6 @@ mod test {
                 "add 3",
                 "storew", // c = c + 1
                 "#end", // End the loop body
-                "popr", "pop", "ret 0" // Implicit void return
             ]
                 .join("\n")
         );

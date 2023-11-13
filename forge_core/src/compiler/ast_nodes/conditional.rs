@@ -43,7 +43,6 @@ mod test {
                 "peekr",
                 "storew", // The branch, x = 1
                 "#end",
-                "popr", "pop", "ret 0" // Implicit void return
             ]
                 .join("\n")
         );
@@ -70,7 +69,6 @@ mod test {
                 "peekr",
                 "storew", // x = 7
                 "#end",
-                "popr", "pop", "ret 0" // Implicit void return
             ]
                 .join("\n")
         )

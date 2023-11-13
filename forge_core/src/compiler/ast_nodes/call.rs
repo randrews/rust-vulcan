@@ -56,7 +56,6 @@ mod test {
                 "push _forge_gensym_1", // evaluating target (this fn)
                 "call", // Actually make the call
                 "pop", // expr-as-statement drops the evaluated value
-                "popr", "pop", "ret 0" // Implicit void return
             ]
                 .join("\n")
         );

@@ -68,7 +68,6 @@ mod test {
                 "peekr", // Push the addr of x
                 "swap 12", // The asm body, which swaps 12 behind it and stores it there
                 "storew",
-                "popr", "pop", "ret 0" // Implicit void return
             ]
                 .join("\n")
         )
@@ -105,10 +104,7 @@ mod test {
                 "storew", // taking the same (now freed) frame slot that c took, because c is
                 "peekr", // now out of scope
                 "loadw",
-                "popr", // Blow away old frame ptr
-                "pop",
-                "ret",
-                "popr", "pop", "ret 0" // Implicit void return
+                "jmpr @_forge_gensym_2",
             ]
                 .join("\n")
         );

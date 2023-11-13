@@ -47,7 +47,6 @@ mod test {
                 "mul",         // b * 2 evaluated
                 "peekr", // Loading "a" as an lvalue
                 "storew",      // doing the assignment
-                "popr", "pop", "ret 0" // Implicit void return
             ]
                 .join("\n")
         )

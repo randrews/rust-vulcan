@@ -78,10 +78,12 @@ mod test {
             "_forge_gensym_1:",
             "pushr",
             "push 5",
+            "jmpr @_forge_gensym_2",
+            "push 0",
+            "_forge_gensym_2:",
             "popr",
             "pop",
             "ret",
-            "popr", "pop", "ret 0", // Implicit void return
             "stack: .db 0",
         ].join("\n"));
 
@@ -95,11 +97,13 @@ mod test {
             "_forge_gensym_1: .db \"blah\\0\"",
             "_forge_gensym_2:",
             "pushr",
-            "push _forge_gensym_1",
+            "push _forge_gensym_1", // Push the str
+            "jmpr @_forge_gensym_3", // Return
+            "push 0", // Implicit return val
+            "_forge_gensym_3:", // outro
             "popr",
             "pop",
             "ret",
-            "popr", "pop", "ret 0", // Implicit void return
             "stack: .db 0",
         ].join("\n"))
     }
@@ -115,22 +119,26 @@ mod test {
         assert_eq!(asm.join("\n"), vec![
             ".org 0x400",
             "push stack",
-            "call _forge_gensym_2",
+            "call _forge_gensym_3",
             "hlt",
             "_forge_gensym_1:", // fn foo()
             "pushr", // capture frame ptr
-            "popr", // drop it and ret
+            "push 0", // implicit return
+            "_forge_gensym_2:",
+            "popr",
             "pop",
-            "ret 0",
-            "_forge_gensym_2:", // fn main()
+            "ret",
+            "_forge_gensym_3:", // fn main()
             "pushr", // capture frame ptr
             "peekr", // prep frame ptr to send to foo
             "push _forge_gensym_1", // load foo
             "call", // call it
             "pop", // Throw away its return value
-            "popr", // drop frame ptr and ret
+            "push 0", // Implicit return value
+            "_forge_gensym_4:", // Outro start
+            "popr", // Restore frame ptr
             "pop",
-            "ret 0",
+            "ret",
             "stack: .db 0",
         ].join("\n"))
     }

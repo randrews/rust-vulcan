@@ -1,6 +1,5 @@
 use std::collections::btree_map::Entry::Vacant;
 use std::fmt::Display;
-use crate::ast::Function;
 use crate::compiler::compile_error::CompileError;
 use crate::compiler::utils::{Label, Scope, Variable};
 
@@ -12,14 +11,17 @@ use crate::compiler::utils::{Label, Scope, Variable};
 ///
 /// A complete function implementation consists of:
 /// - A label for the entrypoint
-/// - The function body (including preamble code to set up the stack frame)
+/// - A label for the outro (returns jmpr here)
+/// - The function body
+/// - The function preamble (code to set up the stack frame, capture args)
+/// - The function outro (tear down the stack frame)
 ///
-/// The stack frame is managed by the function through a global pointer called "frame". When
-/// the function is called, it can assume that all memory after "frame" is free for use (this
+/// The stack frame is managed by the function through a pointer passed to it. When
+/// the function is called, it can assume that all memory after that pointer is free for use (this
 /// isn't actually true because you can blow out the stack, but within reason it is). So when
 /// you make a call to another function, you need to increment frame by the current frame size,
-/// and then after the other function has returned, decrement it back so that frame again points
-/// at your stack frame. Locals can be found by adding some offset from the frame pointer.
+/// and put that on the top of the data stack. Functions store their pointer in the top of the
+/// rstack, and locals can be found by adding some offset from the frame pointer.
 ///
 /// todo: the allocator problem has (probably) been solved! Make an alloca() that increases the
 /// current frame pointer by some size. To dynamically allocate memory, just put it in the stack
@@ -45,6 +47,7 @@ use crate::compiler::utils::{Label, Scope, Variable};
 #[derive(Clone, PartialEq, Debug, Default)]
 pub struct CompiledFn {
     pub label: Label,
+    pub end_label: Label,
     pub frame_size: usize,
     pub local_scope: Scope,
     pub arity: usize,
@@ -124,13 +127,11 @@ impl CompiledFn {
     /// depends on knowledge of the body of the fn, but what this produces will be emitted to
     /// the final listing before the fn body
     pub(crate) fn generate_preamble_outro(&mut self, args: &Vec<String>) -> Result<(), CompileError> {
-        let mut arg_names: Vec<&str> = Vec::new();
-
         // Does our fn make any allocations? If so we need to save the old alloc pool pointer:
         if self.alloc {
             todo!("alloc pool not actually implemented");
-            self.preamble_emit("loadw pool");
-            self.preamble_emit("pushr");
+            //self.preamble_emit("loadw pool");
+            //self.preamble_emit("pushr");
         }
 
         // Top argument is the frame ptr; copy it to the rstack:
@@ -152,6 +153,28 @@ impl CompiledFn {
                 self.preamble_emit("storew");
             }
         }
+
+        // Create the outro:
+        // First, we might fall through to here, so, leave a push 0 on the stack. Normally we roll
+        // with an empty stack, or have some data and jmpr here, but if we fall through this will
+        // ensure that the following return returns something:
+        self.outro_emit("push 0");
+
+        // Now, the outro label:
+        self.outro_emit(format!("{}:", self.end_label).as_str());
+
+        // The top of the rstack is, of course, the frame ptr. So we need to get rid of that:
+        self.outro_emit("popr");
+        self.outro_emit("pop");
+
+        // If we alloced anything, we need to drain that pool:
+        if self.alloc {
+            todo!("alloc pool not implemented yet");
+        }
+
+        // We're in the same condition we entered in except that our return value is on the stack
+        // (or a default 0 is) so time to actually return:
+        self.outro_emit("ret");
 
         Ok(())
     }

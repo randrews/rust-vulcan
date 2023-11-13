@@ -105,11 +105,11 @@ fn cursed_call_test() {
     assert_eq!(compiler_output(src).join("\n"), vec![
         ".org 0x400",
         "push stack",
-        "call _forge_gensym_2",
+        "call _forge_gensym_3",
         "hlt",
         "_forge_gensym_1:", // foo()
-        "pushr","push 2","popr","pop","ret","popr","pop","ret 0",
-        "_forge_gensym_2:", // main()
+        "pushr","push 2","jmpr @_forge_gensym_2","push 0","_forge_gensym_2:","popr","pop","ret",
+        "_forge_gensym_3:", // main()
         "pushr", // preamble (no args)
         "push 0", "peekr", "storew", // repeat counter var (n)
         "push 2", // repeat limit
@@ -134,7 +134,9 @@ fn cursed_call_test() {
         "#end",
         "peekr","dup","loadw","add 1","swap","storew","#end", // inc n, end the loop
         "pop", // Drop the loop limit off
-        "popr","pop","ret 0", // Implicit return 0 to end main
+        "push 0", // Implicit return value
+        "_forge_gensym_4:",
+        "popr","pop","ret", // Standard outro
         "stack: .db 0", // The stack
     ].join("\n"))
 }

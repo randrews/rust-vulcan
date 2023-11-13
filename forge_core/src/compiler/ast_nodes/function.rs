@@ -1,4 +1,4 @@
-use crate::ast::{Function, Location, Return};
+use crate::ast::{Function, Location};
 use crate::compiler::compilable::Compilable;
 use crate::compiler::compiled_fn::CompiledFn;
 use crate::compiler::CompileError;
@@ -7,10 +7,12 @@ use crate::compiler::state::State;
 impl Compilable for Function {
     fn process(self, state: &mut State, _: Option<&mut CompiledFn>, loc: Location) -> Result<(), CompileError> {
         let label = state.find_or_declare_function(self.name.as_str(), loc)?;
+        let end_label = state.gensym(); // The label of the outro of the fn
 
         // The CompiledFn for this function, which will eventually get stuff populated into it:
         let mut sig = CompiledFn {
             label,
+            end_label,
             ..Default::default()
         };
 
@@ -31,11 +33,6 @@ impl Compilable for Function {
         // body is compiled (won't know if we have any args / need to mess with pool) but things
         // created here will be emitted before (preamble) and after (outro) the body
         sig.generate_preamble_outro(&self.args)?;
-
-        // This fn probably has a return statement... but it's not required. As a final catch just
-        // in case we fall through to this point, we'll generate a void return and compile it:
-        // TODO this can die soon because the outro is implicitly a return so we'd just fall into that
-        Return(None).process(state, Some(&mut sig), loc)?;
 
         // This can't fail because if it were a dupe name, adding the global would have failed
         state.functions.insert(self.name.clone(), sig);
@@ -63,7 +60,6 @@ mod test {
                 "peekr", // Calculate the lvalue
                 "add 3",       // "b" arg is frame + 3
                 "storew",      // Finally store
-                "popr", "pop", "ret 0" // Implicit void return
             ]
                 .join("\n")
         )
