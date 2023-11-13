@@ -86,7 +86,26 @@ fn scope_test() {
 }
 
 #[test]
-fn cursed_call_test() {
+fn recursion_test() {
+    // Recursive call with some stuff in it
+    assert_eq!(
+        main_return(
+            "fn sum(n) {
+                    if (n > 0) {
+                        return n + sum(n - 1);
+                    } else {
+                        return 0;
+                    }
+                }
+                 fn main() { return sum(5); }"),
+        15
+    )
+}
+
+//#[test]
+// This is no longer cursed, or a test. The revised calling convention with the pool pointer makes
+// it now perfectly sane. Left here for posterity.
+fn _cursed_call_test() {
     // This is a cursed subtlety of block scoping and the way calls are compiled. It's not actually
     // a bug. It's explained below:
     let src = "

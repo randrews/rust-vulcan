@@ -16,13 +16,10 @@ impl Compilable for Call {
             arg.process(state, Some(sig), loc)?;
         }
 
-        // Now we increment the frame ptr to right after the current frame:
-        // see cursed test case in vtest/forge_tests.rs
-        sig.emit("peekr");
-        let frame_size = sig.frame_size();
-        if frame_size > 0 {
-            sig.emit_arg("add", frame_size);
-        }
+        // Whatever shall we send as a frame pointer to the new fn? Our pool pointer, because we
+        // know that's free, even if we've alloced anything, it'll increment it:
+        sig.emit("popr"); sig.emit("peekr"); // take the frame ptr off and copy the pool off
+        sig.emit("swap"); sig.emit("pushr"); // swap the pool under the frame and put the frame back on
 
         // Eval the target
         self.target.0.process(state, Some(sig), loc)?;
@@ -51,8 +48,7 @@ mod test {
             vec![
                 "push 2", // evaluating args, in order
                 "push 3",
-                "peekr", // The new fn's frame ptr:
-                "add 6",
+                "popr", "peekr", "swap", "pushr", // Pool ptr to send to the new call
                 "push _forge_gensym_1", // evaluating target (this fn)
                 "call", // Actually make the call
                 "pop", // expr-as-statement drops the evaluated value

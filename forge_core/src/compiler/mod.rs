@@ -140,7 +140,7 @@ mod test {
             "_forge_gensym_3:", // fn main()
             "dup", "pushr", // capture pool ptr
             "pushr", // capture frame ptr
-            "peekr", // prep frame ptr to send to foo
+            "popr", "peekr", "swap", "pushr", // Grab pool ptr to send to foo
             "push _forge_gensym_1", // load foo
             "call", // call it
             "pop", // Throw away its return value
