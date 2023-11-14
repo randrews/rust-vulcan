@@ -7,8 +7,8 @@ use crate::compiler::utils::Variable;
 
 impl Compilable for Global {
     fn process(self, state: &mut State, _: Option<&mut CompiledFn>, _loc: Location) -> Result<(), CompileError> {
-        if self.size.is_some() {
-            todo!("Global arrays are not yet supported")
+        if self.initial.is_some() {
+            todo!("Globals with initials are not yet supported")
         }
         state.add_global(&self.name, |s| Variable::IndirectLabel(s.gensym()))
     }

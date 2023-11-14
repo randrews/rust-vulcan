@@ -91,7 +91,6 @@ return_stmt = { "return" ~ expr? }
 conditional = { "if" ~ "(" ~ expr ~ ")" ~ block ~ ("else" ~ block)? }
 while_loop  = { "while" ~ "(" ~ expr ~ ")" ~ block }
 repeat_loop = { "repeat" ~ "(" ~ expr ~ ")" ~ name? ~ block }
-var_decl    = { "var" ~ name ~ size? ~ ("=" ~ expr)? }
-global      = { "global" ~ name ~ size? ~ ";" }
-size        = { "[" ~ expr ~ "]" }
+var_decl    = { "var" ~ name ~ ("=" ~ expr)? }
+global      = { "global" ~ name ~ ("=" ~ expr)? ~ ";" }
 const_decl  = { "const" ~ name ~ "=" ~ (string | expr) ~ ";" }

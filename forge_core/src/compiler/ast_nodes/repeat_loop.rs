@@ -15,7 +15,6 @@ impl Compilable for RepeatLoop {
         if named_counter {
             let decl = VarDecl {
                 name: counter_name.clone(),
-                size: None,
                 initial: Some(Expr::Number(0)),
             };
             decl.process(state, Some(sig), loc)?;

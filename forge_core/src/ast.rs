@@ -30,7 +30,7 @@ pub enum Declaration {
 #[derive(PartialEq, Clone, Debug)]
 pub struct Global {
     pub name: String,
-    pub size: Option<Expr>,
+    pub initial: Option<Expr>,
 }
 
 #[derive(PartialEq, Clone, Debug)]
@@ -105,7 +105,6 @@ impl From<Expr> for Lvalue {
 #[derive(PartialEq, Clone, Debug)]
 pub struct VarDecl {
     pub name: String,
-    pub size: Option<Expr>,
     pub initial: Option<Expr>,
 }
 

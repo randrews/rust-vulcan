@@ -44,6 +44,13 @@ pub fn build_boot(src: &str) -> Result<Vec<String>, CompileError> {
         for (label, val) in state.strings.iter() {
             asm.push(format!("{}: .db \"{}\\0\"", label, val))
         }
+        for (label, val) in state.global_scope.iter() {
+            // All global variables are indirect labels; anything in scope that's not that is a const,
+            // fn, or string, which we'll emit elsewhere.
+            if let Variable::IndirectLabel(label) = val {
+                asm.push(format!("{}: .db 0", label))
+            }
+        }
         for (_, val) in state.functions.iter_mut() {
             asm.push(format!("{}:", val.label));
             asm.append(val.preamble.as_mut());
@@ -118,7 +125,24 @@ mod test {
 
     #[test]
     fn test_global_vars() {
-
+        // Trying a non-str global var
+        let asm = build_boot("global foo; fn main() { foo = 3; }".into()).unwrap();
+        assert_eq!(asm.join("\n"), vec![
+            ".org 0x400",
+            "push stack",
+            "call _forge_gensym_2",
+            "hlt",
+            "_forge_gensym_1: .db 0", // The global var
+            "_forge_gensym_2:", // main()
+            "dup", "pushr", "pushr", // The frame is zero length; that's a global we're assigning to
+            "push 3", // rvalue
+            "push _forge_gensym_1", // lvalue
+            "storew",
+            "push 0",
+            "_forge_gensym_3:",
+            "popr", "pop", "popr", "pop", "ret",
+            "stack: .db 0",
+        ].join("\n"))
     }
 
     #[test]

@@ -126,6 +126,20 @@ fn array_test() {
     )
 }
 
+#[test]
+fn global_test() {
+    // Declare an array and do things
+    assert_eq!(
+        main_return(
+            "global a;
+                fn main() {
+                    a = 10;
+                    return a;
+                }"),
+        10
+    )
+}
+
 //#[test]
 // This is no longer cursed, or a test. The revised calling convention with the pool pointer makes
 // it now perfectly sane. Left here for posterity.

@@ -6,9 +6,9 @@ impl AstNode for Global {
     fn from_pair(pair: Pair) -> Self {
         let mut inner = pair.into_inner().peekable();
         let name = String::from(inner.next().unwrap().as_str());
-        let size = inner.next().map(Expr::from_pair);
+        let initial = inner.next().map(Expr::from_pair);
 
-        Global { name, size }
+        Global { name, initial }
     }
 }
 
@@ -23,18 +23,18 @@ mod test {
             Global::from_str("global foo;"),
             Ok(Global {
                 name: "foo".into(),
-                size: None,
+                initial: None,
             })
         )
     }
 
     #[test]
-    fn parse_global_arrays() {
+    fn parse_global_vars() {
         assert_eq!(
-            Global::from_str("global foo[10];"),
+            Global::from_str("global foo = 10;"),
             Ok(Global {
                 name: "foo".into(),
-                size: Some(10.into()),
+                initial: Some(10.into()),
             })
         );
     }

@@ -7,9 +7,6 @@ use crate::compiler::state::State;
 impl Compilable for VarDecl {
     fn process(self, state: &mut State, sig: Option<&mut CompiledFn>, loc: Location) -> Result<(), CompileError> {
         let sig = sig.expect("Var declaration outside function");
-        if self.size.is_some() {
-            todo!("Arrays are not yet supported")
-        }
         if let Some(initial) = self.initial {
             // If it's got an initial value, we have to compile that before we add
             // the name to scope, or else UB will ensue if it refers to itself:

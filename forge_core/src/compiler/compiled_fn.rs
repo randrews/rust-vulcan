@@ -211,7 +211,6 @@ impl CompiledFn {
 
 #[cfg(test)]
 mod test {
-    use super::*;
     use crate::compiler::test_utils::*;
 
     #[test]
