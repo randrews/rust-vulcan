@@ -82,12 +82,9 @@ impl CompiledFn {
         }
     }
 
-    pub(crate) fn text(&self) -> Vec<String> {
-        let preamble = self.preamble.0.clone();
-        let body = self.body.0.clone();
-        let outro = self.outro.0.clone();
-
-        [preamble, body, outro].into_iter().flatten().collect()
+    /// Return an iterator over all the
+    pub fn text(&self) -> impl Iterator<Item = &str> {
+        self.preamble.0.iter().chain(self.body.0.iter()).chain(self.outro.0.iter()).map(String::as_str)
     }
 
     /// Emit and emit arg should just be delegated to `body`

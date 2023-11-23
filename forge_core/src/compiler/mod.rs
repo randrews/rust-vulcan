@@ -47,7 +47,9 @@ pub fn build_boot(src: &str) -> Result<Vec<String>, CompileError> {
         // Now start dumping compiled objects into there. First functions:
         for (_, val) in state.functions.iter_mut() {
             asm.push(format!("{}:", val.label));
-            asm.append(val.text().as_mut());
+            for line in val.text() {
+                asm.push(String::from(line));
+            }
         }
 
         // Strings:
