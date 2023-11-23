@@ -44,7 +44,7 @@ pub fn eval_const(expr: Expr, scope: &Scope) -> Result<i32, CompileError> {
         // (currently) parsed as a special case of const. The only things that will hit this are
         // const expressions that include strings, like '"foo"[2]' or something. Those can't be
         // (generally) calculated at compile time, so, they're an error.
-        Expr::Address(_) | Expr::Deref(_) | Expr::String(_) => Err(CompileError(
+        Expr::Address(_) | Expr::Deref(_) | Expr::String(_) | Expr::Static(_) => Err(CompileError(
             0,
             0,
             String::from("Addresses are not known at compile time"),

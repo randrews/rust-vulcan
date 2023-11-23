@@ -40,22 +40,32 @@ pub fn build_boot(src: &str) -> Result<Vec<String>, CompileError> {
         // When main returns, just hlt:
         asm.push("hlt".into());
 
-        // Now start dumping compiled objects into there:
+        // Now start dumping compiled objects into there. First functions:
+        for (_, val) in state.functions.iter_mut() {
+            asm.push(format!("{}:", val.label));
+            asm.append(val.preamble.as_mut());
+            asm.append(val.body.as_mut());
+            asm.append(val.outro.as_mut());
+        }
+
+        // Strings:
         for (label, val) in state.strings.iter() {
             asm.push(format!("{}: .db \"{}\\0\"", label, val))
         }
-        for (label, val) in state.global_scope.iter() {
+
+        // Global vars:
+        for (_, val) in state.global_scope.iter() {
             // All global variables are indirect labels; anything in scope that's not that is a const,
             // fn, or string, which we'll emit elsewhere.
             if let Variable::IndirectLabel(label) = val {
                 asm.push(format!("{}: .db 0", label))
             }
         }
-        for (_, val) in state.functions.iter_mut() {
-            asm.push(format!("{}:", val.label));
-            asm.append(val.preamble.as_mut());
-            asm.append(val.body.as_mut());
-            asm.append(val.outro.as_mut());
+
+        // Static buffers:
+        for(label, size) in state.buffers {
+            asm.push(format!("{}: .db 0", label));
+            asm.push(format!(".org {} + {}", label, size));
         }
 
         // Final thing is to place a label for the stack:
@@ -105,7 +115,6 @@ mod test {
             "push stack",
             "call _forge_gensym_2",
             "hlt",
-            "_forge_gensym_1: .db \"blah\\0\"",
             "_forge_gensym_2:",
             "dup",
             "pushr",
@@ -119,6 +128,7 @@ mod test {
             "popr",
             "pop",
             "ret",
+            "_forge_gensym_1: .db \"blah\\0\"",
             "stack: .db 0",
         ].join("\n"))
     }
@@ -132,7 +142,6 @@ mod test {
             "push stack",
             "call _forge_gensym_2",
             "hlt",
-            "_forge_gensym_1: .db 0", // The global var
             "_forge_gensym_2:", // main()
             "dup", "pushr", "pushr", // The frame is zero length; that's a global we're assigning to
             "push 3", // rvalue
@@ -141,6 +150,7 @@ mod test {
             "push 0",
             "_forge_gensym_3:",
             "popr", "pop", "popr", "pop", "ret",
+            "_forge_gensym_1: .db 0", // The global var
             "stack: .db 0",
         ].join("\n"))
     }

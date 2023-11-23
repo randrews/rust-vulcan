@@ -15,6 +15,8 @@ pub(crate) struct State {
     pub functions: BTreeMap<String, CompiledFn>,
     /// The string table
     pub strings: Vec<(Label, String)>,
+    /// The statically-allocated buffers (size in bytes)
+    pub buffers: Vec<(Label, usize)>,
     /// The functions that have been prototyped but not yet defined
     pub prototypes: Scope,
 }
@@ -49,6 +51,12 @@ impl State {
     pub(crate) fn add_string(&mut self, string: &str) -> Label {
         let sym = self.gensym();
         self.strings.push((sym.clone(), string.into()));
+        sym
+    }
+
+    pub(crate) fn add_buffer(&mut self, size: usize) -> Label {
+        let sym = self.gensym();
+        self.buffers.push((sym.clone(), size));
         sym
     }
 

@@ -91,6 +91,9 @@ impl Compilable for Expr {
                 compile_alloc(&mut sig);
                 Ok(())
             },
+            Expr::Static(size_expr) => {
+                compile_static(size_expr, state, sig)
+            }
             Expr::Subscript(array, index) => {
                 array.0.process(state, Some(sig), loc)?;
                 index.0.process(state, Some(sig), loc)?;
@@ -172,6 +175,13 @@ fn compile_alloc(sig: &mut CompiledFn) {
     sig.emit("pushr");
     sig.emit("swap");
     sig.emit("pushr");
+}
+
+fn compile_static(expr: BoxExpr, state: &mut State, sig: &mut CompiledFn) -> Result<(), CompileError> {
+    let size = eval_const(*expr.0, &state.global_scope)? as usize;
+    let label = state.add_buffer(size * 3);
+    sig.emit_arg("push", label);
+    Ok(())
 }
 
 #[cfg(test)]
@@ -279,6 +289,18 @@ mod test {
                 "add", // ..added to base...
                 "loadw", // ...And loaded
                 "jmpr @_forge_gensym_2", // (and returned)
+            ].join("\n")
+        )
+    }
+
+    #[test]
+    fn test_static() {
+        assert_eq!(
+            test_body(state_for("fn test() { var x = static(1); }")),
+            vec![
+                "push _forge_gensym_3", // Address of a 3-byte buffer
+                "peekr",
+                "storew",
             ].join("\n")
         )
     }

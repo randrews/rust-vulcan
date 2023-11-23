@@ -19,6 +19,7 @@ impl AstNode for Expr {
             .map_primary(|term| match term.as_rule() {
                 PestRule::number => Expr::Number(term.into_number()),
                 PestRule::alloc => Expr::New(Expr::from_pair(term.first()).into()),
+                PestRule::static_alloc => Expr::Static(Expr::from_pair(term.first()).into()),
                 PestRule::name => Expr::Name(String::from(term.as_str())),
                 PestRule::expr => Expr::from_pair(term),
                 PestRule::string => Self::String(term.into_quoted_string()),
@@ -274,5 +275,10 @@ mod test {
     #[test]
     fn alloc() {
         assert_eq!(Expr::from_str("new(8)"), Ok(Expr::New(8.into())));
+    }
+
+    #[test]
+    fn static_alloc() {
+        assert_eq!(Expr::from_str("static(8)"), Ok(Expr::Static(8.into())));
     }
 }

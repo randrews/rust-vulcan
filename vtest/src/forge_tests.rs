@@ -15,6 +15,12 @@ fn compiler_output(src: &str) -> Vec<String> {
     forge_core::compiler::build_boot(src).unwrap()
 }
 
+#[allow(dead_code)]
+fn assembler_output(src: &str) -> Vec<u8> {
+    let asm = compiler_output(src);
+    assemble_snippet(asm).unwrap()
+}
+
 fn main_return(src: &str) -> i32 {
     let mut cpu = run_forge(src);
     cpu.pop_data().into()
@@ -138,6 +144,26 @@ fn global_test() {
                 }"),
         10
     )
+}
+
+#[test]
+fn static_test() {
+    // Because the static(1) returns the same address each time, a[0] is the same variable
+    // no matter how many times foo is called
+    let src = "
+        global a;
+        fn foo() {
+            a = static(1);
+            a[0] = a[0] + 1;
+        }
+        fn main() {
+            foo(); foo(); foo();
+            return a[0];
+        }";
+    assert_eq!(
+        main_return(src),
+        3
+    );
 }
 
 //#[test]
