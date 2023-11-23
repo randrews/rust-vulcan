@@ -2,6 +2,7 @@ use std::cmp::max;
 use std::collections::btree_map::Entry::Vacant;
 use std::fmt::Display;
 use crate::compiler::compile_error::CompileError;
+use crate::compiler::text::Text;
 use crate::compiler::utils::{Label, Scope, Variable};
 
 /// The data associated with a function signature:
@@ -24,7 +25,7 @@ use crate::compiler::utils::{Label, Scope, Variable};
 /// and put that on the top of the data stack. Functions store their pointer in the top of the
 /// rstack, and locals can be found by adding some offset from the frame pointer.
 ///
-/// The max_frams_size field is important: this is the most entries that can be in scope at one time.
+/// The max_frame_size field is important: this is the most entries that can be in scope at one time.
 /// The reason that's important is that anything in the stack _after_ that many slots is available
 /// for use by the allocator pool. The second entry in the rstack is the "pool pointer" which is the
 /// address of the first byte of the stack that we haven't used yet. When we want to allocate more
@@ -54,9 +55,15 @@ pub struct CompiledFn {
     pub max_frame_size: usize,
     pub local_scope: Scope,
     pub arity: usize,
-    pub preamble: Vec<String>,
-    pub body: Vec<String>,
-    pub outro: Vec<String>,
+
+    /// The preamble is the area of the function capturing the args, etc
+    pub preamble: Text,
+
+    /// The body is the actual body of the function
+    pub body: Text,
+
+    /// The outro handles restoring the stack / pool pointers and pushing the return value
+    pub outro: Text,
 }
 
 impl CompiledFn {
@@ -75,37 +82,21 @@ impl CompiledFn {
         }
     }
 
-    /// Emit a string (ideally one instruction, but whatever) to the function body.
-    /// This doesn't actually emit anything to output, the body will eventually be emitted
-    /// in a final pass by the compiler once all functions are compiled.
+    pub(crate) fn text(&self) -> Vec<String> {
+        let preamble = self.preamble.0.clone();
+        let body = self.body.0.clone();
+        let outro = self.outro.0.clone();
+
+        [preamble, body, outro].into_iter().flatten().collect()
+    }
+
+    /// Emit and emit arg should just be delegated to `body`
     pub(crate) fn emit(&mut self, opcode: &str) {
-        self.body.push(String::from(opcode))
+        self.body.emit(opcode)
     }
 
-    /// Emit a string (ideally one instruction, but whatever) to the function preamble.
-    /// This is very similar to `emit` but it appends the line to a section that will be written
-    /// before the body. If we need to write something that depends on the body but must be run
-    /// before it, it gets written through here.
-    pub(crate) fn preamble_emit(&mut self, opcode: &str) {
-        self.preamble.push(String::from(opcode))
-    }
-
-    /// Emit a string (ideally one instruction, but whatever) to the function outro. Just like the
-    /// body and preamble, the outro is part of the fn, but will be emitted after the fn body. Any
-    /// cleanup that needs to happen should happen here.
-    pub(crate) fn outro_emit(&mut self, opcode: &str) {
-        self.outro.push(String::from(opcode))
-    }
-
-    /// A shorthand method to emit something with a `Display` arg, because emitting a
-    /// single instruction with a variable (numeric or label) arg is very common.
     pub(crate) fn emit_arg<T: Display>(&mut self, opcode: &str, arg: T) {
-        self.body.push(format!("{} {}", opcode, arg))
-    }
-
-    /// Preamble version of emit_arg
-    pub(crate) fn preamble_emit_arg<T: Display>(&mut self, opcode: &str, arg: T) {
-        self.preamble.push(format!("{} {}", opcode, arg))
+        self.body.emit_arg(opcode, arg)
     }
 
     /// The (current) size of the local scope in bytes. This increases as variables are declared,
@@ -133,15 +124,15 @@ impl CompiledFn {
     pub(crate) fn generate_preamble_outro(&mut self, args: &Vec<String>) -> Result<(), CompileError> {
         // First, we need a pool pointer on the rstack. We know this because it's the current top
         // (the frame ptr) plus a (known) max scope size:
-        self.preamble_emit("dup");
+        self.preamble.emit("dup");
         if self.max_frame_size > 0 {
             // Pool ptr is right after the locals, so, add max_frame_size
-            self.preamble_emit_arg("add", self.max_frame_size);
+            self.preamble.emit_arg("add", self.max_frame_size);
         }
-        self.preamble_emit("pushr");
+        self.preamble.emit("pushr");
 
         // The top argument we were sent is the frame ptr, store that also:
-        self.preamble_emit("pushr");
+        self.preamble.emit("pushr");
 
         // Add each argument as a local
         let mut arg_names: Vec<_> = args.iter().map(|a| a.clone()).collect();
@@ -152,11 +143,11 @@ impl CompiledFn {
 
         for name in arg_names {
             if let Variable::Local(offset) = self.local_scope[&name] {
-                self.preamble_emit("peekr");
+                self.preamble.emit("peekr");
                 if offset != 0 {
-                    self.preamble_emit_arg("add", offset);
+                    self.preamble.emit_arg("add", offset);
                 }
-                self.preamble_emit("storew");
+                self.preamble.emit("storew");
             }
         }
 
@@ -164,21 +155,21 @@ impl CompiledFn {
         // First, we might fall through to here, so, leave a push 0 on the stack. Normally we roll
         // with an empty stack, or have some data and jmpr here, but if we fall through this will
         // ensure that the following return returns something:
-        self.outro_emit("push 0");
+        self.outro.emit("push 0");
 
         // Now, the outro label:
-        self.outro_emit(format!("{}:", self.end_label).as_str());
+        self.outro.emit(format!("{}:", self.end_label).as_str());
 
         // The top of the rstack is, of course, the frame ptr and pool ptr. So we need to get rid of
         // those:
-        self.outro_emit("popr");
-        self.outro_emit("pop");
-        self.outro_emit("popr");
-        self.outro_emit("pop");
+        self.outro.emit("popr");
+        self.outro.emit("pop");
+        self.outro.emit("popr");
+        self.outro.emit("pop");
 
         // We're in the same condition we entered in except that our return value is on the stack
         // (or a default 0 is) so time to actually return:
-        self.outro_emit("ret");
+        self.outro.emit("ret");
 
         Ok(())
     }

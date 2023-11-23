@@ -13,6 +13,7 @@ mod compilable;
 
 #[cfg(test)]
 mod test_utils;
+mod text;
 
 ///////////////////////////////////////////////////////////
 
@@ -31,6 +32,9 @@ pub fn build_boot(src: &str) -> Result<Vec<String>, CompileError> {
         // Now we start piling stuff into the vec, starting with an org:
         asm.push(".org 0x400".into());
 
+        // We need to put in any global initialization:
+        asm.append(state.init.0.as_mut());
+
         // Main takes no args, but it does take a frame ptr:
         asm.push("push stack".into());
 
@@ -43,9 +47,7 @@ pub fn build_boot(src: &str) -> Result<Vec<String>, CompileError> {
         // Now start dumping compiled objects into there. First functions:
         for (_, val) in state.functions.iter_mut() {
             asm.push(format!("{}:", val.label));
-            asm.append(val.preamble.as_mut());
-            asm.append(val.body.as_mut());
-            asm.append(val.outro.as_mut());
+            asm.append(val.text().as_mut());
         }
 
         // Strings:
@@ -185,6 +187,31 @@ mod test {
             "popr", // Drop pool ptr
             "pop",
             "ret",
+            "stack: .db 0",
+        ].join("\n"))
+    }
+
+    #[test]
+    fn test_global_static() {
+        let asm = build_boot("global a = static(10); fn main() { a[2] = 5; }".into()).unwrap();
+        assert_eq!(asm.join("\n"), vec![
+            ".org 0x400",
+            "push _forge_gensym_2", // the addr of the static buffer
+            "storew _forge_gensym_1", // stored in a
+            "push stack",
+            "call _forge_gensym_3",
+            "hlt",
+            "_forge_gensym_3:", // fn main()
+            "dup", "pushr", "pushr", // capture pool / frame ptrs
+            "push 5", // rvalue
+            "loadw _forge_gensym_1", "push 2", "mul 3", "add", "storew", // store it in a[2]
+            "push 0", // Implicit return value
+            "_forge_gensym_4:", // Outro start
+            "popr", "pop", "popr", "pop", // Drop frame / pool ptrs
+            "ret",
+            "_forge_gensym_1: .db 0", // a itself
+            "_forge_gensym_2: .db 0", // the buffer
+            ".org _forge_gensym_2 + 30",
             "stack: .db 0",
         ].join("\n"))
     }

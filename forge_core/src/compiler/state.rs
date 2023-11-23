@@ -2,6 +2,7 @@ use std::collections::BTreeMap;
 use crate::ast::Location;
 use crate::compiler::compile_error::CompileError;
 use crate::compiler::compiled_fn::CompiledFn;
+use crate::compiler::text::Text;
 use crate::compiler::utils::{Label, Scope, Variable};
 
 /// The compiler state:
@@ -19,6 +20,8 @@ pub(crate) struct State {
     pub buffers: Vec<(Label, usize)>,
     /// The functions that have been prototyped but not yet defined
     pub prototypes: Scope,
+    /// The initialization code for globals
+    pub init: Text,
 }
 
 impl State {

@@ -12,13 +12,13 @@ pub(crate) fn state_for(src: &str) -> State {
 }
 
 pub(crate) fn test_body(state: State) -> String {
-    state.functions.get("test").unwrap().body.join("\n")
+    state.functions.get("test").unwrap().body.0.join("\n")
 }
 
 pub(crate) fn test_preamble(state: State) -> String {
-    state.functions.get("test").unwrap().preamble.join("\n")
+    state.functions.get("test").unwrap().preamble.0.join("\n")
 }
 
 pub(crate) fn test_outro(state: State) -> String {
-    state.functions.get("test").unwrap().outro.join("\n")
+    state.functions.get("test").unwrap().outro.0.join("\n")
 }

@@ -166,6 +166,24 @@ fn static_test() {
     );
 }
 
+#[test]
+fn static2_test() {
+    // An actual global static array
+    let src = "
+        global a = static(1);
+        fn foo() {
+            a[0] = a[0] + 1;
+        }
+        fn main() {
+            foo(); foo(); foo();
+            return a[0];
+        }";
+    assert_eq!(
+        main_return(src),
+        3
+    );
+}
+
 //#[test]
 // This is no longer cursed, or a test. The revised calling convention with the pool pointer makes
 // it now perfectly sane. Left here for posterity.

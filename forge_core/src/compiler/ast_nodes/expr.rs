@@ -24,7 +24,7 @@ impl Compilable for Expr {
         match self {
             Expr::Number(n) => {
                 // Numbers are just pushed as literals
-                sig.body.push(format!("push {}", n));
+                sig.emit_arg("push", n);
                 Ok(())
             }
             Expr::Name(name) => {
