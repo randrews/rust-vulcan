@@ -18,7 +18,7 @@ impl Compilable for Global {
             state.init.emit_arg("storew", label.clone());
         }
 
-        state.add_global(&self.name, |s| Variable::IndirectLabel(label.clone()))
+        state.add_global(&self.name, |_| Variable::IndirectLabel(label.clone()))
     }
 }
 
@@ -52,7 +52,7 @@ mod test {
 
     #[test]
     fn test_init() {
-        let mut state = state_for("global a = 5 + 3;");
+        let state = state_for("global a = 5 + 3;");
         assert_eq!(
             state.init.0.join("\n"),
             vec![

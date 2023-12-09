@@ -1513,6 +1513,7 @@ dependencies = [
 name = "vweb"
 version = "0.1.0"
 dependencies = [
+ "forge_core",
  "serde",
  "serde-wasm-bindgen",
  "vasm_core",
