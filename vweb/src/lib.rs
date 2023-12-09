@@ -4,8 +4,6 @@ mod nova_forth;
 mod error;
 
 use wasm_bindgen::prelude::*;
-use vcore::memory::{PeekPoke, PeekPokeExt};
-use serde::{ Deserialize, Serialize };
 use crate::error::JsVasmError;
 
 #[wasm_bindgen]
