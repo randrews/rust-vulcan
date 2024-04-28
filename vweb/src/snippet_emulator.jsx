@@ -22,7 +22,7 @@ export default function({ children, width = 80 }) {
     const onChangeSrc = useCallback((e) => setSrc(e.target.value), []) // Callback for the textarea
     const [binary, setBinary] = useState(null) // The assembled binary
     const [sourceMap, setSourceMap] = useState(null) // A map from byte address to line number
-    const [cpu, _setCpu] = useState(new WasmCPU()) // The actual CPU emulator itself
+    const [cpu, _setCpu] = useState(() => new WasmCPU()) // The actual CPU emulator itself
     const [activeLine, setActiveLine] = useState(null) // The (0-based) index of the
 
     // Update which line is highlighted. This should be called in most button callbacks.
