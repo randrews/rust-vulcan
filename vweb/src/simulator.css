@@ -1,0 +1,82 @@
+/* Basic night-mode and mono styling */
+body {
+    background-color: #333333;
+    color: #dddddd;
+    font-family: monospace;
+}
+a { color: #cccccc; }
+
+/* The simulator container itself, with the grid */
+.simulator {
+    display: grid;
+    grid-template:
+        "tab" 1em
+        "btns" 1em
+        "content" 1fr
+        "status" 1em / 1fr;
+    row-gap: 0.3em;
+}
+
+/* Setting where things go in the grid */
+.tabbar { grid-area: tab }
+.buttons { grid-area: btns }
+.content { grid-area: content }
+.status { grid-area: status }
+
+/* Make the content fill the remainder of the screen */
+.content {
+    height: calc(100vh - 5em);
+    width: 100%;
+    overflow: auto;
+}
+
+/* Some styling to the <pre>s in the content */
+.content pre {
+    margin: 0;
+}
+
+/* Make the textarea look presentable (TODO: replace with CodeMirror) */
+.content textarea {
+    height: 100%;
+    width: 100%;
+    padding: 0;
+    margin: 0;
+    background: #000000;
+    color: #a0a0a0;
+    border: none;
+    resize: none;
+    outline: none;
+}
+
+.forge-editor textarea:focus {
+    border: none;
+    outline: none;
+}
+
+/* Status, btns, tabs all look right */
+.status, .buttons, .tabbar { font-weight: bold; }
+.tabbar a, .buttons a { cursor: pointer; }
+
+/* Make the display the right size by centering the canvas in a rectangle*/
+.display {
+    height: 100%;
+    display: grid;
+    grid-template:
+        "lt top rt" 1fr
+        "lt screen rt" calc(480px + 4em)
+        "lt btm rt" 1fr / 1fr calc(640px + 4em) 1fr;
+}
+
+/* The beige monitor border around the screen */
+.display { background-color: #0f0f0f }
+.display canvas {
+    grid-area: screen;
+    border: 2em solid #bb9;
+    border-radius: 2em;
+}
+
+/* Colors of tabs and buttons */
+.tabbar a.active { background-color: #686868; }
+.buttons .run { color: #66bb66 }
+.buttons .stop { color: #bb6666 }
+.buttons .build { color: #aaaaff; }

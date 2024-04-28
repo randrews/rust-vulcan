@@ -1,0 +1,22 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Forge Editor Demo</title>
+    <link rel="stylesheet" href="simulator.css"/>
+    <script type="module" src="forge_editor_demo.js"></script>
+</head>
+<body>
+<div class="simulator">
+    <pre>
+        fn main() {
+          var n = 0;
+          while (n < 40 * 30) {
+            asm(72, n + 0x10000) { store }
+            n = n + 1;
+          }
+        }
+    </pre>
+</div>
+</body>
+</html>
