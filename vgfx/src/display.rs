@@ -21,8 +21,8 @@ impl Default for DisplayRegisters {
             screen: Word::from(0x10000),
             palette: Word::from(0x20000 - 0x100),
             font: Word::from(0x20000 - 0x100 - 0x2000),
-            height: Word::from(60),
-            width: Word::from(80),
+            height: Word::from(30),
+            width: Word::from(40),
             row_offset: Word::from(0),
             col_offset: Word::from(0),
         }
