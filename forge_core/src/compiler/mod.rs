@@ -54,7 +54,13 @@ pub fn build_boot(src: &str) -> Result<Vec<String>, CompileError> {
 
         // Strings:
         for (label, val) in state.strings.iter() {
-            asm.push(format!("{}: .db \"{}\\0\"", label, val))
+            let cleaned = val.replace("\\", "\\\\")
+                .replace("\t","\\t")
+                .replace("\r","\\r")
+                .replace("\n","\\n")
+                .replace("\0","\\0")
+                .replace("\"","\\\"");
+            asm.push(format!("{}: .db \"{}\\0\"", label, cleaned))
         }
 
         // Global vars:
@@ -214,6 +220,28 @@ mod test {
             "_forge_gensym_1: .db 0", // a itself
             "_forge_gensym_2: .db 0", // the buffer
             ".org _forge_gensym_2 + 30",
+            "stack: .db 0",
+        ].join("\n"))
+    }
+
+    #[test]
+    fn test_string_escapes() {
+        let asm = build_boot("global a = \"\\\\foo\"; fn main() { }".into()).unwrap();
+        assert_eq!(asm.join("\n"), vec![
+            ".org 0x400",
+            "push _forge_gensym_2",
+            "storew _forge_gensym_1",
+            "push stack",
+            "call _forge_gensym_3",
+            "hlt",
+            "_forge_gensym_3:", // fn main()
+            "dup", "pushr", "pushr", // capture pool / frame ptrs
+            "push 0", // Implicit return value
+            "_forge_gensym_4:", // Outro start
+            "popr", "pop", "popr", "pop", // Drop frame / pool ptrs
+            "ret",
+            "_forge_gensym_2: .db \"\\\\foo\\0\"", // here
+            "_forge_gensym_1: .db 0",
             "stack: .db 0",
         ].join("\n"))
     }
