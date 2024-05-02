@@ -93,16 +93,5 @@ export default {
             }
             return 'quote'
         }
-    },
-
-    indent: function (state, textAfter, cx) {
-        return 0
-        //const closing = dedentPartial.test(textAfter);
-        //return state.basecol + cx.unit * (state.indentDepth - (closing ? 1 : 0));
-    },
-
-    languageData: {
-        //indentOnInput: /^\s*(?:end|until|else|\)|\})$/,
-        //commentTokens: {line: '//', block: {open: '/*', close: '*/'}}
     }
 }

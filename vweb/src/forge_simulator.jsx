@@ -10,10 +10,21 @@ export default function({ src: defaultSrc }) {
     const [binary, setBinary] = useState(null) // The assembled binary
     const [cpu, _setCpu] = useState(() => new WasmCPU()) // The actual CPU emulator
     const [errors, setErrors] = useState(null) // What's displayed on the compile errors tab
-    const [src, setSrc] = useState(() => undent(defaultSrc)) // The current Forge source
     const [status, setStatus] = useState('') // The contents of the status bar
     // Whether the emulator should be running. Has to be a ref because the CPU setTimeout loop won't ever see changes in it otherwise
     const running = useRef(false)
+
+    // The current Forge source. Our initial state tries to look something up from localStorage,
+    // then if that fails uses the prop.
+    const [src, setSrc] = useState(() => {
+        return window.localStorage.getItem('src') || undent(defaultSrc)
+    })
+
+    // When we update the src, also update the key in localStorage
+    const updateSrc = useCallback((newSrc) => {
+        setSrc(newSrc)
+        window.localStorage.setItem('src', newSrc)
+    }, [])
 
     // Callback for the build button
     const build = useCallback(() => {
@@ -65,7 +76,7 @@ export default function({ src: defaultSrc }) {
             <Tabbar activeTab={activeTab} setActiveTab={setActiveTab} anyErrors={!!errors}/>
             <Toolbar activeTab={activeTab} running={running.current} build={build} run={run} stop={stop}/>
             <div className='content'>
-                {activeTab === 'editor' && <ForgeEditor build={build} run={run} updateSrc={setSrc} src={src}/>}
+                {activeTab === 'editor' && <ForgeEditor build={build} run={run} updateSrc={updateSrc} src={src}/>}
                 {activeTab === 'assembly' && <pre>{assembly}</pre>}
                 {activeTab === 'display' && <EmulatorDisplay cpu={cpu}/>}
                 {activeTab === 'errors' && <pre>{errors}</pre>}
