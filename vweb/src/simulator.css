@@ -70,3 +70,5 @@ a { color: #cccccc; }
 .buttons .run, .file-buttons .new { color: #66bb66 }
 .buttons .stop, .file-buttons .del { color: #bb6666 }
 .buttons .build { color: #aaaaff; }
+.files .file.selected-file { background-color: #686868 !important; }
+.files .file:hover { background-color: #505050; }

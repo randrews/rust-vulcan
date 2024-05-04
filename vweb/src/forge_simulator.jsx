@@ -14,7 +14,7 @@ export default function({ src: defaultSrc }) {
     // Whether the emulator should be running. Has to be a ref because the CPU setTimeout loop won't ever see changes in it otherwise
     const running = useRef(false)
 
-    const [currentFile, setCurrentFile] = useState(() => (Object.keys(window.localStorage)[0] || 'example'))
+    const [currentFile, setCurrentFile] = useState(() => (Object.keys(window.localStorage).sort()[0] || 'example'))
     useEffect(() => {
         if (!currentFile) {
             setCurrentFile('example')
@@ -37,7 +37,15 @@ export default function({ src: defaultSrc }) {
         selectFile(name)
     }, [])
 
-    const removeFile = useCallback((name) => {}, [])
+    const removeFile = useCallback(() => {
+        const files = Object.keys(window.localStorage).sort()
+        if (files.length < 2) { return } // Can't delete the last file
+        if (!confirm(`Are you sure you want to delete "${currentFile}"?`)) { return }
+        const idx = files.indexOf(currentFile)
+        window.localStorage.removeItem(currentFile)
+        files.splice(idx, 1)
+        selectFile(files[Math.min(files.length - 1, idx)])
+    }, [currentFile, selectFile])
 
     // The current Forge source. Our initial state tries to look something up from localStorage,
     // then if that fails uses the prop.
@@ -109,7 +117,7 @@ export default function({ src: defaultSrc }) {
         <>
             <Tabbar activeTab={activeTab} setActiveTab={setActiveTab} anyErrors={!!errors}/>
             <Toolbar activeTab={activeTab} running={running.current} build={build} run={run} stop={stop} addFile={addFile} removeFile={removeFile}/>
-            <FileList fileList={Object.keys(window.localStorage)} selectFile={selectFile}/>
+            <FileList fileList={Object.keys(window.localStorage).sort()} selectFile={selectFile} currentFile={currentFile}/>
             <div className='content'>{content}</div>
             <EmulatorDisplay cpu={cpu}/>
             <Status message={status}/>
@@ -118,13 +126,13 @@ export default function({ src: defaultSrc }) {
 }
 
 // A list of "files" stored in localStorage, that we can display / build / compile
-function FileList({ fileList, selectFile }) {
+function FileList({ fileList, selectFile, currentFile }) {
     const clickFile = useCallback((event) => {
         const name = event.target.getAttribute('data-name')
         selectFile(name)
         event.preventDefault()
     }, [selectFile])
-    const fileRows = fileList.map(file => <div className='file' onClick={clickFile} data-name={file} key={file}>{file}</div>)
+    const fileRows = fileList.map(file => <div className={currentFile === file ? 'selected-file file' : 'file'} onClick={clickFile} data-name={file} key={file}>{file}</div>)
     return (
         <div className='files'>
             {fileRows}
