@@ -20,6 +20,13 @@ impl AstNode for Expr {
                 PestRule::number => Expr::Number(term.into_number()),
                 PestRule::alloc => Expr::New(Expr::from_pair(term.first()).into()),
                 PestRule::static_alloc => Expr::Static(Expr::from_pair(term.first()).into()),
+                PestRule::peek_expr => Expr::Peek(Expr::from_pair(term.first()).into()),
+                PestRule::poke_expr => {
+                    let mut it = term.into_inner();
+                    let first = it.next().unwrap();
+                    let second = it.next().unwrap();
+                    Expr::Poke(Expr::from_pair(first).into(), Expr::from_pair(second).into())
+                },
                 PestRule::name => Expr::Name(String::from(term.as_str())),
                 PestRule::expr => Expr::from_pair(term),
                 PestRule::string => Self::String(term.into_quoted_string()),
@@ -280,5 +287,15 @@ mod test {
     #[test]
     fn static_alloc() {
         assert_eq!(Expr::from_str("static(8)"), Ok(Expr::Static(8.into())));
+    }
+
+    #[test]
+    fn peek() {
+        assert_eq!(Expr::from_str("peek(8)"), Ok(Expr::Peek(8.into())));
+    }
+
+    #[test]
+    fn poke() {
+        assert_eq!(Expr::from_str("poke(10, 20)"), Ok(Expr::Poke(10.into(), 20.into())));
     }
 }

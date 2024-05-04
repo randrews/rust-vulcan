@@ -20,6 +20,8 @@ impl Compilable for Lvalue {
             Expr::Call(_) |
             Expr::New(_) |
             Expr::Static(_) |
+            Expr::Peek(_) |
+            Expr::Poke(_, _) |
             Expr::Infix(_, _, _) |
             Expr::String(_) => {
                 Err(CompileError(0, 0, String::from("Not a valid lvalue")))

@@ -63,9 +63,11 @@ operator = _{
 }
 
 expr = { prefix* ~ term ~ suffix* ~ (operator ~ prefix* ~ term ~ suffix*)* }
-term = _{ number | alloc | static_alloc | name | "(" ~ expr ~ ")" | string }
+term = _{ number | alloc | static_alloc | peek_expr | poke_expr | name | "(" ~ expr ~ ")" | string }
 alloc = { "new" ~ "(" ~ expr ~ ")" }
 static_alloc = { "static" ~ "(" ~ expr ~ ")" }
+peek_expr = { "peek" ~ "(" ~ expr ~ ")" }
+poke_expr = { "poke" ~ "(" ~ expr ~ "," ~ expr ~ ")" }
 
 suffix    = _{ subscript | arglist }
 subscript = { "[" ~ expr ~ "]" }

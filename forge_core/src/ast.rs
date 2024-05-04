@@ -174,6 +174,8 @@ pub enum Expr {
     Call(Call),
     New(BoxExpr),
     Static(BoxExpr),
+    Peek(BoxExpr),
+    Poke(BoxExpr, BoxExpr),
     Subscript(BoxExpr, BoxExpr),
     Infix(BoxExpr, Operator, BoxExpr),
     String(String),

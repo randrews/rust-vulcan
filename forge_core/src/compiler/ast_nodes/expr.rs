@@ -90,9 +90,24 @@ impl Compilable for Expr {
                 size_expr.0.process(state, Some(sig), loc)?;
                 compile_alloc(&mut sig);
                 Ok(())
-            },
+            }
             Expr::Static(size_expr) => {
                 compile_static(size_expr, state, sig)
+            }
+            Expr::Peek(addr) => {
+                addr.0.process(state, Some(sig), loc)?;
+                sig.emit("load");
+                Ok(())
+            }
+            Expr::Poke(addr, val) => {
+                // To avoid confusion, we'll evaluate the args in this order and swap
+                addr.0.process(state, Some(sig), loc)?;
+                val.0.process(state, Some(sig), loc)?;
+                // This is an expr, so, we have to evaluate to something. So let's evaluate to the value poked.
+                // To that end, we'll grab the addr from the stack
+                sig.emit("pick 1");
+                sig.emit("store"); // The store consumes the new copy of the addr and the value, leaving the value
+                Ok(())
             }
             Expr::Subscript(array, index) => {
                 array.0.process(state, Some(sig), loc)?;
@@ -301,6 +316,23 @@ mod test {
                 "push _forge_gensym_3", // Address of a 3-byte buffer
                 "peekr",
                 "storew",
+            ].join("\n")
+        )
+    }
+
+    #[test]
+    fn test_peekpoke() {
+        assert_eq!(
+            test_body(state_for("fn test() { peek(10); poke(20, 30); }")),
+            vec![
+                "push 10",
+                "load",
+                "pop",
+                "push 20",
+                "push 30",
+                "pick 1",
+                "store",
+                "pop"
             ].join("\n")
         )
     }
