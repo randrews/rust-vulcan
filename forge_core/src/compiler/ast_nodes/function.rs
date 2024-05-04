@@ -1,6 +1,6 @@
 use crate::ast::{Function, Location};
 use crate::compiler::compilable::Compilable;
-use crate::compiler::compiled_fn::CompiledFn;
+use crate::compiler::compiled_fn::{CompiledFn};
 use crate::compiler::CompileError;
 use crate::compiler::state::State;
 
@@ -11,6 +11,7 @@ impl Compilable for Function {
 
         // The CompiledFn for this function, which will eventually get stuff populated into it:
         let mut sig = CompiledFn {
+            comments: state.comments,
             label,
             end_label,
             ..Default::default()

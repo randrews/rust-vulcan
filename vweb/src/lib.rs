@@ -20,5 +20,5 @@ pub fn source_map(snippet: String) -> JsValue {
 
 #[wasm_bindgen]
 pub fn compile_forge(src: String) -> Result<String, String> {
-    build_boot(src.as_str()).map(|s| s.join("\n")).map_err(|e| format!("{}", e))
+    build_boot(src.as_str(), true).map(|s| s.join("\n")).map_err(|e| format!("{}", e))
 }

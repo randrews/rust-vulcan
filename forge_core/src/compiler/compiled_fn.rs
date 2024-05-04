@@ -50,6 +50,7 @@ use crate::compiler::utils::{Label, Scope, Variable};
 /// with an interface in the zero page.
 #[derive(Clone, PartialEq, Debug, Default)]
 pub struct CompiledFn {
+    pub comments: bool,
     pub label: Label,
     pub end_label: Label,
     pub max_frame_size: usize,
@@ -94,6 +95,12 @@ impl CompiledFn {
 
     pub(crate) fn emit_arg<T: Display>(&mut self, opcode: &str, arg: T) {
         self.body.emit_arg(opcode, arg)
+    }
+
+    pub(crate) fn emit_comment<T: Display>(&mut self, arg: T) {
+        if self.comments {
+            self.body.emit(format!("{}", arg).as_str())
+        }
     }
 
     /// The (current) size of the local scope in bytes. This increases as variables are declared,

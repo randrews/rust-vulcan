@@ -20,8 +20,12 @@ mod text;
 /// Turn a `Program` into a list of assembly lines that can be assembled to run it.
 /// There are various ways to build a program, this one is the simplest: it builds it as a
 /// complete ROM that will place a jmp to main() at 0x400, so a Vulcan can boot from it.
-pub fn build_boot(src: &str) -> Result<Vec<String>, CompileError> {
-    let mut state = State::default();
+pub fn build_boot(src: &str, include_comments: bool) -> Result<Vec<String>, CompileError> {
+    let mut state = if include_comments {
+        State::with_comments()
+    } else {
+        State::default()
+    };
     let ast = parse(src).map_err(CompileError::from)?;
     ast.process(&mut state, None, (0, 0).into())?;
 
@@ -45,10 +49,18 @@ pub fn build_boot(src: &str) -> Result<Vec<String>, CompileError> {
         asm.push("hlt".into());
 
         // Now start dumping compiled objects into there. First functions:
-        for (_, val) in state.functions.iter_mut() {
+        for (name, val) in state.functions.iter_mut() {
+            // If we've asked for comments, then put in a header comment
+            if include_comments {
+                asm.push(format!(";;; Begin {:=<70}", format!("{} ", name)))
+            }
             asm.push(format!("{}:", val.label));
             for line in val.text() {
                 asm.push(String::from(line));
+            }
+            // If we've asked for comments, then put in a footer also
+            if include_comments {
+                asm.push(format!(";;; End {:=<72}", format!("{} ", name)))
             }
         }
 
@@ -64,11 +76,15 @@ pub fn build_boot(src: &str) -> Result<Vec<String>, CompileError> {
         }
 
         // Global vars:
-        for (_, val) in state.global_scope.iter() {
+        for (name, val) in state.global_scope.iter() {
             // All global variables are indirect labels; anything in scope that's not that is a const,
             // fn, or string, which we'll emit elsewhere.
             if let Variable::IndirectLabel(label) = val {
-                asm.push(format!("{}: .db 0", label))
+                if include_comments {
+                    asm.push(format!("{}: .db 0 ;;; Global {}", label, name))
+                } else {
+                    asm.push(format!("{}: .db 0", label))
+                }
             }
         }
 
@@ -96,7 +112,7 @@ mod test {
     #[test]
     fn test_build_boot() {
         // Very basic test of one main()
-        let asm = build_boot("fn main() { return 5; }".into()).unwrap();
+        let asm = build_boot("fn main() { return 5; }".into(), false).unwrap();
         assert_eq!(asm.join("\n"), vec![
             ".org 0x400",
             "push stack",
@@ -119,7 +135,7 @@ mod test {
         ].join("\n"));
 
         // Slightly more complicated, with a global str
-        let asm = build_boot("const str = \"blah\"; fn main() { return str; }".into()).unwrap();
+        let asm = build_boot("const str = \"blah\"; fn main() { return str; }".into(), false).unwrap();
         assert_eq!(asm.join("\n"), vec![
             ".org 0x400",
             "push stack",
@@ -144,9 +160,38 @@ mod test {
     }
 
     #[test]
+    fn test_comments() {
+        // Very basic test of one main()
+        let asm = build_boot("global foo; fn main() { return 5; }".into(), true).unwrap();
+        assert_eq!(asm.join("\n"), vec![
+            ".org 0x400",
+            "push stack",
+            "call _forge_gensym_2",
+            "hlt",
+            ";;; Begin main =================================================================",
+            "_forge_gensym_2:",
+            "dup",
+            "pushr",
+            "pushr",
+            ";; 1:25 :: return",
+            "push 5",
+            "jmpr @_forge_gensym_3",
+            "push 0",
+            "_forge_gensym_3:",
+            "popr",
+            "pop",
+            "popr",
+            "pop",
+            "ret",
+            ";;; End main ===================================================================",
+            "_forge_gensym_1: .db 0 ;;; Global foo",
+            "stack: .db 0",
+        ].join("\n"));
+    }
+        #[test]
     fn test_global_vars() {
         // Trying a non-str global var
-        let asm = build_boot("global foo; fn main() { foo = 3; }".into()).unwrap();
+        let asm = build_boot("global foo; fn main() { foo = 3; }".into(), false).unwrap();
         assert_eq!(asm.join("\n"), vec![
             ".org 0x400",
             "push stack",
@@ -167,7 +212,7 @@ mod test {
 
     #[test]
     fn test_no_return() {
-        let asm = build_boot("fn foo() { } fn main() { foo(); }".into()).unwrap();
+        let asm = build_boot("fn foo() { } fn main() { foo(); }".into(), false).unwrap();
         assert_eq!(asm.join("\n"), vec![
             ".org 0x400",
             "push stack",
@@ -201,7 +246,7 @@ mod test {
 
     #[test]
     fn test_global_static() {
-        let asm = build_boot("global a = static(10); fn main() { a[2] = 5; }".into()).unwrap();
+        let asm = build_boot("global a = static(10); fn main() { a[2] = 5; }".into(), false).unwrap();
         assert_eq!(asm.join("\n"), vec![
             ".org 0x400",
             "push _forge_gensym_2", // the addr of the static buffer
@@ -226,7 +271,7 @@ mod test {
 
     #[test]
     fn test_string_escapes() {
-        let asm = build_boot("global a = \"\\\\foo\"; fn main() { }".into()).unwrap();
+        let asm = build_boot("global a = \"\\\\foo\"; fn main() { }".into(), false).unwrap();
         assert_eq!(asm.join("\n"), vec![
             ".org 0x400",
             "push _forge_gensym_2",

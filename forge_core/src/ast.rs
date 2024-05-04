@@ -224,3 +224,20 @@ impl From<&str> for Expr {
         Self::Name(String::from(value))
     }
 }
+
+impl Statement {
+    pub fn description(&self) -> String {
+        String::from(
+            match self {
+                Statement::Return(_) => "return",
+                Statement::Assignment(_) => "assignment",
+                Statement::Expr(_) => "expr",
+                Statement::VarDecl(_) => "varDecl",
+                Statement::Conditional(_) => "conditional",
+                Statement::WhileLoop(_) => "whileLoop",
+                Statement::RepeatLoop(_) => "repeatLoop",
+                Statement::Asm(_) => "asm"
+            }
+        )
+    }
+}

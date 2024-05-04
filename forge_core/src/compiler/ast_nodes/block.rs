@@ -13,6 +13,7 @@ impl Compilable for Block {
         // Compile each statement:
         for stmt in self.0 {
             let loc = stmt.location;
+            sig.emit_comment(format!(";; {}:{} :: {}", loc.line, loc.col, stmt.ast.description()));
             match stmt.ast {
                 Statement::Return(ret) => {
                     ret.process(state, Some(sig), loc)?;

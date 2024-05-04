@@ -3,7 +3,7 @@ use vcore::memory::Memory;
 use vcore::CPU;
 
 fn run_forge(src: &str) -> CPU {
-    let asm = forge_core::compiler::build_boot(src).unwrap();
+    let asm = forge_core::compiler::build_boot(src, true).unwrap();
     let bin = assemble_snippet(asm).unwrap();
     let mut cpu = CPU::new(Memory::with_program(bin));
     cpu.run_to_halt();
@@ -12,7 +12,7 @@ fn run_forge(src: &str) -> CPU {
 
 #[allow(dead_code)]
 fn compiler_output(src: &str) -> Vec<String> {
-    forge_core::compiler::build_boot(src).unwrap()
+    forge_core::compiler::build_boot(src, true).unwrap()
 }
 
 #[allow(dead_code)]
@@ -27,7 +27,7 @@ fn main_return(src: &str) -> i32 {
 }
 
 fn error_message(src: &str) -> Option<String> {
-    match forge_core::compiler::build_boot(src) {
+    match forge_core::compiler::build_boot(src, true) {
         Ok(_) => None,
         Err(forge_core::compiler::CompileError(_, _, s)) => Some(s)
     }

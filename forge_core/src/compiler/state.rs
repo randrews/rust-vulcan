@@ -8,6 +8,8 @@ use crate::compiler::utils::{Label, Scope, Variable};
 /// The compiler state:
 #[derive(Clone, PartialEq, Debug, Default)]
 pub(crate) struct State {
+    /// Whether to emit documentation comments in the asm listing
+    pub comments: bool,
     /// Used by gensym to generate unique symbols
     pub gensym_index: usize,
     /// The globally-defined names
@@ -25,6 +27,13 @@ pub(crate) struct State {
 }
 
 impl State {
+    pub(crate) fn with_comments() -> Self {
+        Self {
+            comments: true,
+            ..Self::default()
+        }
+    }
+
     /// Generate a guaranteed-unique symbolic name
     pub(crate) fn gensym(&mut self) -> Label {
         self.gensym_index += 1;
