@@ -58,6 +58,7 @@ pub struct FunctionPrototype {
 
 #[derive(PartialEq, Clone, Debug)]
 pub enum Statement {
+    Break,
     Return(Return),
     Assignment(Assignment),
     Expr(Expr),
@@ -231,6 +232,7 @@ impl Statement {
     pub fn description(&self) -> String {
         String::from(
             match self {
+                Statement::Break => "break",
                 Statement::Return(_) => "return",
                 Statement::Assignment(_) => "assignment",
                 Statement::Expr(_) => "expr",

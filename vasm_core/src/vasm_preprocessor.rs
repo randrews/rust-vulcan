@@ -81,7 +81,10 @@ impl<T: IntoIterator<Item = String>, F: Fn(String) -> Result<T, AssembleError>> 
 
                 // It's a macro, so do it and then try again
                 Ok(VASMLine::Macro(mac)) => {
-                    self.handle_macro(mac);
+                    match self.handle_macro(mac) {
+                        None => {}
+                        Some(err) => return Some(Err(err))
+                    }
                     self.next()
                 }
 
@@ -214,6 +217,20 @@ impl<T: IntoIterator<Item = String>, F: Fn(String) -> Result<T, AssembleError>> 
                 }
                 _ => return Some(AssembleError::MacroError(self.current_location())),
             },
+
+            Macro::Break => {
+                let innermost_loop = self.control_stack.iter().rev().find(|cs| {
+                    match cs {
+                        ControlStructure::LoopDo(_, _) => true,
+                        _ => false
+                    }
+                });
+                if let Some(ControlStructure::LoopDo(_, after)) = innermost_loop {
+                    self.emit(format!("jmpr @{}", after));
+                } else {
+                    return Some(AssembleError::MacroError(self.current_location()))
+                }
+            }
         }
         None
     }
@@ -227,8 +244,16 @@ mod tests {
 
     fn lines_for(source: Vec<String>) -> Vec<VASMLine> {
         let include = |_name: String| panic!();
-        let src = LineSource::new("blah", source, include);
+        let src = LineSource::new("<none>", source, include);
         src.map(|line| line.unwrap().line).collect()
+    }
+
+    fn error_for(source: Vec<String>) -> Option<AssembleError> {
+        let include = |_name: String| panic!();
+        for line in LineSource::new("<none>", source, include) {
+            if line.is_err() { return line.err() }
+        }
+        None
     }
 
     fn stringify(a: Vec<&str>) -> Vec<String> {
@@ -323,6 +348,42 @@ mod tests {
                 ),
                 VASMLine::LabelDef(Label::from("__gensym_2"))
             ]
+        )
+    }
+
+    #[test]
+    fn test_preprocess_break() {
+        // First a working one
+        assert_eq!(
+            lines_for(stringify(vec!["#while", "#do", "#break", "#end"])),
+            vec![
+                VASMLine::LabelDef(Label("__gensym_1".to_string())),
+                VASMLine::Instruction(
+                    None,
+                    Brz,
+                    Some(Node::RelativeLabel("__gensym_2".to_string()))
+                ),
+                VASMLine::Instruction(
+                    None,
+                    Jmpr,
+                    Some(Node::RelativeLabel("__gensym_2".to_string()))
+                ),
+                VASMLine::Instruction(
+                    None,
+                    Jmpr,
+                    Some(Node::RelativeLabel("__gensym_1".to_string()))
+                ),
+                VASMLine::LabelDef(Label::from("__gensym_2"))
+            ]
+        );
+    }
+
+    #[test]
+    fn test_malformed_break() {
+        // Malformed one
+        assert_eq!(
+            error_for(stringify(vec!["#while", "#break"])),
+            Some(AssembleError::MacroError(Location::from(2)))
         )
     }
 }

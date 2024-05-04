@@ -6,6 +6,7 @@ impl AstNode for Statement {
     fn from_pair(pair: Pair) -> Self {
         let pair = pair.first();
         match pair.as_rule() {
+            PestRule::break_stmt => Self::Break,
             PestRule::return_stmt => Self::Return(Return::from_pair(pair)),
             PestRule::assignment => Self::Assignment(Assignment::from_pair(pair)),
             PestRule::expr => Self::Expr(Expr::from_pair(pair)),

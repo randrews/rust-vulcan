@@ -1,6 +1,7 @@
 use std::cmp::max;
 use std::collections::btree_map::Entry::Vacant;
 use std::fmt::Display;
+use crate::ast::Location;
 use crate::compiler::compile_error::CompileError;
 use crate::compiler::text::Text;
 use crate::compiler::utils::{Label, Scope, Variable};
@@ -56,6 +57,7 @@ pub struct CompiledFn {
     pub max_frame_size: usize,
     pub local_scope: Scope,
     pub arity: usize,
+    pub loop_level: u32,
 
     /// The preamble is the area of the function capturing the args, etc
     pub preamble: Text,
@@ -81,6 +83,22 @@ impl CompiledFn {
         } else {
             Err(CompileError(0, 0, format!("Duplicate name {}", name)))
         }
+    }
+
+    pub fn enter_loop(&mut self) {
+        self.loop_level += 1
+    }
+    pub fn exit_loop(&mut self) {
+        if self.loop_level > 0 {
+            self.loop_level -= 1;
+        } else {
+            // I doubt it's possible for this to happen, since it would be
+            // caught at the parse stage
+            unreachable!()
+        }
+    }
+    pub fn in_loop(&self) -> bool {
+        self.loop_level > 0
     }
 
     /// Return an iterator over all the

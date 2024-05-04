@@ -62,6 +62,7 @@ pub enum Macro {
     Until,
     Do,
     End,
+    Break,
 }
 
 #[derive(Debug, PartialEq, Clone)]

@@ -5,7 +5,7 @@ use crate::compiler::CompileError;
 use crate::compiler::state::State;
 
 impl Compilable for Block {
-    fn process(self, state: &mut State, sig: Option<&mut CompiledFn>, _loc: Location) -> Result<(), CompileError> {
+    fn process(self, state: &mut State, sig: Option<&mut CompiledFn>, loc: Location) -> Result<(), CompileError> {
         let sig = sig.expect("Block outside function");
 
         let frame_size_before_block = sig.frame_size();
@@ -15,6 +15,13 @@ impl Compilable for Block {
             let loc = stmt.location;
             sig.emit_comment(format!(";; {}:{} :: {}", loc.line, loc.col, stmt.ast.description()));
             match stmt.ast {
+                Statement::Break => {
+                    if sig.in_loop() {
+                        sig.emit("#break")
+                    } else {
+                        return Err(CompileError(loc.line, loc.col, "Break outside loop".to_string()))
+                    }
+                }
                 Statement::Return(ret) => {
                     ret.process(state, Some(sig), loc)?;
                 }
@@ -59,6 +66,7 @@ impl Compilable for Block {
 
 #[cfg(test)]
 mod test {
+    use crate::compiler::CompileError;
     use crate::compiler::test_utils::*;
 
     #[test]
@@ -71,6 +79,35 @@ mod test {
                 "storew",
             ]
                 .join("\n")
+        )
+    }
+
+    #[test]
+    fn test_break_statements() {
+        assert_eq!(
+            test_body(state_for("fn test() { repeat(10) { break; } }")),
+            vec![
+                "push 10", "#while", "dup", "agt 0", "#do", // standard repeat loop header
+                "#break", // the break
+                "sub 1", "#end", "pop" // repeat loop footer
+            ].join("\n")
+        );
+
+        assert_eq!(
+            test_body(state_for("fn test() { while(1) { break; } }")),
+            vec![
+                "#while", "push 1", "#do", // standard repeat loop header
+                "#break", // the break
+                "#end" // repeat loop footer
+            ].join("\n")
+        )
+    }
+
+    #[test]
+    fn test_malformed_break_statements() {
+        assert_eq!(
+            test_err("fn test() { break; }"),
+            Some(CompileError(1, 13, "Break outside loop".to_string()))
         )
     }
 

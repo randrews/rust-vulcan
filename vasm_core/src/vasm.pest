@@ -69,7 +69,7 @@ org_directive = { label_def? ~ ".org" ~ expr }
 equ_directive = { label_def ~ ".equ" ~ expr }
 
 include = { "include" ~ string }
-control = { "if" | "unless" | "while" | "until" | "do" | "else" | "end" }
+control = { "if" | "unless" | "while" | "until" | "do" | "else" | "end" | "break" }
 preprocessor = {"#" ~ (control | include) }
 
 blank = { WHITESPACE? ~ COMMENT? }

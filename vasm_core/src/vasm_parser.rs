@@ -208,6 +208,7 @@ fn parse_macro(line: Pair) -> Macro {
             "until" => Macro::Until,
             "do" => Macro::Do,
             "end" => Macro::End,
+            "break" => Macro::Break,
             _ => unreachable!(),
         },
         Rule::include => Macro::Include(create_string(pre.only())),

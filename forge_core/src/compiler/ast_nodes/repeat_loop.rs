@@ -41,7 +41,9 @@ impl Compilable for RepeatLoop {
 
         // Loop body:
         sig.emit("#do");
+        sig.enter_loop();
         body.process(state, Some(sig), loc)?;
+        sig.exit_loop();
 
         // After the body we need to increment the counter if there is one
         if named_counter {
