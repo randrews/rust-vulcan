@@ -10,18 +10,19 @@ a { color: #cccccc; }
 .simulator {
     display: grid;
     grid-template:
-        "tab" 1em
-        "btns" 1em
-        "content" 1fr
-        "status" 1em / 1fr;
+        "filebtns tab btns" 1em
+        "files content screen " 1fr
+        "files status screen" 1em / 16em 1fr calc(640px + 3em);
     row-gap: 0.3em;
 }
 
 /* Setting where things go in the grid */
 .tabbar { grid-area: tab }
 .buttons { grid-area: btns }
+.file-buttons { grid-area: filebtns }
 .content { grid-area: content }
 .status { grid-area: status }
+.files { grid-area: files }
 
 /* Make the content fill the remainder of the screen */
 .content {
@@ -40,48 +41,32 @@ a { color: #cccccc; }
     height: calc(100vh - 5em)
 }
 
-/*!* Make the textarea look presentable (TODO: replace with CodeMirror) *!*/
-/*.content textarea {*/
-/*    height: 100%;*/
-/*    width: 100%;*/
-/*    padding: 0;*/
-/*    margin: 0;*/
-/*    background: #000000;*/
-/*    color: #a0a0a0;*/
-/*    border: none;*/
-/*    resize: none;*/
-/*    outline: none;*/
-/*}*/
-
-/*.forge-editor textarea:focus {*/
-/*    border: none;*/
-/*    outline: none;*/
-/*}*/
-
 /* Status, btns, tabs all look right */
-.status, .buttons, .tabbar { font-weight: bold; }
-.tabbar a, .buttons a { cursor: pointer; }
+.status, .buttons, .file-buttons, .tabbar { font-weight: bold; }
+.tabbar a, .buttons a, .file-buttons a, .file { cursor: pointer; }
 
-/* Make the display the right size by centering the canvas in a rectangle*/
+/* Make the display the right size by centering the canvas in a rectangle */
+/* The display is in the screen section of the main grid but it's also got to define its own grid  */
 .display {
+    grid-area: screen;
     height: 100%;
     display: grid;
     grid-template:
         "lt top rt" 1fr
-        "lt screen rt" calc(480px + 4em)
-        "lt btm rt" 1fr / 1fr calc(640px + 4em) 1fr;
+        "lt screen rt" calc(480px + 2em)
+        "lt btm rt" 1fr / 1fr calc(640px + 2em) 1fr;
 }
 
 /* The beige monitor border around the screen */
 .display { background-color: #0f0f0f }
 .display canvas {
     grid-area: screen;
-    border: 2em solid #bb9;
-    border-radius: 2em;
+    border: 1em solid #bb9;
+    border-radius: 1em;
 }
 
 /* Colors of tabs and buttons */
 .tabbar a.active { background-color: #686868; }
-.buttons .run { color: #66bb66 }
-.buttons .stop { color: #bb6666 }
+.buttons .run, .file-buttons .new { color: #66bb66 }
+.buttons .stop, .file-buttons .del { color: #bb6666 }
 .buttons .build { color: #aaaaff; }

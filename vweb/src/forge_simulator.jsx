@@ -1,4 +1,4 @@
-import React, { useState, useCallback, useRef } from 'react'
+import React, {useState, useCallback, useRef, useEffect} from 'react'
 import ForgeEditor from "./forge_editor"
 import EmulatorDisplay from "./emulator_display"
 import { WasmCPU, assemble_snippet, compile_forge } from '../pkg/vweb.js'
@@ -14,17 +14,42 @@ export default function({ src: defaultSrc }) {
     // Whether the emulator should be running. Has to be a ref because the CPU setTimeout loop won't ever see changes in it otherwise
     const running = useRef(false)
 
+    const [currentFile, setCurrentFile] = useState(() => (Object.keys(window.localStorage)[0] || 'example'))
+    useEffect(() => {
+        if (!currentFile) {
+            setCurrentFile('example')
+            window.localStorage.setItem('example', defaultSrc)
+        }
+    }, [])
+
+    const selectFile = useCallback((name) => {
+        setSrc(window.localStorage.getItem(name))
+        setCurrentFile(name)
+    }, [])
+
+    const addFile = useCallback(() => {
+        const fileList = Object.keys(window.localStorage)
+        let name = null
+        while(!name || fileList.indexOf(name) >= 0) {
+            name = prompt('Create new file named:')
+        }
+        window.localStorage[name] = ''
+        selectFile(name)
+    }, [])
+
+    const removeFile = useCallback((name) => {}, [])
+
     // The current Forge source. Our initial state tries to look something up from localStorage,
     // then if that fails uses the prop.
     const [src, setSrc] = useState(() => {
-        return window.localStorage.getItem('src') || undent(defaultSrc)
+        return window.localStorage.getItem(currentFile) || undent(defaultSrc)
     })
 
     // When we update the src, also update the key in localStorage
     const updateSrc = useCallback((newSrc) => {
         setSrc(newSrc)
-        window.localStorage.setItem('src', newSrc)
-    }, [])
+        window.localStorage.setItem(currentFile, newSrc)
+    }, [currentFile])
 
     // Callback for the build button
     const build = useCallback(() => {
@@ -71,18 +96,39 @@ export default function({ src: defaultSrc }) {
         setStatus('Stopped by user')
     }, [])
 
+    let content;
+    if (activeTab === 'assembly') {
+        content = <pre>{assembly}</pre>
+    } else if (activeTab === 'errors') {
+        content = <pre>{errors}</pre>
+    } else if (activeTab === 'editor') {
+        content = <ForgeEditor build={build} run={run} updateSrc={updateSrc} src={src} fileName={currentFile}/>
+    }
+
     return (
         <>
             <Tabbar activeTab={activeTab} setActiveTab={setActiveTab} anyErrors={!!errors}/>
-            <Toolbar activeTab={activeTab} running={running.current} build={build} run={run} stop={stop}/>
-            <div className='content'>
-                {activeTab === 'editor' && <ForgeEditor build={build} run={run} updateSrc={updateSrc} src={src}/>}
-                {activeTab === 'assembly' && <pre>{assembly}</pre>}
-                {activeTab === 'display' && <EmulatorDisplay cpu={cpu}/>}
-                {activeTab === 'errors' && <pre>{errors}</pre>}
-            </div>
+            <Toolbar activeTab={activeTab} running={running.current} build={build} run={run} stop={stop} addFile={addFile} removeFile={removeFile}/>
+            <FileList fileList={Object.keys(window.localStorage)} selectFile={selectFile}/>
+            <div className='content'>{content}</div>
+            <EmulatorDisplay cpu={cpu}/>
             <Status message={status}/>
         </>
+    )
+}
+
+// A list of "files" stored in localStorage, that we can display / build / compile
+function FileList({ fileList, selectFile }) {
+    const clickFile = useCallback((event) => {
+        const name = event.target.getAttribute('data-name')
+        selectFile(name)
+        event.preventDefault()
+    }, [selectFile])
+    const fileRows = fileList.map(file => <div className='file' onClick={clickFile} data-name={file} key={file}>{file}</div>)
+    return (
+        <div className='files'>
+            {fileRows}
+        </div>
     )
 }
 
@@ -97,7 +143,6 @@ function Tabbar({ activeTab, setActiveTab, anyErrors }) {
     return (
         <div className='tabbar'>
             <a className={classNames('editor')} onClick={onChangeTab} data-tab='editor'>[Editor]</a>
-            <a className={classNames('display')} onClick={onChangeTab} data-tab='display'>[Display]</a>
             <a className={classNames('assembly')} onClick={onChangeTab} data-tab='assembly'>[Assembly]</a>
             {anyErrors && <a className={classNames('errors')} onClick={onChangeTab} data-tab='errors'>[Errors]</a>}
         </div>
@@ -105,7 +150,7 @@ function Tabbar({ activeTab, setActiveTab, anyErrors }) {
 }
 
 // Toolbar of the controls for the simulator
-function Toolbar({ activeTab, running, compile, build, run, stop }) {
+function Toolbar({activeTab, running, compile, build, run, stop, addFile, removeFile }) {
     let buildBtn, runBtn
     // TODO: Make this assemble on assembly tab, make that editable
     buildBtn = <a className='build' onClick={build}>[Build]</a>
@@ -117,14 +162,20 @@ function Toolbar({ activeTab, running, compile, build, run, stop }) {
     }
 
     return (
-        <div className='buttons'>
-            {buildBtn}
-            {runBtn}
-        </div>
+        <>
+            <div className='file-buttons'>
+                <a className='new' onClick={addFile}>[new]</a>
+                <a className='del' onClick={removeFile}>[del]</a>
+            </div>
+            <div className='buttons'>
+                {buildBtn}
+                {runBtn}
+            </div>
+        </>
     )
 }
 
 // The short status line at the bottom
-function Status({ message }) {
+function Status({message}) {
     return <div className='status'>{message}</div>
 }
