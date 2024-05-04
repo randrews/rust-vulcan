@@ -147,6 +147,19 @@ fn global_test() {
 }
 
 #[test]
+fn peekpoke_test() {
+    // Poke a byte in, peek it back out. Peek / poke only touches one byte at a time
+    assert_eq!(
+        main_return(
+            "fn main() {
+                    poke(0x10000, 0x1010);
+                    return peek(0x10000);
+                }"),
+        0x10
+    )
+}
+
+#[test]
 fn static_test() {
     // Because the static(1) returns the same address each time, a[0] is the same variable
     // no matter how many times foo is called
