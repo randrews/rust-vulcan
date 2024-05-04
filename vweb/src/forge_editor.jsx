@@ -7,7 +7,7 @@ import {StreamLanguage} from '@codemirror/language'
 import {gruvboxDark} from 'cm6-theme-gruvbox-dark'
 import ForgeHighlighter from './forge_highlighter'
 
-export default function ForgeEditor({ src, updateSrc }) {
+export default function ForgeEditor({ src, updateSrc, fileName }) {
     const editor = useRef(null)
     const container = useRef(null)
 
@@ -19,13 +19,16 @@ export default function ForgeEditor({ src, updateSrc }) {
                 keymap.of([indentWithTab]),
                 gruvboxDark,
                 EditorView.updateListener.of((update) => {
-                    updateSrc(update.state.doc.text.join('\n'))
+                    updateSrc(update.state.doc.toString())
                 }),
                 StreamLanguage.define(ForgeHighlighter)
             ],
             parent: container.current
         })
-    }, [])
+
+        // Destroy the editor when we re-fire this, which is when the filename changes
+        return () => (container.current && container.current.children[0].remove())
+    }, [fileName])
 
     return <div className='editor' ref={container}/>
 }
