@@ -16,7 +16,7 @@ export default {
             if (word = stream.match(/^[a-zA-Z_$][a-zA-Z0-9_$]*/)) {
                 // This is either a keyword or an identifier.
                 // All the keywords are valid names, so, check that:
-                if (word[0].match(/^fn|var|new|static|asm|return|if|while|repeat|global|const$/)) {
+                if (word[0].match(/^fn|var|new|static|asm|return|if|while|repeat|global|const|peek|poke$/)) {
                     if (word[0] === 'asm') {
                         state.asm = true
                     } // This is the start of an asm control structure

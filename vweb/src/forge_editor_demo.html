@@ -9,10 +9,20 @@
 <body>
 <div class="simulator">
     <pre>
+        // Welcome! Press [run] to run this, or write your own!
+        // User manual coming soon
+        // -- ross.andrews@gmail.com
+        const str = "Hello, world!";
+
         fn main() {
+          repeat(1200) n {
+            poke(0x10000 + 1200 + n, 0x6f);
+            poke(0x10000 + n, 0);
+          }
+
           var n = 0;
-          while (n < 40 * 30) {
-            asm(72, n + 0x10000) { store }
+          while(peek(str + n)) {
+            poke(0x10000 + 41 + n, peek(str + n));
             n = n + 1;
           }
         }

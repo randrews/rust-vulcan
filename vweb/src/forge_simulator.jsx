@@ -11,6 +11,7 @@ export default function({ src: defaultSrc }) {
     const [cpu, setCpu] = useState(() => new WasmCPU()) // The actual CPU emulator
     const [errors, setErrors] = useState(null) // What's displayed on the compile errors tab
     const [status, setStatus] = useState('') // The contents of the status bar
+    const [stale, setStale] = useState(false) // Whether the editor has been changed since the last build
     // Whether the emulator should be running. Has to be a ref because the CPU setTimeout loop won't ever see changes in it otherwise
     const running = useRef(false)
 
@@ -59,6 +60,7 @@ export default function({ src: defaultSrc }) {
     // When we update the src, also update the key in localStorage
     const updateSrc = useCallback((newSrc) => {
         setSrc(newSrc)
+        setStale(true)
         window.localStorage.setItem(currentFile, newSrc)
     }, [currentFile])
 
@@ -71,6 +73,7 @@ export default function({ src: defaultSrc }) {
             setBinary(bin) // Store that
             setStatus(`Compiled ${bin.length} bytes`) // Success!
             setErrors(null) // Clear the old error messages off the tab
+            setStale(false)
             return { bin, errors: null }
         } catch (err) {
             if (err.message) { err = err.message } // How we get this differs between forge and asm
@@ -84,7 +87,7 @@ export default function({ src: defaultSrc }) {
     // Callback for the run button
     const run = useCallback(() => {
         let bin = binary
-        if (!bin) {
+        if (!bin || stale) {
             const result = build()
             if (result.errors) { return }
             else { bin = result.bin }
@@ -105,7 +108,7 @@ export default function({ src: defaultSrc }) {
             }
         }
         setTimeout(time_slice, 0)
-    }, [cpu, binary, running, build])
+    }, [cpu, binary, running, build, stale])
 
     const reset = useCallback(() => {
         running.current = false
