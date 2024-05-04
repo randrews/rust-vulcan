@@ -68,7 +68,11 @@ a { color: #cccccc; }
 /* Colors of tabs and buttons */
 .tabbar a.active { background-color: #686868; }
 .buttons .run, .file-buttons .new { color: #66bb66 }
-.buttons .stop, .file-buttons .del { color: #bb6666 }
+.buttons .stop, .file-buttons .del, .button[data-tab=errors] { color: #bb6666 }
 .buttons .build { color: #aaaaff; }
+.buttons .reset { color: #bbbb66; }
 .files .file.selected-file { background-color: #686868 !important; }
-.files .file:hover { background-color: #505050; }
+.files .file:hover, .button:hover, .file-buttons a:hover, .buttons a:hover {
+    background-color: #505050;
+    user-select: none;
+}

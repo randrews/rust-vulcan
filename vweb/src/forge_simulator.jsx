@@ -8,19 +8,21 @@ export default function({ src: defaultSrc }) {
     let [activeTab, setActiveTab] = useState('editor') // Support for the tabbar
     const [assembly, setAssembly] = useState(null) // The compiled assembly code
     const [binary, setBinary] = useState(null) // The assembled binary
-    const [cpu, _setCpu] = useState(() => new WasmCPU()) // The actual CPU emulator
+    const [cpu, setCpu] = useState(() => new WasmCPU()) // The actual CPU emulator
     const [errors, setErrors] = useState(null) // What's displayed on the compile errors tab
     const [status, setStatus] = useState('') // The contents of the status bar
     // Whether the emulator should be running. Has to be a ref because the CPU setTimeout loop won't ever see changes in it otherwise
     const running = useRef(false)
 
-    const [currentFile, setCurrentFile] = useState(() => (Object.keys(window.localStorage).sort()[0] || 'example'))
-    useEffect(() => {
-        if (!currentFile) {
-            setCurrentFile('example')
-            window.localStorage.setItem('example', defaultSrc)
+    const [currentFile, setCurrentFile] = useState(() => {
+        const files = Object.keys(window.localStorage).sort()
+        if (files[0]) { // If there are any, select the first one
+            return files[0]
+        } else { // If it's empty, create an example.frg and put some default src in it
+            window.localStorage.setItem('example.frg', undent(defaultSrc))
+            return 'example.frg'
         }
-    }, [])
+    })
 
     const selectFile = useCallback((name) => {
         setSrc(window.localStorage.getItem(name))
@@ -32,8 +34,9 @@ export default function({ src: defaultSrc }) {
         let name = null
         while(!name || fileList.indexOf(name) >= 0) {
             name = prompt('Create new file named:')
+            if (!name.match(/\.frg$/)) { name += '.frg' }
         }
-        window.localStorage[name] = ''
+        window.localStorage[name] = `// ${name}`
         selectFile(name)
     }, [])
 
@@ -68,35 +71,47 @@ export default function({ src: defaultSrc }) {
             setBinary(bin) // Store that
             setStatus(`Compiled ${bin.length} bytes`) // Success!
             setErrors(null) // Clear the old error messages off the tab
+            return { bin, errors: null }
         } catch (err) {
             if (err.message) { err = err.message } // How we get this differs between forge and asm
             console.error(err) // Meh
             setErrors(err) // Show full compiler errors
             setStatus("Failed to compile") // Short status line message
+            return { bin: null, errors: err }
         }
     }, [src])
 
     // Callback for the run button
     const run = useCallback(() => {
-        cpu.load(binary)
+        let bin = binary
+        if (!bin) {
+            const result = build()
+            if (result.errors) { return }
+            else { bin = result.bin }
+        }
+        cpu.load(bin)
         cpu.reset()
         cpu.start()
         running.current = true
         setStatus('Running...')
         const time_slice = () => {
+            if (!running.current) { return } // If someone's flipped the flag, don't run the cycles.
             cpu.safe_run(100_000) // We want a good number of cycles here: too short is too slow; too fast is nonresponsive
-            if (!cpu.halted() && running.current) { // Stop if we've hit the stop btn or if it's at a hlt
+            if (!cpu.halted()) { // Stop if we've hit the stop btn or if it's at a hlt
                 setTimeout(time_slice, 0) // Otherwise reschedule this for the end of the event loop
-            } else {
-                if (running.current) { // If this is true, we stopped from hlt, so update the status
-                    // (if they hit the button then the status has already been updated)
-                    setStatus('Terminated')
-                    running.current = false
-                }
+            } else { // We finished!
+                setStatus('Terminated')
+                running.current = false
             }
         }
         setTimeout(time_slice, 0)
-    }, [cpu, binary, running])
+    }, [cpu, binary, running, build])
+
+    const reset = useCallback(() => {
+        running.current = false
+        setStatus('Reset')
+        setCpu(new WasmCPU())
+    }, [])
 
     // Callback for the stop button
     const stop = useCallback(() => {
@@ -116,7 +131,7 @@ export default function({ src: defaultSrc }) {
     return (
         <>
             <Tabbar activeTab={activeTab} setActiveTab={setActiveTab} anyErrors={!!errors}/>
-            <Toolbar activeTab={activeTab} running={running.current} build={build} run={run} stop={stop} addFile={addFile} removeFile={removeFile}/>
+            <Toolbar activeTab={activeTab} running={running.current} build={build} run={run} stop={stop} reset={reset} addFile={addFile} removeFile={removeFile}/>
             <FileList fileList={Object.keys(window.localStorage).sort()} selectFile={selectFile} currentFile={currentFile}/>
             <div className='content'>{content}</div>
             <EmulatorDisplay cpu={cpu}/>
@@ -158,7 +173,7 @@ function Tabbar({ activeTab, setActiveTab, anyErrors }) {
 }
 
 // Toolbar of the controls for the simulator
-function Toolbar({activeTab, running, compile, build, run, stop, addFile, removeFile }) {
+function Toolbar({activeTab, running, compile, build, run, stop, reset, addFile, removeFile }) {
     let buildBtn, runBtn
     // TODO: Make this assemble on assembly tab, make that editable
     buildBtn = <a className='build' onClick={build}>[Build]</a>
@@ -176,6 +191,7 @@ function Toolbar({activeTab, running, compile, build, run, stop, addFile, remove
                 <a className='del' onClick={removeFile}>[del]</a>
             </div>
             <div className='buttons'>
+                <a className='reset' onClick={reset}>[Reset]</a>
                 {buildBtn}
                 {runBtn}
             </div>
