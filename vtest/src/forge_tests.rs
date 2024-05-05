@@ -160,6 +160,40 @@ fn peekpoke_test() {
 }
 
 #[test]
+fn break_test() {
+    // Loop 0..10? Not quite!
+    assert_eq!(
+        main_return(
+            "fn main() {
+                    var n = 0;
+                    while(n < 10) {
+                        n = n + 1;
+                        if (n == 4) { break; }
+                    }
+                    return n;
+                }"),
+        4
+    )
+}
+
+#[test]
+fn continue_test() {
+    // Loop 0..4, but skip 3
+    assert_eq!(
+        main_return(
+            "fn main() {
+                    var n = 0;
+                    repeat(5) i {
+                        if (i == 3) { continue; }
+                        n = n + i;
+                    }
+                    return n;
+                }"),
+        7
+    )
+}
+
+#[test]
 fn static_test() {
     // Because the static(1) returns the same address each time, a[0] is the same variable
     // no matter how many times foo is called

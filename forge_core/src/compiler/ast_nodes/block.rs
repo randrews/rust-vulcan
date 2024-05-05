@@ -22,6 +22,21 @@ impl Compilable for Block {
                         return Err(CompileError(loc.line, loc.col, "Break outside loop".to_string()))
                     }
                 }
+                Statement::Continue => {
+                    if sig.in_loop() {
+                        // This is subtle. To "continue" a while or until loop, we simply need to #continue
+                        // and the assembler takes care of the macro for us. Repeat loops are different though
+                        // because the counter inc / dec takes place at the end of the loop, so we can't use
+                        // the macro, we just want to generate a jmpr instead
+                        if let Some(label) = sig.continue_point() {
+                            sig.emit_arg("jmpr", format!("@{}", label))
+                        } else {
+                            sig.emit("#continue")
+                        }
+                    } else {
+                        return Err(CompileError(loc.line, loc.col, "Continue outside loop".to_string()))
+                    }
+                }
                 Statement::Return(ret) => {
                     ret.process(state, Some(sig), loc)?;
                 }
@@ -89,7 +104,7 @@ mod test {
             vec![
                 "push 10", "#while", "dup", "agt 0", "#do", // standard repeat loop header
                 "#break", // the break
-                "sub 1", "#end", "pop" // repeat loop footer
+                "_forge_gensym_3:", "sub 1", "#end", "pop" // repeat loop footer
             ].join("\n")
         );
 
@@ -104,11 +119,28 @@ mod test {
     }
 
     #[test]
-    fn test_malformed_break_statements() {
+    fn test_continue_statements() {
+        assert_eq!(
+            test_body(state_for("fn test() { repeat(10) { continue; } }")),
+            vec![
+                "push 10", "#while", "dup", "agt 0", "#do", // standard repeat loop header
+                "jmpr @_forge_gensym_3", // the continue, jumping to the label
+                "_forge_gensym_3:", // The label demnoting the start of the counter update
+                "sub 1", "#end", "pop" // repeat loop footer
+            ].join("\n")
+        );
+    }
+
+    #[test]
+    fn test_malformed_break_continue_statements() {
         assert_eq!(
             test_err("fn test() { break; }"),
             Some(CompileError(1, 13, "Break outside loop".to_string()))
-        )
+        );
+        assert_eq!(
+            test_err("fn test() { continue; }"),
+            Some(CompileError(1, 13, "Continue outside loop".to_string()))
+        );
     }
 
     #[test]
@@ -129,6 +161,7 @@ mod test {
                 "#do",
                 "push 2", // Pointless loop body
                 "pop",
+                "_forge_gensym_3:",
                 "peekr", // Load c as an lvalue
                 "dup", // Dup it, load it, add 1
                 "loadw",

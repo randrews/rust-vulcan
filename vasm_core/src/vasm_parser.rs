@@ -209,6 +209,7 @@ fn parse_macro(line: Pair) -> Macro {
             "do" => Macro::Do,
             "end" => Macro::End,
             "break" => Macro::Break,
+            "continue" => Macro::Continue,
             _ => unreachable!(),
         },
         Rule::include => Macro::Include(create_string(pre.only())),

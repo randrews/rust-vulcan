@@ -11,7 +11,7 @@ impl Compilable for WhileLoop {
         sig.emit("#while");
         condition.process(state, Some(sig), loc)?;
         sig.emit("#do");
-        sig.enter_loop();
+        sig.enter_loop(None);
         body.process(state, Some(sig), loc)?;
         sig.exit_loop();
         sig.emit("#end");

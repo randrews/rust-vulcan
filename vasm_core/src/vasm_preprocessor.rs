@@ -217,22 +217,31 @@ impl<T: IntoIterator<Item = String>, F: Fn(String) -> Result<T, AssembleError>> 
                 }
                 _ => return Some(AssembleError::MacroError(self.current_location())),
             },
-
             Macro::Break => {
-                let innermost_loop = self.control_stack.iter().rev().find(|cs| {
-                    match cs {
-                        ControlStructure::LoopDo(_, _) => true,
-                        _ => false
-                    }
-                });
-                if let Some(ControlStructure::LoopDo(_, after)) = innermost_loop {
+                if let Some(ControlStructure::LoopDo(_, after)) = self.innermost_loop() {
                     self.emit(format!("jmpr @{}", after));
+                } else {
+                    return Some(AssembleError::MacroError(self.current_location()))
+                }
+            }
+            Macro::Continue => {
+                if let Some(ControlStructure::LoopDo(test, _)) = self.innermost_loop() {
+                    self.emit(format!("jmpr @{}", test));
                 } else {
                     return Some(AssembleError::MacroError(self.current_location()))
                 }
             }
         }
         None
+    }
+
+    pub fn innermost_loop(&self) -> Option<&ControlStructure> {
+        self.control_stack.iter().rev().find(|cs| {
+            match cs {
+                ControlStructure::LoopDo(_, _) => true,
+                _ => false
+            }
+        })
     }
 }
 
@@ -383,6 +392,42 @@ mod tests {
         // Malformed one
         assert_eq!(
             error_for(stringify(vec!["#while", "#break"])),
+            Some(AssembleError::MacroError(Location::from(2)))
+        )
+    }
+
+    #[test]
+    fn test_preprocess_continue() {
+        // First a working one
+        assert_eq!(
+            lines_for(stringify(vec!["#while", "#do", "#continue", "#end"])),
+            vec![
+                VASMLine::LabelDef(Label("__gensym_1".to_string())),
+                VASMLine::Instruction(
+                    None,
+                    Brz,
+                    Some(Node::RelativeLabel("__gensym_2".to_string()))
+                ),
+                VASMLine::Instruction(
+                    None,
+                    Jmpr,
+                    Some(Node::RelativeLabel("__gensym_1".to_string()))
+                ),
+                VASMLine::Instruction(
+                    None,
+                    Jmpr,
+                    Some(Node::RelativeLabel("__gensym_1".to_string()))
+                ),
+                VASMLine::LabelDef(Label::from("__gensym_2"))
+            ]
+        );
+    }
+
+    #[test]
+    fn test_malformed_continue() {
+        // Malformed one
+        assert_eq!(
+            error_for(stringify(vec!["#while", "#continue"])),
             Some(AssembleError::MacroError(Location::from(2)))
         )
     }

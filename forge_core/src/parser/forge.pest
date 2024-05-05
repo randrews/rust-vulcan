@@ -73,7 +73,7 @@ suffix    = _{ subscript | arglist }
 subscript = { "[" ~ expr ~ "]" }
 arglist   = { "(" ~ (expr ~ ("," ~ expr)*)? ~ ")" }
 
-statement = { asm | ((break_stmt | return_stmt | var_decl | assignment | expr) ~ ";") | conditional | while_loop | repeat_loop }
+statement = { asm | ((break_stmt | continue_stmt | return_stmt | var_decl | assignment | expr) ~ ";") | conditional | while_loop | repeat_loop }
 
 asm      = { "asm" ~ asm_args? ~ "{" ~ asm_body ~ "}" }
 asm_args = _{ "(" ~ expr ~ ("," ~ expr)* ~ ")" }
@@ -90,6 +90,7 @@ declaration = { function | function_prototype | global | const_decl }
 program     = { (COMMENT | WHITESPACE)? ~ declaration* ~ EOI }
 
 break_stmt = { "break" }
+continue_stmt = { "continue" }
 return_stmt = { "return" ~ expr? }
 conditional = { "if" ~ "(" ~ expr ~ ")" ~ block ~ ("else" ~ block)? }
 while_loop  = { "while" ~ "(" ~ expr ~ ")" ~ block }

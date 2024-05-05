@@ -41,9 +41,11 @@ impl Compilable for RepeatLoop {
 
         // Loop body:
         sig.emit("#do");
-        sig.enter_loop();
+        let cp = state.gensym();
+        sig.enter_loop(Some(cp.clone()));
         body.process(state, Some(sig), loc)?;
         sig.exit_loop();
+        sig.emit(format!("{}:", cp).as_str());
 
         // After the body we need to increment the counter if there is one
         if named_counter {
@@ -115,6 +117,7 @@ mod test {
                 "peekr", // Load x as an lvalue
                 "add 3",
                 "storew", // Store c + x into it
+                "_forge_gensym_3:",
                 "peekr", // Load c as an lvalue
                 "add 6",
                 "dup", // Dup it, load it, add 1
@@ -157,6 +160,7 @@ mod test {
                 "peekr", // Load x as an lvalue
                 "add 3",
                 "storew", // Store 2x into it
+                "_forge_gensym_3:", // Label for the continue point, before the counter change
                 "sub 1", // decrement the counter
                 "#end", // End of the loop body!
                 "pop", // Drop the limit off the top

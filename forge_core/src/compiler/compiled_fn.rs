@@ -1,7 +1,6 @@
 use std::cmp::max;
 use std::collections::btree_map::Entry::Vacant;
 use std::fmt::Display;
-use crate::ast::Location;
 use crate::compiler::compile_error::CompileError;
 use crate::compiler::text::Text;
 use crate::compiler::utils::{Label, Scope, Variable};
@@ -57,7 +56,7 @@ pub struct CompiledFn {
     pub max_frame_size: usize,
     pub local_scope: Scope,
     pub arity: usize,
-    pub loop_level: u32,
+    pub continue_points: Vec<Option<Label>>,
 
     /// The preamble is the area of the function capturing the args, etc
     pub preamble: Text,
@@ -85,12 +84,12 @@ impl CompiledFn {
         }
     }
 
-    pub fn enter_loop(&mut self) {
-        self.loop_level += 1
+    pub fn enter_loop(&mut self, continue_point: Option<Label>) {
+        self.continue_points.push(continue_point)
     }
     pub fn exit_loop(&mut self) {
-        if self.loop_level > 0 {
-            self.loop_level -= 1;
+        if self.continue_points.len() > 0 {
+            self.continue_points.pop();
         } else {
             // I doubt it's possible for this to happen, since it would be
             // caught at the parse stage
@@ -98,7 +97,10 @@ impl CompiledFn {
         }
     }
     pub fn in_loop(&self) -> bool {
-        self.loop_level > 0
+        self.continue_points.len() > 0
+    }
+    pub fn continue_point(&self) -> &Option<Label> {
+        self.continue_points.last().unwrap_or(&None)
     }
 
     /// Return an iterator over all the
