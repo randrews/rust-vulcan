@@ -67,7 +67,8 @@ pub enum Statement {
     Conditional(Conditional),
     WhileLoop(WhileLoop),
     RepeatLoop(RepeatLoop),
-    Asm(Asm)
+    Asm(Asm),
+    Once(Once)
 }
 
 #[derive(PartialEq, Clone, Debug)]
@@ -115,6 +116,11 @@ pub struct Conditional {
     pub condition: Expr,
     pub body: Block,
     pub alternative: Option<Block>,
+}
+
+#[derive(PartialEq, Clone, Debug)]
+pub struct Once {
+    pub body: Block
 }
 
 #[derive(PartialEq, Clone, Debug)]
@@ -242,7 +248,8 @@ impl Statement {
                 Statement::Conditional(_) => "conditional",
                 Statement::WhileLoop(_) => "whileLoop",
                 Statement::RepeatLoop(_) => "repeatLoop",
-                Statement::Asm(_) => "asm"
+                Statement::Asm(_) => "asm",
+                Statement::Once(_) => "once"
             }
         )
     }

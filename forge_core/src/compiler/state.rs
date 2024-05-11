@@ -20,6 +20,8 @@ pub(crate) struct State {
     pub strings: Vec<(Label, String)>,
     /// The statically-allocated buffers (size in bytes)
     pub buffers: Vec<(Label, usize)>,
+    /// The flags for once blocks
+    pub flags: Vec<Label>,
     /// The functions that have been prototyped but not yet defined
     pub prototypes: Scope,
     /// The initialization code for globals
@@ -69,6 +71,12 @@ impl State {
     pub(crate) fn add_buffer(&mut self, size: usize) -> Label {
         let sym = self.gensym();
         self.buffers.push((sym.clone(), size));
+        sym
+    }
+
+    pub(crate) fn add_flag(&mut self) -> Label {
+        let sym = self.gensym();
+        self.flags.push(sym.clone());
         sym
     }
 

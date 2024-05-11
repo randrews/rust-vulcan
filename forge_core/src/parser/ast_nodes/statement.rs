@@ -15,6 +15,7 @@ impl AstNode for Statement {
             PestRule::conditional => Self::Conditional(Conditional::from_pair(pair)),
             PestRule::while_loop => Self::WhileLoop(WhileLoop::from_pair(pair)),
             PestRule::repeat_loop => Self::RepeatLoop(RepeatLoop::from_pair(pair)),
+            PestRule::once => Self::Once(Once::from_pair(pair)),
             PestRule::asm => Self::Asm(Asm::from_pair(pair)),
             _ => unreachable!(),
         }

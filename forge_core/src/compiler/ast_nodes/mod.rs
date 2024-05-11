@@ -14,3 +14,4 @@ mod r#const;
 mod r#return;
 mod conditional;
 mod while_loop;
+mod once;

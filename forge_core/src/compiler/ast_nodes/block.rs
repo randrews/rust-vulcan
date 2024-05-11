@@ -5,7 +5,7 @@ use crate::compiler::CompileError;
 use crate::compiler::state::State;
 
 impl Compilable for Block {
-    fn process(self, state: &mut State, sig: Option<&mut CompiledFn>, loc: Location) -> Result<(), CompileError> {
+    fn process(self, state: &mut State, sig: Option<&mut CompiledFn>, _loc: Location) -> Result<(), CompileError> {
         let sig = sig.expect("Block outside function");
 
         let frame_size_before_block = sig.frame_size();
@@ -65,6 +65,9 @@ impl Compilable for Block {
                 }
                 Statement::RepeatLoop(repeat_loop) => {
                     repeat_loop.process(state, Some(sig), loc)?;
+                }
+                Statement::Once(once) => {
+                    once.process(state, Some(sig), loc)?;
                 }
             }
         }

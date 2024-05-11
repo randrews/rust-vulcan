@@ -231,6 +231,27 @@ fn static2_test() {
     );
 }
 
+#[test]
+fn once_test() {
+    // A once block.
+    // We pass a pointer in, it increments the var, but only the first time.
+    let src = "
+        fn foo(n) {
+            once {
+                *n = *n + 1;
+            }
+        }
+        fn main() {
+            var n = 0;
+            foo(&n); foo(&n); foo(&n);
+            return n;
+        }";
+    assert_eq!(
+        main_return(src),
+        1
+    );
+}
+
 //#[test]
 // This is no longer cursed, or a test. The revised calling convention with the pool pointer makes
 // it now perfectly sane. Left here for posterity.

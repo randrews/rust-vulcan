@@ -94,6 +94,11 @@ pub fn build_boot(src: &str, include_comments: bool) -> Result<Vec<String>, Comp
             asm.push(format!(".org {} + {}", label, size));
         }
 
+        // Once flags:
+        for label in state.flags {
+            asm.push(format!("{}: .db 1", label));
+        }
+
         // Final thing is to place a label for the stack:
         // (this is just a cell with the address of the following word)
         asm.push("stack: .db 0".into());
