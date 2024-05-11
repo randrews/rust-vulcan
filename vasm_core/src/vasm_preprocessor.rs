@@ -11,7 +11,7 @@ pub struct Line {
 }
 
 #[derive(Debug, Clone, PartialEq)]
-enum LoopType {
+pub enum LoopType {
     While,
     Until,
 }
@@ -27,7 +27,7 @@ impl From<Macro> for LoopType {
 }
 
 #[derive(Debug, Clone, PartialEq)]
-enum ControlStructure {
+pub enum ControlStructure {
     Target(String),
     Loop(String, LoopType),
     LoopDo(String, String),
