@@ -92,7 +92,7 @@ fn init_palette<P: PeekPoke>(machine: &mut P) {
 }
 
 fn to_byte_address((x, y): (Word, Word), reg: DisplayRegisters) -> Word {
-    let row_start = (y + reg.row_offset % reg.height) * reg.width + reg.screen;
+    let row_start = ((y + reg.row_offset) % reg.height) * reg.width + reg.screen;
     ((x + reg.col_offset) % reg.width) + row_start
 }
 

@@ -33,4 +33,18 @@ mod test {
             ]
         )
     }
+
+    #[test]
+    fn parse_comments() {
+        // No other good place to put this test...
+        let prog = Program::from_str("global /* I am a comment */ foo; const blah = 3; // also a comment").unwrap();
+        let decls: Vec<_> = dislocate(prog.0);
+        assert_eq!(
+            decls,
+            vec![
+                Declaration::from_str("global foo;").unwrap(),
+                Declaration::from_str("const blah = 3;").unwrap(),
+            ]
+        )
+    }
 }

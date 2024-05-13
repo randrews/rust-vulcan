@@ -1,6 +1,6 @@
 // C++-style whitespace and comments
 WHITESPACE = _{ " " | "\t" | NEWLINE }
-COMMENT    = _{ "//" ~ (!"\n" ~ ANY)* }
+COMMENT    = _{ ("//" ~ (!"\n" ~ ANY)*) | ("/*" ~ (!"*/" ~ ANY)* ~ "*/") }
 
 // C-style names
 name_char =  { ASCII_ALPHA_LOWER | ASCII_ALPHA_UPPER | "_" | "$" }
