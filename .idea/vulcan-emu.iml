@@ -12,6 +12,7 @@
       <sourceFolder url="file://$MODULE_DIR$/vweb/src" isTestSource="false" />
       <sourceFolder url="file://$MODULE_DIR$/vgfx/src" isTestSource="false" />
       <sourceFolder url="file://$MODULE_DIR$/forge_core/src" isTestSource="false" />
+      <sourceFolder url="file://$MODULE_DIR$/novaforth/src" isTestSource="false" />
       <excludeFolder url="file://$MODULE_DIR$/target" />
     </content>
     <orderEntry type="inheritedJdk" />

@@ -888,6 +888,14 @@ dependencies = [
 ]
 
 [[package]]
+name = "novaforth"
+version = "0.1.0"
+dependencies = [
+ "serde_json",
+ "vasm_core",
+]
+
+[[package]]
 name = "ntapi"
 version = "0.3.7"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1514,6 +1522,7 @@ name = "vweb"
 version = "0.1.0"
 dependencies = [
  "forge_core",
+ "novaforth",
  "serde",
  "serde-wasm-bindgen",
  "vasm_core",

@@ -9,8 +9,8 @@ members = [
     "vlua",
     "vweb",
     "vgfx",
-    "forge_core"
-]
+    "forge_core",
+    "novaforth"]
 
 [profile.test]
 debug-assertions = false
