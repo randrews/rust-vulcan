@@ -12,6 +12,7 @@ export default function({ src: defaultSrc }) {
     const [errors, setErrors] = useState(null) // What's displayed on the compile errors tab
     const [status, setStatus] = useState('') // The contents of the status bar
     const [stale, setStale] = useState(false) // Whether the editor has been changed since the last build
+    const [keyFocus, setKeyFocus] = useState('editor') // The lens for interpreting key events: 'editor', 'emulator', 'filelist'
     // Whether the emulator should be running. Has to be a ref because the CPU setTimeout loop won't ever see changes in it otherwise
     const running = useRef(false)
 
@@ -131,6 +132,24 @@ export default function({ src: defaultSrc }) {
         content = <ForgeEditor build={build} run={run} updateSrc={updateSrc} src={src} fileName={currentFile}/>
     }
 
+    useEffect(() => {
+        const listener = (event) => {
+            // F1-4 act the same in every mode:
+            if (event.key === 'F3') {
+                event.preventDefault()
+                reset()
+            }
+            if (event.key === 'F4') {
+                event.preventDefault()
+                setKeyFocus('emulator')
+                run()
+            }
+        }
+        document.addEventListener('keydown', listener)
+
+        return () => document.removeEventListener('keydown', listener)
+    }, [reset, run])
+
     return (
         <>
             <Tabbar activeTab={activeTab} setActiveTab={setActiveTab} anyErrors={!!errors}/>
@@ -168,7 +187,7 @@ function Tabbar({ activeTab, setActiveTab, anyErrors }) {
     const classNames = name => (name === activeTab ? 'button active' : 'button')
     return (
         <div className='tabbar'>
-            <a className={classNames('editor')} onClick={onChangeTab} data-tab='editor'>[Editor]</a>
+            <a className={classNames('editor')} onClick={onChangeTab} data-tab='editor'>[Editor (F2)]</a>
             <a className={classNames('assembly')} onClick={onChangeTab} data-tab='assembly'>[Assembly]</a>
             {anyErrors && <a className={classNames('errors')} onClick={onChangeTab} data-tab='errors'>[Errors]</a>}
         </div>
@@ -176,25 +195,26 @@ function Tabbar({ activeTab, setActiveTab, anyErrors }) {
 }
 
 // Toolbar of the controls for the simulator
-function Toolbar({activeTab, running, compile, build, run, stop, reset, addFile, removeFile }) {
+function Toolbar({ running, build, run, stop, reset, addFile, removeFile }) {
     let buildBtn, runBtn
     // TODO: Make this assemble on assembly tab, make that editable
     buildBtn = <a className='build' onClick={build}>[Build]</a>
 
     if (running) {
-        runBtn = <a className='stop' onClick={stop}>[Stop]</a>
+        runBtn = <a className='stop' onClick={stop}>[Stop (F4)]</a>
     } else {
-        runBtn = <a className='run' onClick={run}>[Run]</a>
+        runBtn = <a className='run' onClick={run}>[Run (F4)]</a>
     }
 
     return (
         <>
             <div className='file-buttons'>
+                (F1)
                 <a className='new' onClick={addFile}>[new]</a>
                 <a className='del' onClick={removeFile}>[del]</a>
             </div>
             <div className='buttons'>
-                <a className='reset' onClick={reset}>[Reset]</a>
+                <a className='reset' onClick={reset}>[Reset (F3)]</a>
                 {buildBtn}
                 {runBtn}
             </div>

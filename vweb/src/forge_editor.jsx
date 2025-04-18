@@ -6,6 +6,7 @@ import {indentWithTab} from '@codemirror/commands'
 import {StreamLanguage} from '@codemirror/language'
 import {gruvboxDark} from 'cm6-theme-gruvbox-dark'
 import ForgeHighlighter from './forge_highlighter'
+import { Prec } from "@codemirror/state"
 
 export default function ForgeEditor({ src, updateSrc, fileName }) {
     const editor = useRef(null)
@@ -16,6 +17,12 @@ export default function ForgeEditor({ src, updateSrc, fileName }) {
             doc: src,
             extensions: [
                 basicSetup,
+                // Normally F3 opens the search dialog, but we want to just eat it so the document's handler will get it.
+                // We use F3 as a global shortcut for resetting the machine, even if the editor has focus.
+                // Since the editor doesn't do anything for F1, 2, or 4, we don't need to do anything to ignore those.
+                Prec.highest(
+                    keymap.of([{ key: "F3", run: () => { return true } }])
+                ),
                 keymap.of([indentWithTab]),
                 gruvboxDark,
                 EditorView.updateListener.of((update) => {
