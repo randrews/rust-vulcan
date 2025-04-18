@@ -32,7 +32,8 @@ fn main() {
             symfile.write(json.as_bytes()).expect("Unable to write to symbol file");
         }
         Err(e) => {
-            eprintln!("{}", e)
+            eprintln!("{}", e);
+            panic!()
         }
     }
 }

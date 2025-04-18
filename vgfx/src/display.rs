@@ -12,6 +12,7 @@ struct DisplayRegisters {
     width: Word,
     row_offset: Word,
     col_offset: Word,
+    blank_color: Word,
 }
 
 impl Default for DisplayRegisters {
@@ -25,6 +26,7 @@ impl Default for DisplayRegisters {
             width: Word::from(40),
             row_offset: Word::from(0),
             col_offset: Word::from(0),
+            blank_color: Word::from(0),
         }
     }
 }
@@ -39,6 +41,7 @@ fn read_display_registers<P: PeekPoke>(machine: &P, start: Word) -> DisplayRegis
         width: machine.peek24(start + 13),
         row_offset: machine.peek24(start + 16),
         col_offset: machine.peek24(start + 19),
+        blank_color: machine.peek24(start + 22),
     }
 }
 
@@ -52,6 +55,7 @@ fn init_display_registers<P: PeekPoke>(machine: &mut P, start: Word) {
     machine.poke24(start + 13, dr.width);
     machine.poke24(start + 16, dr.row_offset);
     machine.poke24(start + 19, dr.col_offset);
+    machine.poke24(start + 22, dr.blank_color);
 }
 
 fn init_font<P: PeekPoke>(machine: &mut P) {
