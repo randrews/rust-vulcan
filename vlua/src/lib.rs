@@ -5,7 +5,7 @@ use vcore::memory::{PeekPoke, PeekPokeExt};
 use std::iter::FromIterator;
 
 #[mlua::lua_module]
-fn libvlua(lua: &Lua) -> LuaResult<LuaTable> {
+fn libvlua(lua: &Lua) -> LuaResult<LuaTable<'_>> {
     let exports = lua.create_table()?;
     let cpu_constructor = lua.create_function(|_, _: ()| Ok(LuaCPU(CPU::new_random())))?;
     exports.set("new", cpu_constructor)?;

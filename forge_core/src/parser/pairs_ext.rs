@@ -59,11 +59,11 @@ impl<'a> PairExt for Pair<'a> {
 pub trait PairsExt {
     /// Peek the next sibling but only if it matches a given rule: used for things
     /// with optional modifiers following
-    fn next_if_rule(&mut self, rule: PestRule) -> Option<Pair>;
+    fn next_if_rule(&mut self, rule: PestRule) -> Option<Pair<'_>>;
 }
 
 impl PairsExt for Peekable<Pairs<'_>> {
-    fn next_if_rule(&mut self, rule: PestRule) -> Option<Pair> {
+    fn next_if_rule(&mut self, rule: PestRule) -> Option<Pair<'_>> {
         self.next_if(|p| p.as_rule() == rule)
     }
 }
