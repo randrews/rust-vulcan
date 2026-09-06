@@ -1,21 +1,48 @@
+use std::collections::HashMap;
 use mlua::prelude::*;
 use vcore::{ CPU, Word };
-use mlua::{UserData, UserDataMethods};
+use mlua::{Error, UserData, UserDataMethods};
 use vcore::memory::{PeekPoke, PeekPokeExt};
 use std::iter::FromIterator;
+use tinyjson::JsonValue;
+use novaforth::{ROM, PRELUDE, SYMBOLS};
+use vcore::opcodes::Opcode;
 
 #[mlua::lua_module]
-fn libvlua(lua: &Lua) -> LuaResult<LuaTable<'_>> {
+fn libvlua(lua: &Lua) -> LuaResult<LuaTable> {
     let exports = lua.create_table()?;
+
     let cpu_constructor = lua.create_function(|_, _: ()| Ok(LuaCPU(CPU::new_random())))?;
     exports.set("new", cpu_constructor)?;
+
+    let symbols: HashMap<_, _> = {
+        let symbols: JsonValue = SYMBOLS.parse().unwrap();
+        symbols.try_into().unwrap()
+    };
+
+    let symbol_addr = lua.create_function(move |_, sym: String| -> Result<i32, Error> {
+        if let Some(JsonValue::Number(num)) = symbols.get(&sym) {
+            return Ok(*num as i32);
+        }
+        Err(Error::runtime("Symbol not found"))
+    })?;
+    exports.set("symbol", symbol_addr)?;
+
+    let opcode_for = lua.create_function(|_, mnemonic: String| -> Result<u8, _> {
+        if let Ok(op) = Opcode::try_from(mnemonic.as_str()) {
+            return Ok(op.into())
+        }
+        Err(Error::runtime("Invalid opcode"))
+    })?;
+    exports.set("opcode_for", opcode_for)?;
+
     Ok(exports)
 }
 
 struct LuaCPU(CPU);
 
 impl UserData for LuaCPU {
-    fn add_methods<'lua, M: UserDataMethods<'lua, Self>>(methods: &mut M) {
+    fn add_methods<'lua, M: UserDataMethods<Self>>(methods: &mut M) {
         methods.add_method_mut("reset", |_, lcpu, ()| {
             lcpu.0.reset();
             Ok(())
@@ -127,6 +154,15 @@ impl UserData for LuaCPU {
 
         methods.add_method_mut("interrupt", |_, lcpu, (irq, arg): (u8, Option<i32>)| {
             lcpu.0.interrupt(irq as usize, arg.map(|n| Word::from(n)));
+            Ok(())
+        });
+
+        methods.add_method_mut("load_rom", |_, lcpu, ()| {
+            for (i, b) in ROM.iter().enumerate() {
+                lcpu.0.poke(Word::from(0x400 + i), *b)
+            }
+
+            lcpu.0.set_pc(0x400.into());
             Ok(())
         });
     }
