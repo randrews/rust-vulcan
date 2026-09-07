@@ -14,7 +14,7 @@ impl<R: Rng> From<R> for Memory {
     fn from(mut rng: R) -> Self {
         let mut mem = Memory::default();
         for i in 0..(MEM_SIZE - 1) {
-            mem.0[i as usize] = rng.gen()
+            mem.0[i as usize] = rng.r#gen()
         }
         mem
     }
