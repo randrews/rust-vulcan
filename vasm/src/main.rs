@@ -7,18 +7,18 @@ use serde_json::json;
 
 /// Vulcan Assembler
 #[derive(Parser, Debug)]
-#[clap(author, version, about, long_about = None)]
+#[command(author, version, about, long_about = None)]
 struct Args {
     /// File to output to
-    #[clap(short, long)]
+    #[arg(short, long)]
     output: Option<String>,
 
     /// Whether to generate a JSON file containing the symbol table
-    #[clap(short, long)]
+    #[arg(short, long)]
     symbols: bool,
 
     /// Input file
-    #[clap()]
+    #[arg()]
     file: String,
 }
 
