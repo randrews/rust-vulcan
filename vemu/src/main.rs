@@ -2,7 +2,7 @@ mod keyboard;
 
 use winit::{
     dpi::LogicalSize,
-    event::{Event, WindowEvent},
+    event::WindowEvent,
     event_loop::{ControlFlow, EventLoop},
 };
 
@@ -16,7 +16,7 @@ use vasm_core::assemble_snippet;
 use vcore::cpu::CPU;
 use vcore::memory::{Memory, PeekPoke};
 use vcore::word::Word;
-use winit::event::{DeviceEvent, DeviceId, ElementState, StartCause};
+use winit::event::{ElementState, StartCause};
 use winit::event_loop::ActiveEventLoop;
 use winit::keyboard::PhysicalKey;
 use winit::window::{Window, WindowId};
@@ -102,7 +102,7 @@ impl<'a> ApplicationHandler for App<'a> {
         }
     }
 
-    fn window_event(&mut self, event_loop: &ActiveEventLoop, window_id: WindowId, event: WindowEvent) {
+    fn window_event(&mut self, event_loop: &ActiveEventLoop, _window_id: WindowId, event: WindowEvent) {
         match event {
             WindowEvent::CloseRequested => event_loop.exit(),
 

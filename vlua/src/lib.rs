@@ -5,7 +5,7 @@ use mlua::{Error, UserData, UserDataMethods};
 use vcore::memory::{PeekPoke, PeekPokeExt};
 use std::iter::FromIterator;
 use tinyjson::JsonValue;
-use novaforth::{ROM, PRELUDE, SYMBOLS};
+use novaforth::{ROM, SYMBOLS};
 use vcore::opcodes::Opcode;
 
 #[mlua::lua_module]

@@ -9,3 +9,6 @@ edition = "2021"
 vcore = { path = "../vcore" }
 vasm_core = { path = "../vasm_core" }
 forge_core = { path = "../forge_core" }
+novaforth = { path = "../novaforth" }
+lazy_static = "1.4.0"
+tinyjson = "2.5.1"

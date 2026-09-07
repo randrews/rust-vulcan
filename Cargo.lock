@@ -2143,6 +2143,9 @@ name = "vtest"
 version = "0.1.0"
 dependencies = [
  "forge_core",
+ "lazy_static",
+ "novaforth",
+ "tinyjson",
  "vasm_core",
  "vcore",
 ]
