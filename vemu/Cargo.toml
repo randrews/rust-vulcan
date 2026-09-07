@@ -11,4 +11,4 @@ vgfx = { path = "../vgfx" }
 vasm_core = { path = "../vasm_core" }
 rand = "0.8.0"
 winit = "0.30.12"
-pixels = "0.15.0"
+pixels = "0.17.2"
